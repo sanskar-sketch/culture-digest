@@ -1,9 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Thanks{% endblock %}
+{% block title %}Thanks &mdash; Culture Digest{% endblock %}
 {% block content %}
-  <h1>Got it.</h1>
-  <p class="lede">
-    Noted "{{ feedback_label }}" for <strong>{{ recommendation.opportunity.title }}</strong>.
-    That'll help shape what we send next time.
-  </p>
+  <section class="hero bg-dark">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="hero-content reveal is-visible">
+      <span class="eyebrow">Noted</span>
+      <h1>Got it.</h1>
+      <p class="lede" style="margin-left:auto;margin-right:auto;">
+        "{{ feedback_label }}" for <strong>{{ recommendation.opportunity.title }}</strong>.
+        That'll help shape what we send next time.
+      </p>
+      <a href="/" class="btn btn-ghost">Back home</a>
+    </div>
+  </section>
 {% endblock %}

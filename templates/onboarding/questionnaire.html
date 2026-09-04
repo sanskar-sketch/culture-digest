@@ -1,80 +1,220 @@
 {% extends "base.html" %}
-{% block title %}Join Culture Digest{% endblock %}
+{% block title %}Culture Digest &mdash; sign up{% endblock %}
 {% block content %}
-  <h1>Get a newsletter worth reading</h1>
-  <p class="lede">
-    A handful of things to see, hear, eat and do &mdash; picked for you, not
-    everyone. Tell us a bit about your taste and we'll do the filtering.
-  </p>
 
-  <form method="post" novalidate>
+  <section class="hero bg-dark">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="hero-content">
+      <span class="eyebrow">Personalised. Weekly. Worth it.</span>
+      <h1>Culture, curated<br>just for you.</h1>
+      <p class="lede" style="margin-left:auto;margin-right:auto;">
+        A handful of things to see, hear, eat and do &mdash; matched to your
+        taste, your budget, and your week. Not everyone's.
+      </p>
+      <a href="#questionnaire" class="btn btn-primary" data-scroll-to="#questionnaire">Get started</a>
+    </div>
+    <div class="scroll-cue"></div>
+  </section>
+
+  <form method="post" novalidate id="questionnaire">
     {% csrf_token %}
 
     {% if form.non_field_errors %}
-      <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    <section class="block tight">
+      <div class="container-narrow">
+        <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      </div>
+    </section>
     {% endif %}
 
-    <fieldset>
-      <legend>The basics</legend>
-      <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
-      {{ form.email }}
-      {{ form.email.errors }}
+    <section class="block reveal">
+      <div class="container-narrow">
+        <span class="eyebrow">The basics</span>
+        <h2>Who are we writing to?</h2>
+        <p class="lede" style="margin-bottom:48px;">
+          Only your email is required. Everything else helps us do better by
+          you &mdash; skip anything you'd rather not answer.
+        </p>
 
-      <label for="{{ form.name.id_for_label }}" style="margin-top:0.75rem;">Name (optional)</label>
-      {{ form.name }}
+        <div class="field-grid">
+          <div>
+            <label class="field-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+            {{ form.email }}
+            {{ form.email.errors }}
+          </div>
+          <div>
+            <label class="field-label" for="{{ form.name.id_for_label }}">Name</label>
+            {{ form.name }}
+          </div>
+        </div>
+        <div class="field-grid" style="margin-top:20px;">
+          <div>
+            <label class="field-label" for="{{ form.age.id_for_label }}">{{ form.age.label }}</label>
+            {{ form.age }}
+          </div>
+          <div>
+            <label class="field-label" for="{{ form.location.id_for_label }}">{{ form.location.label }}</label>
+            {{ form.location }}
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <label for="{{ form.location.id_for_label }}" style="margin-top:0.75rem;">{{ form.location.label }}</label>
-      {{ form.location }}
-      {{ form.location.errors }}
-    </fieldset>
+    <section class="block bg-alt reveal">
+      <div class="container-narrow">
+        <span class="eyebrow">Getting around</span>
+        <h2>Where would you go, for something worth it?</h2>
 
-    <fieldset>
-      <legend>{{ form.interest_tags.label }}</legend>
-      <p class="help">{{ form.interest_tags.help_text }}</p>
-      <div class="choice-list">{{ form.interest_tags }}</div>
-      {{ form.interest_tags.errors }}
-    </fieldset>
+        <div style="margin:40px 0;">
+          <label class="field-label" for="{{ form.travel_destinations.id_for_label }}">
+            {{ form.travel_destinations.label }}
+          </label>
+          <p class="field-help">Cities or places you love, or would love to visit.</p>
+          {{ form.travel_destinations }}
+        </div>
 
-    <fieldset>
-      <legend>{{ form.travel_radius.label }}</legend>
-      <div class="choice-list">{{ form.travel_radius }}</div>
-      {{ form.travel_radius.errors }}
-    </fieldset>
+        <div>
+          <span class="field-label">{{ form.travel_radius.label }}</span>
+          <div class="chip-group">
+            {% for choice in form.travel_radius %}
+              {% if choice.data.value %}
+              <label class="chip" for="{{ choice.id_for_label }}">
+                {{ choice.tag }}
+                <span>{{ choice.choice_label }}</span>
+              </label>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <fieldset>
-      <legend>{{ form.budget.label }}</legend>
-      <div class="choice-list">{{ form.budget }}</div>
-      {{ form.budget.errors }}
-    </fieldset>
+    <section class="block reveal">
+      <div class="container-narrow">
+        <span class="eyebrow">Taste</span>
+        <h2>What moves you?</h2>
+        <p class="lede" style="margin-bottom:32px;">{{ form.interest_tags.help_text }}</p>
+        <div class="chip-group">
+          {% for choice in form.interest_tags %}
+          <label class="chip" for="{{ choice.id_for_label }}">
+            {{ choice.tag }}
+            <span>{{ choice.choice_label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
 
-    <fieldset>
-      <legend>{{ form.availability.label }}</legend>
-      <div class="choice-list">{{ form.availability }}</div>
-      {{ form.availability.errors }}
-    </fieldset>
+    <section class="block bg-dark reveal">
+      <div class="container-narrow">
+        <span class="eyebrow">Practicalities</span>
+        <h2>Budget &amp; timing.</h2>
 
-    <fieldset>
-      <legend>{{ form.mainstream_preference.label }}</legend>
-      <p class="help">1 = mainstream crowd-pleasers, 5 = the unusual and niche</p>
-      <div class="choice-list">{{ form.mainstream_preference }}</div>
-    </fieldset>
+        <div style="margin:40px 0;">
+          <span class="field-label">{{ form.budget.label }}</span>
+          <div class="chip-group">
+            {% for choice in form.budget %}
+              {% if choice.data.value %}
+              <label class="chip" for="{{ choice.id_for_label }}">
+                {{ choice.tag }}
+                <span>{{ choice.choice_label }}</span>
+              </label>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
 
-    <fieldset>
-      <legend>{{ form.scale_preference.label }}</legend>
-      <p class="help">1 = intimate and small-scale, 5 = big and large-scale</p>
-      <div class="choice-list">{{ form.scale_preference }}</div>
-    </fieldset>
+        <div>
+          <span class="field-label">{{ form.availability.label }}</span>
+          <div class="chip-group">
+            {% for choice in form.availability %}
+            <label class="chip" for="{{ choice.id_for_label }}">
+              {{ choice.tag }}
+              <span>{{ choice.choice_label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <fieldset>
-      <legend>{{ form.loved_examples.label }}</legend>
-      {{ form.loved_examples }}
-    </fieldset>
+    <section class="block reveal">
+      <div class="container-narrow">
+        <span class="eyebrow">Your taste, precisely</span>
+        <h2>Dial it in.</h2>
 
-    <fieldset>
-      <legend>{{ form.disliked_examples.label }}</legend>
-      {{ form.disliked_examples }}
-    </fieldset>
+        <div style="margin:48px 0 40px;">
+          <span class="field-label">{{ form.mainstream_preference.label }}</span>
+          <div class="scale-pills">
+            {% for choice in form.mainstream_preference %}
+              {% if choice.data.value %}
+              <label class="scale-pill" for="{{ choice.id_for_label }}">
+                {{ choice.tag }}
+                <span>{{ choice.choice_label }}</span>
+              </label>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <div class="scale-caption"><span>Mainstream</span><span>Unusual</span></div>
+        </div>
 
-    <button type="submit">Sign me up</button>
+        <div style="margin:40px 0 48px;">
+          <span class="field-label">{{ form.scale_preference.label }}</span>
+          <div class="scale-pills">
+            {% for choice in form.scale_preference %}
+              {% if choice.data.value %}
+              <label class="scale-pill" for="{{ choice.id_for_label }}">
+                {{ choice.tag }}
+                <span>{{ choice.choice_label }}</span>
+              </label>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <div class="scale-caption"><span>Intimate</span><span>Large-scale</span></div>
+        </div>
+
+        <div class="toggle-row">
+          <div class="toggle-copy">
+            <strong>{{ form.open_to_surprise.label }}</strong>
+            <span>{{ form.open_to_surprise.help_text }}</span>
+          </div>
+          <label class="switch">
+            {{ form.open_to_surprise }}
+            <span class="track"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="block bg-alt reveal">
+      <div class="container-narrow">
+        <span class="eyebrow">In your own words</span>
+        <h2>Tell us more.</h2>
+        <div style="margin-top:40px;">
+          <label class="field-label" for="{{ form.loved_examples.id_for_label }}">
+            {{ form.loved_examples.label }}
+          </label>
+          {{ form.loved_examples }}
+        </div>
+        <div style="margin-top:24px;">
+          <label class="field-label" for="{{ form.disliked_examples.id_for_label }}">
+            {{ form.disliked_examples.label }}
+          </label>
+          {{ form.disliked_examples }}
+        </div>
+      </div>
+    </section>
+
+    <section class="block bg-dark reveal" style="text-align:center;">
+      <div class="container-narrow">
+        <h2 style="margin-bottom:16px;">Ready when you are.</h2>
+        <p class="lede" style="margin:0 auto 36px;">
+          Unsubscribe anytime, one click. No noise &mdash; just the things worth knowing about.
+        </p>
+        <button type="submit" class="btn btn-primary">Sign me up</button>
+      </div>
+    </section>
   </form>
+
 {% endblock %}

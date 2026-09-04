@@ -215,3 +215,92 @@ class RationaleTests(TestCase):
 
         self.assertIn("Editorial pitch.", rationale)
         self.assertIn("fits their usual budget", rationale)
+
+
+class OptionalProfileFieldsTests(TestCase):
+    """Every onboarding field except email is optional - matching must not
+    blow up, and should be permissive rather than excluding, when a reader
+    hasn't stated a preference."""
+
+    def test_reader_with_no_preferences_at_all_still_gets_matches(self):
+        reader = Reader.objects.create(email="blank@example.com")
+        make_opportunity(price_tier=Opportunity.PriceTier.SPLURGE, location_area="Tokyo")
+
+        matches = matching.top_matches_for_reader(reader)
+
+        self.assertEqual(len(matches), 1)
+
+    def test_blank_budget_is_not_penalised(self):
+        reader = make_reader(budget="")
+        cheap = make_opportunity(title="Cheap", price_tier=Opportunity.PriceTier.BUDGET)
+        splurge = make_opportunity(title="Splurge", price_tier=Opportunity.PriceTier.SPLURGE)
+
+        matches = {m.opportunity: m.score for m in matching.top_matches_for_reader(reader)}
+
+        self.assertEqual(matches[cheap], matches[splurge])
+
+    def test_blank_location_matches_everything(self):
+        reader = make_reader(location="", travel_radius=Reader.TravelRadius.LOCAL_ONLY)
+        opportunity = make_opportunity(location_area="Anywhere but here")
+
+        matches = matching.top_matches_for_reader(reader)
+
+        self.assertIn(opportunity, [m.opportunity for m in matches])
+
+    def test_blank_travel_radius_is_permissive(self):
+        reader = make_reader(location="Bristol", travel_radius="")
+        opportunity = make_opportunity(location_area="London")
+
+        matches = matching.top_matches_for_reader(reader)
+
+        self.assertIn(opportunity, [m.opportunity for m in matches])
+
+    def test_none_mainstream_and_scale_preference_do_not_crash_or_penalise(self):
+        reader = make_reader(mainstream_preference=None, scale_preference=None)
+        niche = make_opportunity(
+            title="Niche", mainstream_to_unusual=5, intimate_to_large_scale=1
+        )
+        mainstream = make_opportunity(
+            title="Mainstream", mainstream_to_unusual=1, intimate_to_large_scale=5
+        )
+
+        matches = {m.opportunity: m.score for m in matching.top_matches_for_reader(reader)}
+
+        self.assertEqual(matches[niche], matches[mainstream])
+
+
+class WildcardTests(TestCase):
+    def test_open_to_surprise_swaps_in_an_unrelated_pick(self):
+        reader = make_reader(open_to_surprise=True)
+        jazz = Tag.objects.create(name="jazz")
+        reader.interest_tags.add(jazz)
+
+        # Four on-taste picks fill every slot ahead of the wildcard...
+        for i in range(4):
+            opp = make_opportunity(title=f"Jazz thing {i}")
+            opp.tags.add(jazz)
+
+        # ...and one unrelated, untagged opportunity waiting in the wings.
+        wildcard_candidate = make_opportunity(title="Pottery class")
+
+        matches = matching.top_matches_for_reader(reader, limit=4)
+
+        titles = [m.opportunity.title for m in matches]
+        self.assertIn("Pottery class", titles)
+        wildcard_match = next(m for m in matches if m.opportunity == wildcard_candidate)
+        self.assertTrue(any("wildcard" in reason for reason in wildcard_match.reasons))
+
+    def test_reader_not_open_to_surprise_gets_no_wildcard(self):
+        reader = make_reader(open_to_surprise=False)
+        jazz = Tag.objects.create(name="jazz")
+        reader.interest_tags.add(jazz)
+
+        for i in range(4):
+            opp = make_opportunity(title=f"Jazz thing {i}")
+            opp.tags.add(jazz)
+        make_opportunity(title="Pottery class")
+
+        matches = matching.top_matches_for_reader(reader, limit=4)
+
+        titles = [m.opportunity.title for m in matches]
+        self.assertNotIn("Pottery class", titles)

@@ -4,20 +4,55 @@ from opportunities.models import Tag
 
 from .models import Reader
 
+NO_PREFERENCE = ("", "No preference")
+
 
 class ReaderOnboardingForm(forms.ModelForm):
+    """Every field except email is optional by design - a reader should be
+    able to sign up with as little or as much detail as they want, and
+    refine their profile later."""
+
     interest_tags = forms.ModelMultipleChoiceField(
         queryset=Tag.objects.all(),
         widget=forms.CheckboxSelectMultiple,
-        required=True,
+        required=False,
         label="What are you interested in?",
         help_text="Pick as many as apply.",
     )
     availability = forms.MultipleChoiceField(
         choices=Reader.Availability.choices,
         widget=forms.CheckboxSelectMultiple,
-        required=True,
+        required=False,
         label="When are you generally free?",
+    )
+    travel_radius = forms.ChoiceField(
+        choices=[NO_PREFERENCE, *Reader.TravelRadius.choices],
+        widget=forms.RadioSelect,
+        required=False,
+        label="How far will you travel for something great?",
+    )
+    budget = forms.ChoiceField(
+        choices=[NO_PREFERENCE, *Reader.Budget.choices],
+        widget=forms.RadioSelect,
+        required=False,
+        label="What's your typical budget?",
+    )
+    mainstream_preference = forms.ChoiceField(
+        choices=[NO_PREFERENCE, *[(i, i) for i in range(1, 6)]],
+        widget=forms.RadioSelect,
+        required=False,
+        label="Mainstream crowd-pleasers, or the unusual and niche?",
+    )
+    scale_preference = forms.ChoiceField(
+        choices=[NO_PREFERENCE, *[(i, i) for i in range(1, 6)]],
+        widget=forms.RadioSelect,
+        required=False,
+        label="Intimate and small-scale, or big and large-scale?",
+    )
+    open_to_surprise = forms.BooleanField(
+        required=False,
+        label="Surprise me sometimes",
+        help_text="Occasionally include a wildcard pick outside my usual taste.",
     )
 
     class Meta:
@@ -25,34 +60,52 @@ class ReaderOnboardingForm(forms.ModelForm):
         fields = [
             "email",
             "name",
+            "age",
             "location",
+            "travel_destinations",
             "travel_radius",
             "budget",
             "availability",
             "interest_tags",
             "mainstream_preference",
             "scale_preference",
+            "open_to_surprise",
             "loved_examples",
             "disliked_examples",
         ]
         widgets = {
-            "travel_radius": forms.RadioSelect,
-            "budget": forms.RadioSelect,
-            "mainstream_preference": forms.RadioSelect,
-            "scale_preference": forms.RadioSelect,
+            "age": forms.NumberInput(attrs={"min": 1, "max": 120, "inputmode": "numeric"}),
             "loved_examples": forms.Textarea(attrs={"rows": 3}),
             "disliked_examples": forms.Textarea(attrs={"rows": 3}),
+            "travel_destinations": forms.Textarea(attrs={"rows": 2}),
         }
         labels = {
             "email": "Email address",
-            "location": "Where are you based? (city or area)",
-            "travel_radius": "How far will you travel for something great?",
-            "budget": "What's your typical budget?",
-            "mainstream_preference": "Mainstream crowd-pleasers, or the unusual and niche?",
-            "scale_preference": "Intimate and small-scale, or big and large-scale?",
+            "age": "Age",
+            "location": "Where do you live?",
+            "travel_destinations": "Where do you love to travel to?",
             "loved_examples": "Tell us about a few things you've loved recently",
             "disliked_examples": "Anything that's really not for you?",
         }
 
+    TEXT_INPUT_FIELDS = (
+        "email", "name", "age", "location", "travel_destinations",
+        "loved_examples", "disliked_examples",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in self.TEXT_INPUT_FIELDS:
+            widget = self.fields[field_name].widget
+            widget.attrs["class"] = ((widget.attrs.get("class", "") + " text-input").strip())
+
     def clean_email(self):
         return self.cleaned_data["email"].strip().lower()
+
+    def clean_mainstream_preference(self):
+        value = self.cleaned_data.get("mainstream_preference")
+        return int(value) if value else None
+
+    def clean_scale_preference(self):
+        value = self.cleaned_data.get("scale_preference")
+        return int(value) if value else None

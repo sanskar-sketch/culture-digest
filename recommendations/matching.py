@@ -66,6 +66,9 @@ class Match:
 def _price_distance(reader: Reader, opportunity: Opportunity) -> int:
     if opportunity.price_tier == Opportunity.PriceTier.FREE:
         return 0
+    if not reader.budget:
+        # No stated budget preference - don't penalise on price at all.
+        return 0
     target_tier = BUDGET_TO_PRICE_TIER[reader.budget]
     return abs(
         PRICE_TIER_ORDER.index(opportunity.price_tier) - PRICE_TIER_ORDER.index(target_tier)
@@ -73,7 +76,8 @@ def _price_distance(reader: Reader, opportunity: Opportunity) -> int:
 
 
 def _location_matches(reader: Reader, opportunity: Opportunity) -> bool:
-    if opportunity.is_online:
+    if opportunity.is_online or not reader.location:
+        # No stated home location - don't exclude on location at all.
         return True
     return reader.location.strip().lower() == opportunity.location_area.strip().lower()
 
@@ -108,7 +112,9 @@ def score_opportunity(
     """Score one opportunity for one reader, or return None to exclude it."""
 
     location_ok = _location_matches(reader, opportunity)
-    if not location_ok and not TRAVEL_RADIUS_ALLOWS_MISMATCH[reader.travel_radius]:
+    # No stated travel radius - default to permissive rather than excluding.
+    allows_mismatch = TRAVEL_RADIUS_ALLOWS_MISMATCH.get(reader.travel_radius, True)
+    if not location_ok and not allows_mismatch:
         return None
 
     price_distance = _price_distance(reader, opportunity)
@@ -139,15 +145,17 @@ def score_opportunity(
     if price_distance == 0:
         reasons.append("fits their usual budget")
 
-    mainstream_gap = abs(reader.mainstream_preference - opportunity.mainstream_to_unusual)
-    score -= 0.4 * mainstream_gap
-    if mainstream_gap <= 1:
-        reasons.append("matches their mainstream/unusual taste")
+    if reader.mainstream_preference is not None:
+        mainstream_gap = abs(reader.mainstream_preference - opportunity.mainstream_to_unusual)
+        score -= 0.4 * mainstream_gap
+        if mainstream_gap <= 1:
+            reasons.append("matches their mainstream/unusual taste")
 
-    scale_gap = abs(reader.scale_preference - opportunity.intimate_to_large_scale)
-    score -= 0.3 * scale_gap
-    if scale_gap <= 1:
-        reasons.append("the right scale for them (intimate vs. large-scale)")
+    if reader.scale_preference is not None:
+        scale_gap = abs(reader.scale_preference - opportunity.intimate_to_large_scale)
+        score -= 0.3 * scale_gap
+        if scale_gap <= 1:
+            reasons.append("the right scale for them (intimate vs. large-scale)")
 
     if opportunity.critic_rating:
         score += float(opportunity.critic_rating) * 0.2
@@ -191,7 +199,27 @@ def top_matches_for_reader(reader: Reader, limit: int | None = None) -> list[Mat
         if (match := score_opportunity(reader, opportunity, feedback_weights)) is not None
     ]
     matches.sort(key=lambda m: m.score, reverse=True)
-    return matches[:limit]
+
+    top = matches[:limit]
+    if reader.open_to_surprise and top and len(matches) > len(top):
+        wildcard = _pick_wildcard(reader, matches[len(top):])
+        if wildcard is not None:
+            top = [*top[:-1], wildcard]
+
+    return top
+
+
+def _pick_wildcard(reader: Reader, remaining: list[Match]) -> Match | None:
+    """Pick the best-scoring remaining match that shares none of the
+    reader's stated interest tags - a genuine "outside your usual taste"
+    surprise, for readers who opted into that."""
+    reader_tag_ids = set(reader.interest_tags.values_list("id", flat=True))
+    for match in remaining:
+        opp_tag_ids = {t.id for t in match.opportunity.tags.all()}
+        if not opp_tag_ids & reader_tag_ids:
+            match.reasons = [*match.reasons, "a wildcard pick, since you're up for a surprise"]
+            return match
+    return None
 
 
 def build_rationale(match: Match) -> str:

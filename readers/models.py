@@ -33,6 +33,7 @@ class Reader(models.Model):
 
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=120, blank=True)
+    age = models.PositiveSmallIntegerField(null=True, blank=True)
 
     interest_tags = models.ManyToManyField(
         Tag, blank=True, related_name="interested_readers",
@@ -46,21 +47,33 @@ class Reader(models.Model):
         blank=True, help_text="Free text: things this reader hasn't enjoyed."
     )
 
-    location = models.CharField(max_length=120, help_text="City or area, e.g. 'London'.")
-    travel_radius = models.CharField(max_length=20, choices=TravelRadius.choices)
-    budget = models.CharField(max_length=20, choices=Budget.choices)
+    location = models.CharField(
+        max_length=120, blank=True, help_text="Where they live - city or area, e.g. 'London'."
+    )
+    travel_destinations = models.TextField(
+        blank=True,
+        help_text="Free text: places they love to travel to, or would love to visit.",
+    )
+    travel_radius = models.CharField(max_length=20, choices=TravelRadius.choices, blank=True)
+    budget = models.CharField(max_length=20, choices=Budget.choices, blank=True)
     availability = models.JSONField(
         default=list, blank=True,
         help_text="List of Availability values, e.g. ['weekends', 'weekday_evenings'].",
     )
 
     mainstream_preference = models.PositiveSmallIntegerField(
-        choices=[(i, i) for i in range(1, 6)], default=3,
-        help_text="1 = strongly prefers mainstream/crowd-pleasing, 5 = strongly prefers niche/unusual.",
+        choices=[(i, i) for i in range(1, 6)], null=True, blank=True,
+        help_text="1 = strongly prefers mainstream/crowd-pleasing, 5 = strongly prefers niche/unusual. "
+        "Blank = no stated preference.",
     )
     scale_preference = models.PositiveSmallIntegerField(
-        choices=[(i, i) for i in range(1, 6)], default=3,
-        help_text="1 = prefers intimate/small-scale, 5 = prefers big/large-scale.",
+        choices=[(i, i) for i in range(1, 6)], null=True, blank=True,
+        help_text="1 = prefers intimate/small-scale, 5 = prefers big/large-scale. "
+        "Blank = no stated preference.",
+    )
+    open_to_surprise = models.BooleanField(
+        default=False,
+        help_text="Happy to occasionally get a wildcard pick outside their usual taste.",
     )
 
     is_active = models.BooleanField(default=True, help_text="Unchecked = unsubscribed.")

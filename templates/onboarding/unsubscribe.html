@@ -1,15 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Unsubscribe{% endblock %}
+{% block title %}Unsubscribe &mdash; Culture Digest{% endblock %}
 {% block content %}
-  {% if reader.is_active %}
-    <h1>Unsubscribe {{ reader.email }}?</h1>
-    <p class="lede">You'll stop receiving the newsletter. You can always sign up again later.</p>
-    <form method="post">
-      {% csrf_token %}
-      <button type="submit">Yes, unsubscribe me</button>
-    </form>
-  {% else %}
-    <h1>You're unsubscribed</h1>
-    <p class="lede">{{ reader.email }} won't receive any more newsletters.</p>
-  {% endif %}
+  <section class="hero bg-dark">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="hero-content reveal is-visible">
+      {% if reader.is_active %}
+        <span class="eyebrow">Before you go</span>
+        <h1>Unsubscribe {{ reader.email }}?</h1>
+        <p class="lede" style="margin-left:auto;margin-right:auto;">
+          You'll stop receiving the newsletter. You can always sign up again later.
+        </p>
+        <form method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">Yes, unsubscribe me</button>
+        </form>
+      {% else %}
+        <span class="eyebrow">Done</span>
+        <h1>You're unsubscribed</h1>
+        <p class="lede" style="margin-left:auto;margin-right:auto;">
+          {{ reader.email }} won't receive any more newsletters.
+        </p>
+        <a href="/" class="btn btn-ghost">Sign up again</a>
+      {% endif %}
+    </div>
+  </section>
 {% endblock %}

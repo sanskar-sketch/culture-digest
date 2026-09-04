@@ -1,15 +1,27 @@
 # Culture Digest
 
 A personalised culture and things-to-do newsletter. Readers fill in a short
-onboarding questionnaire (interests, taste, budget, location, availability),
+onboarding questionnaire (age, where they live, where they love to travel
+to, interests, taste, budget, availability, openness to a wildcard pick),
 editors curate a database of opportunities (theatre, music, film,
 exhibitions, talks, food, events, unusual experiences), and a matching
 engine picks a small number of high-confidence recommendations for each
 reader and emails them a newsletter. Feedback links (`More like this`,
 `Not for me`, `Save`, `Booked`) close the loop and improve future picks.
 
+Only email is required at signup — every other field is optional, and the
+matching engine treats an unanswered question as "no preference" rather
+than excluding the reader from getting recommendations.
+
 Stack: Django 5.1 (Python 3.12), SQLite for local dev, [Resend](https://resend.com)
-for email delivery.
+for email delivery. The reader-facing pages (signup, thank-you, unsubscribe,
+feedback confirmation) use a hand-built Apple.com-style design system —
+big type, scroll-reveal animations, gradient hero orbs, segmented pill
+controls, an iOS-style toggle — in [templates/base.html](templates/base.html),
+plain CSS/JS with no build step or framework. The newsletter *email* borrows
+the same typography and colour language but is necessarily static (no
+animation, no backdrop blur) since email clients don't render those
+reliably.
 
 ## Why Django
 
@@ -35,10 +47,11 @@ templates/
 
 ### Data model
 
-- **`readers.Reader`** — one row per subscriber: email, location, travel
-  radius, budget, availability, interest tags, mainstream/unusual and
-  intimate/large-scale sliders, and free-text "loved"/"disliked" examples
-  from onboarding.
+- **`readers.Reader`** — one row per subscriber. Only `email` is required;
+  everything else (name, age, location, travel destinations, travel radius,
+  budget, availability, interest tags, mainstream/unusual and
+  intimate/large-scale sliders, openness to a wildcard pick, free-text
+  "loved"/"disliked" examples) is optional and can be filled in gradually.
 - **`opportunities.Opportunity`** — one row per curated opportunity:
   category, description, editorial note, tags, price tier, location,
   booking URL, critic rating, mainstream/unusual and intimate/large-scale
@@ -68,6 +81,16 @@ Deliberately simple and rule-based for the MVP:
 4. Return the top N (default 4). If a reader doesn't have enough strong
    matches, they're skipped for that send rather than getting a padded-out,
    low-confidence newsletter — quality over volume was the point.
+5. If the reader opted into **"Surprise me sometimes"**, one slot is swapped
+   for the best-scoring opportunity that shares none of their stated
+   interest tags — a genuine wildcard, not just a lower-confidence version
+   of their usual picks.
+
+Since every onboarding field is optional, an unanswered question is treated
+as "no preference" rather than a reason to exclude the reader: no stated
+budget means no price penalty, no stated location means nothing is filtered
+out on distance, and so on. A reader who filled in nothing but their email
+still gets matched against the full published catalogue.
 
 `build_rationale()` turns a match into the reader-facing "why this suits
 you" copy, currently templated off the editorial note plus the top scoring
