@@ -1,0 +1,17 @@
+{% autoescape off %}{% if reader.name %}For {{ reader.name }}{% else %}Picked for you{% endif %} - Culture Digest
+{% for rec in recommendations %}
+----
+{{ rec.opportunity.title }} ({{ rec.opportunity.get_category_display }}{% if rec.opportunity.location_area %}, {{ rec.opportunity.location_area }}{% endif %})
+
+{{ rec.rationale }}
+
+Book / learn more: {{ rec.booking_url }}
+
+More like this: {{ rec.more_like_this_url }}
+Not for me:      {{ rec.not_for_me_url }}
+Save:            {{ rec.save_url }}
+I booked this:   {{ rec.booked_url }}
+{% endfor %}
+----
+Unsubscribe: {{ unsubscribe_url }}
+{% endautoescape %}

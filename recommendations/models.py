@@ -1,0 +1,61 @@
+import uuid
+
+from django.db import models
+
+from opportunities.models import Opportunity
+from readers.models import Reader
+
+
+class NewsletterIssue(models.Model):
+    """One personalised newsletter send to one reader, containing a small
+    handful of Recommendations."""
+
+    reader = models.ForeignKey(Reader, on_delete=models.CASCADE, related_name="issues")
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    resend_message_id = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Issue for {self.reader} ({self.created_at:%Y-%m-%d})"
+
+
+class Recommendation(models.Model):
+    """A single opportunity recommended to a reader as part of one
+    NewsletterIssue, plus whatever feedback they gave on it."""
+
+    class Feedback(models.TextChoices):
+        NONE = "none", "No feedback yet"
+        MORE_LIKE_THIS = "more_like_this", "More like this"
+        NOT_FOR_ME = "not_for_me", "Not for me"
+        SAVE = "save", "Save"
+        BOOKED = "booked", "Booked"
+
+    issue = models.ForeignKey(
+        NewsletterIssue, on_delete=models.CASCADE, related_name="recommendations"
+    )
+    opportunity = models.ForeignKey(
+        Opportunity, on_delete=models.CASCADE, related_name="recommendations"
+    )
+    rationale = models.TextField(help_text="Short reader-facing explanation of why this fits.")
+    score = models.FloatField(default=0, help_text="Internal matching score, for debugging/tuning.")
+
+    feedback = models.CharField(
+        max_length=20, choices=Feedback.choices, default=Feedback.NONE
+    )
+    feedback_at = models.DateTimeField(null=True, blank=True)
+    feedback_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.opportunity} -> {self.issue.reader}"
+
+    @property
+    def reader(self):
+        return self.issue.reader

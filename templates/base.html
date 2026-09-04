@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Culture Digest{% endblock %}</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+      line-height: 1.5;
+      color: #1a1a1a;
+      background: #fafaf7;
+    }
+    h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+    .lede { color: #555; margin-top: 0; margin-bottom: 2rem; }
+    fieldset { border: none; padding: 0; margin: 0 0 1.75rem; }
+    legend { font-weight: 600; margin-bottom: 0.5rem; padding: 0; }
+    label { display: block; margin: 0.35rem 0; font-weight: normal; }
+    input[type="text"], input[type="email"], textarea, select {
+      width: 100%;
+      padding: 0.55rem 0.6rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+      box-sizing: border-box;
+      font-family: inherit;
+      background: #fff;
+      color: #1a1a1a;
+    }
+    .choice-list label { font-weight: normal; display: flex; gap: 0.5rem; align-items: center; }
+    .help { color: #777; font-size: 0.85rem; margin: 0.15rem 0 0.5rem; }
+    .errorlist { color: #b3261e; list-style: none; padding: 0; margin: 0.25rem 0; font-size: 0.9rem; }
+    button {
+      background: #1a1a1a;
+      color: #fff;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:hover { background: #333; }
+    a { color: #1a1a1a; }
+  </style>
+</head>
+<body>
+  {% block content %}{% endblock %}
+</body>
+</html>

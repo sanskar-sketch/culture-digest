@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Unsubscribe{% endblock %}
+{% block content %}
+  {% if reader.is_active %}
+    <h1>Unsubscribe {{ reader.email }}?</h1>
+    <p class="lede">You'll stop receiving the newsletter. You can always sign up again later.</p>
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit">Yes, unsubscribe me</button>
+    </form>
+  {% else %}
+    <h1>You're unsubscribed</h1>
+    <p class="lede">{{ reader.email }} won't receive any more newsletters.</p>
+  {% endif %}
+{% endblock %}

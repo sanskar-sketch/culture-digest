@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Thanks{% endblock %}
+{% block content %}
+  <h1>Got it.</h1>
+  <p class="lede">
+    Noted "{{ feedback_label }}" for <strong>{{ recommendation.opportunity.title }}</strong>.
+    That'll help shape what we send next time.
+  </p>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Join Culture Digest{% endblock %}
+{% block content %}
+  <h1>Get a newsletter worth reading</h1>
+  <p class="lede">
+    A handful of things to see, hear, eat and do &mdash; picked for you, not
+    everyone. Tell us a bit about your taste and we'll do the filtering.
+  </p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    <fieldset>
+      <legend>The basics</legend>
+      <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+      {{ form.email }}
+      {{ form.email.errors }}
+
+      <label for="{{ form.name.id_for_label }}" style="margin-top:0.75rem;">Name (optional)</label>
+      {{ form.name }}
+
+      <label for="{{ form.location.id_for_label }}" style="margin-top:0.75rem;">{{ form.location.label }}</label>
+      {{ form.location }}
+      {{ form.location.errors }}
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ form.interest_tags.label }}</legend>
+      <p class="help">{{ form.interest_tags.help_text }}</p>
+      <div class="choice-list">{{ form.interest_tags }}</div>
+      {{ form.interest_tags.errors }}
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ form.travel_radius.label }}</legend>
+      <div class="choice-list">{{ form.travel_radius }}</div>
+      {{ form.travel_radius.errors }}
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ form.budget.label }}</legend>
+      <div class="choice-list">{{ form.budget }}</div>
+      {{ form.budget.errors }}
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ form.availability.label }}</legend>
+      <div class="choice-list">{{ form.availability }}</div>
+      {{ form.availability.errors }}
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ form.mainstream_preference.label }}</legend>
+      <p class="help">1 = mainstream crowd-pleasers, 5 = the unusual and niche</p>
+      <div class="choice-list">{{ form.mainstream_preference }}</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ form.scale_preference.label }}</legend>
+      <p class="help">1 = intimate and small-scale, 5 = big and large-scale</p>
+      <div class="choice-list">{{ form.scale_preference }}</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ form.loved_examples.label }}</legend>
+      {{ form.loved_examples }}
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ form.disliked_examples.label }}</legend>
+      {{ form.disliked_examples }}
+    </fieldset>
+
+    <button type="submit">Sign me up</button>
+  </form>
+{% endblock %}

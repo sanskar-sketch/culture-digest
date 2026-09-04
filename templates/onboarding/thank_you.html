@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}You're in{% endblock %}
+{% block content %}
+  <h1>You're in{% if reader.name %}, {{ reader.name }}{% endif %}.</h1>
+  <p class="lede">
+    We'll send your first newsletter to <strong>{{ reader.email }}</strong> soon.
+    Every recommendation comes with a quick "more like this" / "not for me"
+    link &mdash; the more you use them, the sharper future picks get.
+  </p>
+{% endblock %}
