@@ -1,4 +1,4 @@
-{% autoescape off %}{% if reader.name %}For {{ reader.name }}{% else %}Picked for you{% endif %} - The Ether
+{% autoescape off %}{% if reader.name %}For {{ reader.name }}{% else %}Picked for you{% endif %} - {{ site_config.site_name }}
 {% for rec in recommendations %}
 ----
 {{ rec.opportunity.title }} ({{ rec.opportunity.get_category_display }}{% if rec.opportunity.location_area %}, {{ rec.opportunity.location_area }}{% endif %})

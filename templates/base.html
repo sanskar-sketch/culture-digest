@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}The Ether{% endblock %}</title>
+  <title>{% block title %}{{ site_config.site_name }}{% endblock %}</title>
   <style>
     :root {
       color-scheme: light;
@@ -549,13 +549,13 @@
 <body>
   <div class="scroll-progress" id="scroll-progress"></div>
   <nav class="site-nav" id="site-nav">
-    <a href="/" class="wordmark"><span class="dot"></span>The Ether</a>
+    <a href="/" class="wordmark"><span class="dot"></span>{{ site_config.site_name }}</a>
   </nav>
 
   {% block content %}{% endblock %}
 
   <footer class="site-footer">
-    The Ether &mdash; a handful of things worth your time, picked for you.
+    {{ site_config.site_name }} &mdash; {{ site_config.tagline }}
   </footer>
 
   <script>

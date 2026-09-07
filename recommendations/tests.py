@@ -34,6 +34,25 @@ def make_tag(name, **overrides):
     return tag
 
 
+def set_config(**overrides):
+    """Set editable configuration for a test.
+
+    SiteConfig.load() caches, and Django doesn't clear caches between tests,
+    so a value set in one test would otherwise leak into the next.
+    """
+    from django.core.cache import cache
+
+    from siteconfig.models import SiteConfig
+
+    cache.clear()
+    config = SiteConfig.load()
+    for field, value in overrides.items():
+        setattr(config, field, value)
+    config.save()
+    cache.clear()
+    return config
+
+
 def make_reader(**overrides):
     defaults = dict(
         email="reader@example.com",
@@ -555,12 +574,12 @@ class AITimeBudgetTests(TestCase):
     Unbounded AI calls there get the gunicorn worker killed - which takes
     out every other request on it, not just the send."""
 
-    def test_client_is_constructed_with_a_timeout_and_no_retries(self):
+    def test_client_is_constructed_with_the_configured_timeout_and_no_retries(self):
+        set_config(ai_timeout_seconds=3.5)
         with mock.patch("openai.OpenAI") as OpenAI:
-            with override_settings(OPENAI_TIMEOUT_SECONDS=8, OPENAI_API_KEY="k"):
-                ai._client()
+            ai._client()
         kwargs = OpenAI.call_args.kwargs
-        self.assertEqual(kwargs["timeout"], 8)
+        self.assertEqual(kwargs["timeout"], 3.5)
         self.assertEqual(kwargs["max_retries"], 0)
 
     def test_exhausted_budget_skips_the_call_and_uses_the_template(self):
@@ -579,14 +598,114 @@ class AITimeBudgetTests(TestCase):
 
         # Patch the client, not write_rationale - the budget check lives
         # inside write_rationale, so mocking it would skip what we're testing.
-        with override_settings(AI_SEND_BUDGET_SECONDS=0):
-            with mock.patch.object(ai, "_client") as client:
-                result = send_issue_for_reader(reader, dry_run=True)
+        set_config(ai_send_budget_seconds=0)
+        with mock.patch.object(ai, "_client") as client:
+            result = send_issue_for_reader(reader, dry_run=True)
 
         self.assertGreaterEqual(result.match_count, 2)
         client.assert_not_called()
         # And the issue still got rationales - from the template.
         self.assertTrue(all(r.rationale for r in Recommendation.objects.all()) or True)
+
+
+class EditableConfigTests(TestCase):
+    """The settings model has to actually drive behaviour - otherwise the
+    admin fields are decoration."""
+
+    def test_tag_overlap_weight_changes_the_score(self):
+        jazz = make_tag("jazz")
+        reader = make_reader()
+        reader.interest_tags.add(jazz)
+        opp = make_opportunity(title="Jazz night")
+        opp.tags.add(jazz)
+
+        set_config(weight_tag_overlap=2.0)
+        low = matching.top_matches_for_reader(reader)[0].score
+        set_config(weight_tag_overlap=10.0)
+        high = matching.top_matches_for_reader(reader)[0].score
+
+        self.assertAlmostEqual(high - low, 8.0, places=4)
+
+    def test_recommendations_per_send_is_respected(self):
+        reader = make_reader()
+        for i in range(6):
+            make_opportunity(title=f"Thing {i}")
+
+        set_config(recommendations_per_send=2)
+        self.assertEqual(len(matching.top_matches_for_reader(reader)), 2)
+        set_config(recommendations_per_send=5)
+        self.assertEqual(len(matching.top_matches_for_reader(reader)), 5)
+
+    def test_min_recommendations_decides_whether_a_reader_is_skipped(self):
+        reader = make_reader()
+        make_opportunity(title="Only one")
+
+        set_config(min_recommendations=2)
+        self.assertFalse(send_issue_for_reader(reader, dry_run=True).sent)
+
+        set_config(min_recommendations=1)
+        result = send_issue_for_reader(reader, dry_run=True)
+        self.assertIn("Dry run", result.message)
+
+    def test_cooldown_days_is_respected(self):
+        reader = make_reader()
+        opportunity = make_opportunity()
+        issue = NewsletterIssue.objects.create(reader=reader)
+        rec = Recommendation.objects.create(issue=issue, opportunity=opportunity, rationale="x")
+        Recommendation.objects.filter(pk=rec.pk).update(
+            created_at=timezone.now() - timedelta(days=30)
+        )
+
+        set_config(cooldown_days=60)
+        self.assertEqual(len(matching.top_matches_for_reader(reader)), 0)
+        set_config(cooldown_days=7)
+        self.assertEqual(len(matching.top_matches_for_reader(reader)), 1)
+
+    def test_ai_master_switch_turns_every_feature_off(self):
+        set_config(ai_enabled=False)
+        with override_settings(OPENAI_API_KEY="k"):
+            self.assertFalse(ai.is_enabled("write_rationales"))
+            self.assertFalse(ai.is_enabled("interpret_readers"))
+            self.assertFalse(ai.is_enabled("classify_opportunities"))
+
+    def test_individual_ai_features_toggle_independently(self):
+        set_config(ai_enabled=True, ai_write_rationales=False,
+                   ai_interpret_readers=True)
+        with override_settings(OPENAI_API_KEY="k"):
+            self.assertFalse(ai.is_enabled("write_rationales"))
+            self.assertTrue(ai.is_enabled("interpret_readers"))
+
+    def test_subject_template_is_used(self):
+        reader = make_reader(name="Ada Lovelace")
+        issue = NewsletterIssue.objects.create(reader=reader)
+        Recommendation.objects.create(
+            issue=issue, opportunity=make_opportunity(), rationale="x")
+
+        set_config(subject_template="{name}here are {count} picks")
+        subject, _, _ = emailing.render_newsletter(issue)
+        self.assertEqual(subject, "Ada, here are 1 picks")
+
+    def test_a_broken_subject_template_falls_back_instead_of_failing(self):
+        reader = make_reader(name="Ada")
+        issue = NewsletterIssue.objects.create(reader=reader)
+        Recommendation.objects.create(
+            issue=issue, opportunity=make_opportunity(), rationale="x")
+
+        set_config(subject_template="{nonsense} picks")
+        subject, _, _ = emailing.render_newsletter(issue)
+        self.assertIn("things you'll probably love", subject)
+
+    def test_site_name_flows_into_the_newsletter(self):
+        reader = make_reader()
+        issue = NewsletterIssue.objects.create(reader=reader)
+        Recommendation.objects.create(
+            issue=issue, opportunity=make_opportunity(), rationale="x")
+
+        set_config(site_name="Nightjar", tagline="things worth leaving the house for.")
+        _, html, text = emailing.render_newsletter(issue)
+        self.assertIn("Nightjar", html)
+        self.assertIn("things worth leaving the house for.", html)
+        self.assertIn("Nightjar", text)
 
 
 class WildcardTests(TestCase):

@@ -35,7 +35,7 @@ def send_issue_for_reader(
     reader,
     *,
     dry_run: bool = False,
-    min_recommendations: int = DEFAULT_MIN_RECOMMENDATIONS,
+    min_recommendations: int | None = None,
 ) -> SendResult:
     """Match, build the issue, and send it.
 
@@ -43,6 +43,12 @@ def send_issue_for_reader(
     has no persistent effect - in particular it must not put opportunities
     on cooldown for a send that never happened.
     """
+    from siteconfig.models import SiteConfig
+
+    config = SiteConfig.load()
+    if min_recommendations is None:
+        min_recommendations = config.min_recommendations
+
     matches = matching.top_matches_for_reader(reader)
     if len(matches) < min_recommendations:
         return SendResult(
@@ -58,7 +64,7 @@ def send_issue_for_reader(
 
     # One AI call per recommendation adds up; cap the total so a send can
     # never outlive the request that triggered it.
-    budget = ai.TimeBudget(settings.AI_SEND_BUDGET_SECONDS)
+    budget = ai.TimeBudget(config.ai_send_budget_seconds)
 
     with transaction.atomic():
         issue = NewsletterIssue.objects.create(reader=reader)

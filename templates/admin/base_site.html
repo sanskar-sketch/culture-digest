@@ -1,10 +1,10 @@
 {% extends "admin/base.html" %}
 
-{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | The Ether{% endblock %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_config.site_name }}{% endblock %}
 
 {% block branding %}
 <div id="site-name">
-  <a href="{% url 'admin:index' %}"><span class="cd-dot"></span>The Ether</a>
+  <a href="{% url 'admin:index' %}"><span class="cd-dot"></span>{{ site_config.site_name }}</a>
 </div>
 {% endblock %}
 

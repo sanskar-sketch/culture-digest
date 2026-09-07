@@ -30,6 +30,9 @@ def build_unsubscribe_url(reader) -> str:
 
 def render_newsletter(issue) -> tuple[str, str, str]:
     """Return (subject, html_body, text_body) for a NewsletterIssue."""
+    from siteconfig.models import SiteConfig
+
+    config = SiteConfig.load()
     reader = issue.reader
     recs = list(issue.recommendations.select_related("opportunity").all())
 
@@ -49,12 +52,22 @@ def render_newsletter(issue) -> tuple[str, str, str]:
 
     context = {
         "reader": reader,
+        "site_config": config,
         "recommendations": rec_contexts,
         "unsubscribe_url": build_unsubscribe_url(reader),
     }
 
     first_name = reader.name.split(" ")[0] if reader.name else ""
-    subject = f"{first_name + ', ' if first_name else ''}{len(recs)} things you'll probably love this week"
+    try:
+        subject = config.subject_template.format(
+            name=f"{first_name}, " if first_name else "", count=len(recs)
+        )
+    except (KeyError, IndexError, ValueError):
+        # An editor can mistype a placeholder - a broken subject template
+        # must not stop the newsletter going out.
+        logger.warning("Bad subject_template %r - using the default",
+                       config.subject_template)
+        subject = f"{first_name + ', ' if first_name else ''}{len(recs)} things you'll probably love this week"
 
     html_body = render_to_string("emails/newsletter.html", context)
     text_body = render_to_string("emails/newsletter.txt", context)
@@ -66,6 +79,8 @@ def send_newsletter(issue, dry_run: bool = False) -> str | None:
     message id, or None if this was a dry run / sending is unconfigured."""
     subject, html_body, text_body = render_newsletter(issue)
 
+    from siteconfig.models import SiteConfig
+
     if dry_run or not settings.SENDGRID_API_KEY:
         logger.info(
             "[dry-run] Would send newsletter to %s: %s", issue.reader.email, subject
@@ -76,7 +91,7 @@ def send_newsletter(issue, dry_run: bool = False) -> str | None:
     from sendgrid.helpers.mail import Mail
 
     message = Mail(
-        from_email=settings.EMAIL_FROM,
+        from_email=SiteConfig.load().resolved_email_from,
         to_emails=issue.reader.email,
         subject=subject,
         plain_text_content=text_body,

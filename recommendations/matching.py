@@ -36,9 +36,6 @@ BUDGET_TO_PRICE_TIER = {
     Reader.Budget.NO_LIMIT: "splurge",
 }
 
-# How many price-tier steps away from the reader's budget is still acceptable.
-MAX_PRICE_DISTANCE = 2
-
 # Whether a reader whose travel radius doesn't strictly match should still
 # see out-of-area opportunities at all (with a score penalty), or be excluded.
 TRAVEL_RADIUS_ALLOWS_MISMATCH = {
@@ -48,12 +45,13 @@ TRAVEL_RADIUS_ALLOWS_MISMATCH = {
     Reader.TravelRadius.ANYWHERE: True,
 }
 
-FEEDBACK_TAG_WEIGHT = {
-    Recommendation.Feedback.MORE_LIKE_THIS: 1.0,
-    Recommendation.Feedback.SAVE: 0.6,
-    Recommendation.Feedback.BOOKED: 1.2,
-    Recommendation.Feedback.NOT_FOR_ME: -1.0,
-}
+def feedback_weights_from(config) -> dict:
+    return {
+        Recommendation.Feedback.MORE_LIKE_THIS: config.feedback_more_like_this,
+        Recommendation.Feedback.SAVE: config.feedback_saved,
+        Recommendation.Feedback.BOOKED: config.feedback_booked,
+        Recommendation.Feedback.NOT_FOR_ME: config.feedback_not_for_me,
+    }
 
 
 @dataclasses.dataclass
@@ -82,7 +80,7 @@ def _location_matches(reader: Reader, opportunity: Opportunity) -> bool:
     return reader.location.strip().lower() == opportunity.location_area.strip().lower()
 
 
-def _feedback_tag_weights(reader: Reader) -> dict[int, float]:
+def _feedback_tag_weights(reader: Reader, config) -> dict[int, float]:
     """tag id -> signed weight learned from this reader's past feedback.
 
     Opportunities sharing tags with things they said 'more_like_this'/
@@ -91,6 +89,7 @@ def _feedback_tag_weights(reader: Reader) -> dict[int, float]:
     This is the whole MVP "gets better over time" loop.
     """
     weights: dict[int, float] = {}
+    by_feedback = feedback_weights_from(config)
     past = (
         Recommendation.objects.filter(issue__reader=reader)
         .exclude(feedback=Recommendation.Feedback.NONE)
@@ -98,7 +97,7 @@ def _feedback_tag_weights(reader: Reader) -> dict[int, float]:
         .prefetch_related("opportunity__tags")
     )
     for rec in past:
-        weight = FEEDBACK_TAG_WEIGHT.get(rec.feedback)
+        weight = by_feedback.get(rec.feedback)
         if not weight:
             continue
         for tag in rec.opportunity.tags.all():
@@ -107,9 +106,18 @@ def _feedback_tag_weights(reader: Reader) -> dict[int, float]:
 
 
 def score_opportunity(
-    reader: Reader, opportunity: Opportunity, feedback_weights: dict[int, float]
+    reader: Reader, opportunity: Opportunity, feedback_weights: dict[int, float],
+    config=None,
 ) -> Match | None:
-    """Score one opportunity for one reader, or return None to exclude it."""
+    """Score one opportunity for one reader, or return None to exclude it.
+
+    All weights come from the editable SiteConfig, so an editor can tune
+    what the newsletter favours without a deploy.
+    """
+    if config is None:
+        from siteconfig.models import SiteConfig
+
+        config = SiteConfig.load()
 
     location_ok = _location_matches(reader, opportunity)
     # No stated travel radius - default to permissive rather than excluding.
@@ -118,7 +126,7 @@ def score_opportunity(
         return None
 
     price_distance = _price_distance(reader, opportunity)
-    if price_distance > MAX_PRICE_DISTANCE:
+    if price_distance > config.max_price_distance:
         return None
 
     reasons: list[str] = []
@@ -128,14 +136,14 @@ def score_opportunity(
     reader_tag_ids = set(reader.interest_tags.values_list("id", flat=True))
     overlap = [t for t in opp_tags if t.id in reader_tag_ids]
     if overlap:
-        score += 2.0 * len(overlap)
+        score += config.weight_tag_overlap * len(overlap)
         reasons.append("shared interest in " + ", ".join(t.name for t in overlap[:3]))
 
     # Broad category affinity - a weaker signal than a specific tag match,
     # but it means a reader who only picked categories still gets sensible
     # picks. An empty list means no preference, so no bonus and no penalty.
     if reader.interest_categories and opportunity.category in reader.interest_categories:
-        score += 1.5
+        score += config.weight_category
         if not overlap:
             reasons.append(f"{opportunity.get_category_display().lower()} is one of their things")
 
@@ -146,7 +154,7 @@ def score_opportunity(
     inferred_ids = set(reader.ai_inferred_tags.values_list("id", flat=True))
     inferred_overlap = [t for t in opp_tags if t.id in inferred_ids and t.id not in reader_tag_ids]
     if inferred_overlap:
-        score += 0.9 * len(inferred_overlap)
+        score += config.weight_inferred_tag * len(inferred_overlap)
         if not overlap:
             reasons.append(
                 "sounds like the things they described loving"
@@ -154,11 +162,11 @@ def score_opportunity(
 
     avoid_ids = set(reader.ai_avoid_tags.values_list("id", flat=True))
     if any(t.id in avoid_ids for t in opp_tags):
-        score -= 2.0
+        score -= config.penalty_avoid_tag
 
     learned = sum(feedback_weights.get(t.id, 0) for t in opp_tags)
     if learned:
-        if learned < -1:
+        if learned < config.dislike_drop_threshold:
             # They've told us they dislike this cluster before - drop it
             # rather than merely down-ranking it.
             return None
@@ -166,29 +174,29 @@ def score_opportunity(
         if learned > 0:
             reasons.append("similar to things they've liked before")
 
-    score -= 0.6 * price_distance
+    score -= config.penalty_price_step * price_distance
     if price_distance == 0:
         reasons.append("fits their usual budget")
 
     if reader.mainstream_preference is not None:
         mainstream_gap = abs(reader.mainstream_preference - opportunity.mainstream_to_unusual)
-        score -= 0.4 * mainstream_gap
+        score -= config.penalty_mainstream_gap * mainstream_gap
         if mainstream_gap <= 1:
             reasons.append("matches their mainstream/unusual taste")
 
     if reader.scale_preference is not None:
         scale_gap = abs(reader.scale_preference - opportunity.intimate_to_large_scale)
-        score -= 0.3 * scale_gap
+        score -= config.penalty_scale_gap * scale_gap
         if scale_gap <= 1:
             reasons.append("the right scale for them (intimate vs. large-scale)")
 
     if opportunity.critic_rating:
-        score += float(opportunity.critic_rating) * 0.2
+        score += float(opportunity.critic_rating) * config.weight_critic_rating
         if opportunity.critic_rating >= 4:
             reasons.append("critically well-reviewed")
 
     if not location_ok:
-        score -= 1.5
+        score -= config.penalty_out_of_area
         reasons.append("a bit further afield, but worth the trip")
     elif opportunity.is_online:
         reasons.append("available online, wherever they are")
@@ -199,9 +207,12 @@ def score_opportunity(
 
 
 def top_matches_for_reader(reader: Reader, limit: int | None = None) -> list[Match]:
-    limit = limit or settings.RECOMMENDATIONS_PER_SEND
+    from siteconfig.models import SiteConfig
+
+    config = SiteConfig.load()
+    limit = limit or config.recommendations_per_send
     today = timezone.localdate()
-    cooldown_cutoff = timezone.now() - timedelta(days=settings.RECOMMENDATION_COOLDOWN_DAYS)
+    cooldown_cutoff = timezone.now() - timedelta(days=config.cooldown_days)
 
     recently_recommended_ids = set(
         Recommendation.objects.filter(
@@ -216,12 +227,12 @@ def top_matches_for_reader(reader: Reader, limit: int | None = None) -> list[Mat
         .prefetch_related("tags")
     )
 
-    feedback_weights = _feedback_tag_weights(reader)
+    feedback_weights = _feedback_tag_weights(reader, config)
 
     matches = [
         match
         for opportunity in candidates
-        if (match := score_opportunity(reader, opportunity, feedback_weights)) is not None
+        if (match := score_opportunity(reader, opportunity, feedback_weights, config)) is not None
     ]
     matches.sort(key=lambda m: m.score, reverse=True)
 

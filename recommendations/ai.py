@@ -47,8 +47,11 @@ UNTRUSTED_NOTE = (
 )
 
 
-def is_enabled() -> bool:
-    return bool(getattr(settings, "OPENAI_API_KEY", ""))
+def is_enabled(feature: str = "write_rationales") -> bool:
+    """Is this AI feature switched on in the admin *and* has a key?"""
+    from siteconfig.models import SiteConfig
+
+    return SiteConfig.load().ai_available(feature)
 
 
 def _client():
@@ -58,9 +61,11 @@ def _client():
     # request (the admin's send action), where the worker is killed if the
     # request outlives gunicorn's timeout - an unbounded call takes the whole
     # site down with it, not just the send.
+    from siteconfig.models import SiteConfig
+
     return openai.OpenAI(
         api_key=settings.OPENAI_API_KEY,
-        timeout=settings.OPENAI_TIMEOUT_SECONDS,
+        timeout=SiteConfig.load().ai_timeout_seconds,
         max_retries=0,
     )
 
@@ -86,14 +91,17 @@ class TimeBudget:
 
 
 def _call(
-    system: str, user: str, schema: dict, schema_name: str, max_tokens: int = 4000
+    system: str, user: str, schema: dict, schema_name: str, max_tokens: int = 4000,
+    feature: str = "write_rationales",
 ) -> dict | None:
     """One structured call. Returns parsed JSON, or None if AI is off or fails."""
-    if not is_enabled():
+    from siteconfig.models import SiteConfig
+
+    if not is_enabled(feature):
         return None
     try:
         completion = _client().chat.completions.create(
-            model=settings.OPENAI_MODEL,
+            model=SiteConfig.load().resolved_ai_model,
             max_completion_tokens=max_tokens,
             messages=[
                 {"role": "system", "content": system},
@@ -201,7 +209,8 @@ Places they like to travel to:
 {reader.travel_destinations or "(nothing written)"}
 </reader_input>"""
 
-    return _call(INTERPRET_SYSTEM, user, INTERPRET_SCHEMA, "reader_taste", max_tokens=2000)
+    return _call(INTERPRET_SYSTEM, user, INTERPRET_SCHEMA, "reader_taste",
+                 max_tokens=2000, feature="interpret_readers")
 
 
 def apply_interpretation(reader) -> bool:
@@ -275,7 +284,8 @@ Editorial note: {opportunity.editorial_note or "(none)"}
 Venue: {opportunity.location_name or "(none)"}, {opportunity.location_area or "(none)"}
 Price shown to readers: {opportunity.price_display or "(none)"}"""
 
-    return _call(CLASSIFY_SYSTEM, user, CLASSIFY_SCHEMA, "opportunity_classification", max_tokens=1500)
+    return _call(CLASSIFY_SYSTEM, user, CLASSIFY_SCHEMA, "opportunity_classification",
+                 max_tokens=1500, feature="classify_opportunities")
 
 
 # --------------------------------------------------------------------------
@@ -348,7 +358,8 @@ In their own words, things they've loved: {reader.loved_examples or "(nothing wr
 Things not for them: {reader.disliked_examples or "(nothing written)"}
 </reader_input>"""
 
-    result = _call(RATIONALE_SYSTEM, user, RATIONALE_SCHEMA, "recommendation_rationale", max_tokens=1000)
+    result = _call(RATIONALE_SYSTEM, user, RATIONALE_SCHEMA, "recommendation_rationale",
+                   max_tokens=1000, feature="write_rationales")
     if not result:
         return None
     return (result.get("rationale") or "").strip() or None

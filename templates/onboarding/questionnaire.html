@@ -1,16 +1,15 @@
 {% extends "base.html" %}
-{% block title %}The Ether &mdash; sign up{% endblock %}
+{% block title %}{{ site_config.site_name }} &mdash; sign up{% endblock %}
 {% block content %}
 
   <section class="hero bg-dark">
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
     <div class="hero-content">
-      <span class="eyebrow">Personalised. Weekly. Worth it.</span>
-      <h1>Culture, curated<br>just for you.</h1>
+      <span class="eyebrow">{{ site_config.hero_eyebrow }}</span>
+      <h1>{{ site_config.hero_headline }}</h1>
       <p class="lede" style="margin-left:auto;margin-right:auto;">
-        A handful of things to see, hear, eat and do &mdash; matched to your
-        taste, your budget, and your week. Not everyone's.
+        {{ site_config.hero_subhead }}
       </p>
       <a href="#questionnaire" class="btn btn-primary" data-start-wizard>Get started</a>
       <p class="wizard-note" style="text-align:center;">Takes about a minute &middot; only your email is required</p>
