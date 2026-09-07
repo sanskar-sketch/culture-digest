@@ -73,6 +73,17 @@ class DigestAdminSite(AdminSite):
     # without the template loader resolving back to itself.
     index_template = "admin/digest_index.html"
 
+    def each_context(self, request):
+        """The task-grouped navigation on every page, not just the index.
+
+        Registry-only - no database queries - so it costs nothing to put in
+        the sidebar of every request.
+        """
+        context = super().each_context(request)
+        if getattr(request, "user", None) and request.user.is_active and request.user.is_staff:
+            context["digest_sections"] = self.sections(request)
+        return context
+
     def index(self, request, extra_context=None):
         extra_context = {
             **(extra_context or {}),
@@ -95,6 +106,7 @@ class DigestAdminSite(AdminSite):
                 key = f"{app['app_label']}.{model['object_name']}".lower()
                 available[key] = model
 
+        path = getattr(request, "path", "") or ""
         sections, placed = [], set()
         for section in SECTIONS:
             rows = []
@@ -102,7 +114,14 @@ class DigestAdminSite(AdminSite):
                 model = available.get(key)
                 if not model:
                     continue  # not registered, or this user can't see it
-                rows.append({**model, "blurb": blurb})
+                admin_url = model.get("admin_url") or ""
+                rows.append({
+                    **model,
+                    "blurb": blurb,
+                    # Highlights the sidebar entry for the area you're in,
+                    # including its add/change pages.
+                    "active": bool(admin_url) and path.startswith(admin_url),
+                })
                 placed.add(key)
             if rows:
                 sections.append({**section, "rows": rows})

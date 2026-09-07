@@ -1,6 +1,9 @@
 {% extends "admin/index.html" %}
 {% load i18n %}
 
+{% comment %}Django's index.html blanks the sidebar; put ours back.{% endcomment %}
+{% block nav-sidebar %}{% include "admin/ether_sidebar.html" %}{% endblock %}
+
 {% block content %}
 {% if digest_stats %}
 {% with s=digest_stats %}
