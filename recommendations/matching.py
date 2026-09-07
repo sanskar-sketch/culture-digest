@@ -247,7 +247,7 @@ def _pick_wildcard(reader: Reader, remaining: list[Match]) -> Match | None:
     return None
 
 
-def build_rationale(match: Match, reader: Reader | None = None) -> str:
+def build_rationale(match: Match, reader: Reader | None = None, budget=None) -> str:
     """Turn a Match into a short reader-facing 'why this suits you' blurb.
 
     Written by AI when a reader is given and AI is configured, so the line
@@ -258,7 +258,7 @@ def build_rationale(match: Match, reader: Reader | None = None) -> str:
     if reader is not None:
         from . import ai
 
-        written = ai.write_rationale(reader, match.opportunity, match.reasons)
+        written = ai.write_rationale(reader, match.opportunity, match.reasons, budget)
         if written:
             return written
 

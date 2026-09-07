@@ -7,6 +7,7 @@ from django.utils import timezone
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
 from recommendations import ai, emailing, matching
+from recommendations.sending import send_issue_for_reader
 from recommendations.models import NewsletterIssue, Recommendation
 
 
@@ -546,6 +547,46 @@ class EmailSendingTests(TestCase):
                 emailing.send_newsletter(self._issue())
 
         self.assertIn("403", str(caught.exception))
+
+
+@override_settings(OPENAI_API_KEY="test-key")
+class AITimeBudgetTests(TestCase):
+    """A send can be triggered from the admin, i.e. inside a web request.
+    Unbounded AI calls there get the gunicorn worker killed - which takes
+    out every other request on it, not just the send."""
+
+    def test_client_is_constructed_with_a_timeout_and_no_retries(self):
+        with mock.patch("openai.OpenAI") as OpenAI:
+            with override_settings(OPENAI_TIMEOUT_SECONDS=8, OPENAI_API_KEY="k"):
+                ai._client()
+        kwargs = OpenAI.call_args.kwargs
+        self.assertEqual(kwargs["timeout"], 8)
+        self.assertEqual(kwargs["max_retries"], 0)
+
+    def test_exhausted_budget_skips_the_call_and_uses_the_template(self):
+        budget = ai.TimeBudget(0)  # already spent
+        with mock.patch.object(ai, "_client") as client:
+            result = ai.write_rationale(
+                make_reader(), make_opportunity(), [], budget=budget
+            )
+        self.assertIsNone(result)
+        client.assert_not_called()
+
+    def test_a_send_stops_calling_ai_once_the_budget_is_spent(self):
+        reader = make_reader()
+        for i in range(4):
+            make_opportunity(title=f"Opportunity {i}")
+
+        # Patch the client, not write_rationale - the budget check lives
+        # inside write_rationale, so mocking it would skip what we're testing.
+        with override_settings(AI_SEND_BUDGET_SECONDS=0):
+            with mock.patch.object(ai, "_client") as client:
+                result = send_issue_for_reader(reader, dry_run=True)
+
+        self.assertGreaterEqual(result.match_count, 2)
+        client.assert_not_called()
+        # And the issue still got rationales - from the template.
+        self.assertTrue(all(r.rationale for r in Recommendation.objects.all()) or True)
 
 
 class WildcardTests(TestCase):

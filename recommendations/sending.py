@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import dataclasses
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from . import matching
+from . import ai, matching
 from .emailing import send_newsletter
 from .models import NewsletterIssue, Recommendation
 
@@ -55,13 +56,17 @@ def send_issue_for_reader(
             ),
         )
 
+    # One AI call per recommendation adds up; cap the total so a send can
+    # never outlive the request that triggered it.
+    budget = ai.TimeBudget(settings.AI_SEND_BUDGET_SECONDS)
+
     with transaction.atomic():
         issue = NewsletterIssue.objects.create(reader=reader)
         for match in matches:
             Recommendation.objects.create(
                 issue=issue,
                 opportunity=match.opportunity,
-                rationale=matching.build_rationale(match, reader),
+                rationale=matching.build_rationale(match, reader, budget=budget),
                 score=match.score,
             )
 

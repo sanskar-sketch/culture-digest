@@ -139,6 +139,14 @@ EMAIL_FROM = os.environ.get("EMAIL_FROM", "Culture Digest <digest@example.com>")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 
+# Per-call ceiling, and a total allowance for one newsletter send. Sends can
+# be triggered from the admin, i.e. inside a web request, and a request that
+# outlives gunicorn's timeout gets its worker killed - taking out every other
+# request on that worker, not just the send. Anything past the budget falls
+# back to the deterministic template.
+OPENAI_TIMEOUT_SECONDS = float(os.environ.get("OPENAI_TIMEOUT_SECONDS", "8"))
+AI_SEND_BUDGET_SECONDS = float(os.environ.get("AI_SEND_BUDGET_SECONDS", "15"))
+
 # Max number of recommendations included in a single newsletter send.
 RECOMMENDATIONS_PER_SEND = int(os.environ.get("RECOMMENDATIONS_PER_SEND", "4"))
 

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from django.conf import settings
 
@@ -53,7 +54,35 @@ def is_enabled() -> bool:
 def _client():
     import openai
 
-    return openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    # A bounded, non-retrying client. These calls can happen inside a web
+    # request (the admin's send action), where the worker is killed if the
+    # request outlives gunicorn's timeout - an unbounded call takes the whole
+    # site down with it, not just the send.
+    return openai.OpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        timeout=settings.OPENAI_TIMEOUT_SECONDS,
+        max_retries=0,
+    )
+
+
+class TimeBudget:
+    """A wall-clock allowance shared across several AI calls.
+
+    One newsletter means one call per recommendation. Individually bounded,
+    together they can still outlast a web request, so a send gets a total
+    budget and falls back to templates once it's spent.
+    """
+
+    def __init__(self, seconds: float):
+        self.seconds = seconds
+        self._started = time.monotonic()
+
+    @property
+    def spent(self) -> float:
+        return time.monotonic() - self._started
+
+    def exhausted(self) -> bool:
+        return self.spent >= self.seconds
 
 
 def _call(
@@ -282,8 +311,16 @@ Style:
 - Don't open with the event's name - it's already shown above your line."""
 
 
-def write_rationale(reader, opportunity, reasons: list[str]) -> str | None:
+def write_rationale(
+    reader, opportunity, reasons: list[str], budget: "TimeBudget | None" = None
+) -> str | None:
     """Write a personalised rationale, or None to use the template fallback."""
+    if budget is not None and budget.exhausted():
+        logger.info(
+            "AI time budget spent (%.1fs) - using the template for %s",
+            budget.spent, opportunity,
+        )
+        return None
     opp = f"""Title: {opportunity.title}
 Category: {opportunity.get_category_display()}
 Description: {opportunity.description}
