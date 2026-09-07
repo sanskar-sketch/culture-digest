@@ -1,11 +1,7 @@
 from django.core.management.base import BaseCommand
-from django.db import transaction
-from django.utils import timezone
 
 from readers.models import Reader
-from recommendations import matching
-from recommendations.emailing import send_newsletter
-from recommendations.models import NewsletterIssue, Recommendation
+from recommendations.sending import DEFAULT_MIN_RECOMMENDATIONS, send_issue_for_reader
 
 
 class Command(BaseCommand):
@@ -34,7 +30,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--min-recommendations",
             type=int,
-            default=2,
+            default=DEFAULT_MIN_RECOMMENDATIONS,
             help="Skip a reader if fewer than this many matches were found.",
         )
 
@@ -48,43 +44,16 @@ class Command(BaseCommand):
         sent, skipped = 0, 0
 
         for reader in readers:
-            matches = matching.top_matches_for_reader(reader)
-            if len(matches) < options["min_recommendations"]:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"Skipping {reader.email}: only {len(matches)} strong match(es)."
-                    )
-                )
-                skipped += 1
-                continue
-
-            # Dry runs build the issue/recommendations only long enough to
-            # render the email, then roll the transaction back - a dry run
-            # must have zero persistent effect (in particular it must not
-            # count towards the recommendation cooldown).
-            with transaction.atomic():
-                issue = NewsletterIssue.objects.create(reader=reader)
-                for match in matches:
-                    Recommendation.objects.create(
-                        issue=issue,
-                        opportunity=match.opportunity,
-                        rationale=matching.build_rationale(match, reader),
-                        score=match.score,
-                    )
-
-                message_id = send_newsletter(issue, dry_run=options["dry_run"])
-
-                if options["dry_run"]:
-                    transaction.set_rollback(True)
-                else:
-                    issue.sent_at = timezone.now()
-                    issue.provider_message_id = message_id or ""
-                    issue.save(update_fields=["sent_at", "provider_message_id"])
-
-            sent += 1
-            verb = "Would send" if options["dry_run"] else "Sent"
-            self.stdout.write(
-                self.style.SUCCESS(f"{verb} {len(matches)} recommendation(s) to {reader.email}")
+            result = send_issue_for_reader(
+                reader,
+                dry_run=options["dry_run"],
+                min_recommendations=options["min_recommendations"],
             )
+            if result.sent or options["dry_run"]:
+                sent += 1
+                self.stdout.write(self.style.SUCCESS(f"{reader.email}: {result.message}"))
+            else:
+                skipped += 1
+                self.stdout.write(self.style.WARNING(f"{reader.email}: {result.message}"))
 
         self.stdout.write(self.style.SUCCESS(f"Done. Sent: {sent}, skipped: {skipped}."))

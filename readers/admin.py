@@ -6,6 +6,7 @@ from django.utils.safestring import mark_safe
 
 from recommendations import ai
 from recommendations.models import NewsletterIssue, Recommendation
+from recommendations.sending import send_issue_for_reader
 
 from .models import Reader
 
@@ -81,7 +82,7 @@ class ReaderAdmin(admin.ModelAdmin):
                        "ai_profile_updated_at")
     inlines = [NewsletterIssueInline]
     list_per_page = 50
-    actions = ("interpret_taste",)
+    actions = ("preview_newsletter", "send_newsletter_now", "interpret_taste")
 
     fieldsets = (
         ("Who they are", {"fields": ("email", "name", "age", "is_active")}),
@@ -116,6 +117,31 @@ class ReaderAdmin(admin.ModelAdmin):
                 distinct=True,
             ),
         ).prefetch_related("interest_tags")
+
+    def _run_send(self, request, queryset, dry_run):
+        for reader in queryset:
+            try:
+                result = send_issue_for_reader(reader, dry_run=dry_run)
+            except Exception as exc:
+                # A provider rejection (unverified sender, bad key) raises -
+                # surface it to the editor rather than failing silently.
+                self.message_user(
+                    request, f"{reader.email}: send failed — {exc}", messages.ERROR
+                )
+                continue
+            self.message_user(
+                request,
+                f"{reader.email}: {result.message}",
+                messages.SUCCESS if (result.sent or dry_run) else messages.WARNING,
+            )
+
+    @admin.action(description="Preview newsletter (dry run, nothing sent)")
+    def preview_newsletter(self, request, queryset):
+        self._run_send(request, queryset, dry_run=True)
+
+    @admin.action(description="Send newsletter now (really emails them)")
+    def send_newsletter_now(self, request, queryset):
+        self._run_send(request, queryset, dry_run=False)
 
     @admin.action(description="Interpret taste from free text with AI")
     def interpret_taste(self, request, queryset):
