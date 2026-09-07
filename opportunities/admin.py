@@ -130,10 +130,14 @@ class OpportunityAdmin(admin.ModelAdmin):
         (
             "Taste attributes",
             {
-                "description": "These drive matching against a reader's stated taste.",
+                "description": "These drive matching against a reader's stated taste. "
+                               "A critic quote is printed in the newsletter and "
+                               "attributed to the source above - only paste a real one, "
+                               "nothing will invent one.",
                 "fields": (
                     "critic_rating",
                     "critic_rating_source",
+                    "critic_quote",
                     "mainstream_to_unusual",
                     "intimate_to_large_scale",
                 ),
