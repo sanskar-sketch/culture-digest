@@ -170,42 +170,53 @@ class Command(BaseCommand):
             else Opportunity.Status.DRAFT
         )
         today = timezone.localdate()
-        created = skipped = 0
 
+        # Bulk, not one-at-a-time. The database can be a long way from the
+        # app server (ours is a different continent), and 34 listings done
+        # row by row is well over a hundred round trips - enough to outlast
+        # a web request when this is triggered from the admin button.
+        existing = set(Opportunity.objects.values_list("slug", flat=True))
+        tag_ids = dict(Tag.objects.values_list("name", "id"))
+
+        to_create, wanted_tags = [], {}
         for (title, category, price_tier, price_display, venue, area,
              mainstream, scale, rating, tag_names, description) in SAMPLES:
             slug = slugify(title)[:220]
-            if Opportunity.objects.filter(slug=slug).exists():
-                skipped += 1
+            if slug in existing:
                 continue
-
-            opportunity = Opportunity.objects.create(
-                title=title,
-                slug=slug,
-                category=category,
-                description=description,
-                editorial_note=SAMPLE_MARKER,
-                price_tier=price_tier,
-                price_display=price_display,
-                location_name=venue,
-                location_area=area,
-                is_online=(area.lower() == "online"),
-                booking_url=PLACEHOLDER_URL,
-                start_date=today,
-                end_date=today + timedelta(days=90),
+            to_create.append(Opportunity(
+                title=title, slug=slug, category=category, description=description,
+                editorial_note=SAMPLE_MARKER, price_tier=price_tier,
+                price_display=price_display, location_name=venue, location_area=area,
+                is_online=(area.lower() == "online"), booking_url=PLACEHOLDER_URL,
+                start_date=today, end_date=today + timedelta(days=90),
                 critic_rating=rating,
                 critic_rating_source="Sample rating" if rating else "",
-                mainstream_to_unusual=mainstream,
-                intimate_to_large_scale=scale,
+                mainstream_to_unusual=mainstream, intimate_to_large_scale=scale,
                 status=status,
-            )
-            tags = Tag.objects.filter(name__in=tag_names)
-            opportunity.tags.set(tags)
-            missing = set(tag_names) - set(tags.values_list("name", flat=True))
+            ))
+            wanted_tags[slug] = tag_names
+            missing = set(tag_names) - set(tag_ids)
             if missing:
                 self.stdout.write(self.style.WARNING(
                     f"  {title}: no such tag(s) {sorted(missing)}"))
-            created += 1
+
+        skipped = len(SAMPLES) - len(to_create)
+        Opportunity.objects.bulk_create(to_create)
+        created = len(to_create)
+
+        if created:
+            ids = dict(
+                Opportunity.objects.filter(slug__in=wanted_tags)
+                .values_list("slug", "id")
+            )
+            through = Opportunity.tags.through
+            through.objects.bulk_create([
+                through(opportunity_id=ids[slug], tag_id=tag_ids[name])
+                for slug, names in wanted_tags.items()
+                for name in names
+                if name in tag_ids and slug in ids
+            ], ignore_conflicts=True)
 
         self.stdout.write(self.style.SUCCESS(
             f"Created {created} sample opportunit{'y' if created == 1 else 'ies'}"
