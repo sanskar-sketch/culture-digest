@@ -1,5 +1,8 @@
 from django.contrib import admin, messages
+from django.core.management import call_command
 from django.db.models import Count, Q
+from django.shortcuts import redirect
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 
@@ -69,6 +72,42 @@ class OpportunityAdmin(admin.ModelAdmin):
     list_per_page = 50
     actions = ("suggest_classification", "publish", "archive", "back_to_draft")
     save_on_top = True
+    change_list_template = "admin/opportunities/opportunity/change_list.html"
+
+    def get_urls(self):
+        """A button for loading the sample catalogue.
+
+        The hosting has no shell, so a management command an editor can't run
+        is a command that doesn't exist as far as they're concerned.
+        """
+        return [
+            path(
+                "load-sample-catalogue/",
+                self.admin_site.admin_view(self.load_sample_catalogue),
+                name="opportunities_load_sample_catalogue",
+            ),
+        ] + super().get_urls()
+
+    def load_sample_catalogue(self, request):
+        before = Opportunity.objects.count()
+        try:
+            call_command("seed_sample_catalogue")
+        except Exception as exc:
+            self.message_user(request, f"Could not load the samples: {exc}", messages.ERROR)
+        else:
+            added = Opportunity.objects.count() - before
+            if added:
+                self.message_user(
+                    request,
+                    f"Added {added} sample opportunities as drafts. Review them, replace "
+                    f"the placeholder booking links, then publish the ones you want.",
+                    messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request, "The samples are already loaded - nothing added.", messages.INFO
+                )
+        return redirect(reverse("admin:opportunities_opportunity_changelist"))
 
     fieldsets = (
         (None, {"fields": ("title", "slug", "category", "status", "tags")}),

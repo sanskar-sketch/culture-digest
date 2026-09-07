@@ -1,0 +1,13 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  <li>
+    <a href="{% url 'admin:opportunities_load_sample_catalogue' %}" class="addlink"
+       style="background-image:none;"
+       title="{% translate 'Adds a starter set of sample listings as drafts, for you to edit and publish.' %}">
+      {% translate "Load sample catalogue" %}
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}
