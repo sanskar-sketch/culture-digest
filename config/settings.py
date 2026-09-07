@@ -36,6 +36,9 @@ if RENDER_EXTERNAL_HOSTNAME:
 # header - without it Django can't tell the request was actually HTTPS.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = not DEBUG
+# The platform's own health check talks plain HTTP to the container, so the
+# HTTPS redirect would answer it with a 301 and it would never see the 200.
+SECURE_REDIRECT_EXEMPT = [r"^healthz/?$"]
 
 
 INSTALLED_APPS = [
