@@ -21,8 +21,79 @@ class DigestAdminSite(AdminSite):
     index_template = "admin/digest_index.html"
 
     def index(self, request, extra_context=None):
-        extra_context = {**(extra_context or {}), "digest_stats": self.dashboard_stats()}
+        extra_context = {
+            **(extra_context or {}),
+            "digest_stats": self.dashboard_stats(),
+            "digest_config": self.configuration(),
+        }
         return super().index(request, extra_context=extra_context)
+
+    def configuration(self):
+        """What's wired up, for the dashboard.
+
+        Reports presence and non-secret values only - never a key itself.
+        Each row says what the consequence is when it's missing, since
+        every integration here degrades quietly rather than erroring.
+        """
+        from django.conf import settings
+        from django.db import connection
+
+        engine = connection.settings_dict.get("ENGINE", "")
+        host = connection.settings_dict.get("HOST") or ""
+        on_postgres = "postgresql" in engine
+        if on_postgres and "supabase" in host:
+            db_detail = "Supabase Postgres"
+        elif on_postgres:
+            db_detail = f"Postgres ({host or 'unknown host'})"
+        else:
+            db_detail = "SQLite - data is lost on every deploy"
+
+        return [
+            {
+                "name": "Database",
+                "ok": on_postgres,
+                "detail": db_detail,
+            },
+            {
+                "name": "Email sending",
+                "ok": bool(settings.SENDGRID_API_KEY),
+                "detail": (
+                    f"SendGrid key set · from {settings.EMAIL_FROM}"
+                    if settings.SENDGRID_API_KEY
+                    else "No SENDGRID_API_KEY - sends fall back to dry run"
+                ),
+            },
+            {
+                "name": "Link base URL",
+                "ok": settings.SITE_BASE_URL.startswith("https://"),
+                "detail": (
+                    f"{settings.SITE_BASE_URL} - used for feedback and "
+                    "unsubscribe links in emails"
+                ),
+            },
+            {
+                "name": "AI assistance",
+                "ok": bool(settings.OPENAI_API_KEY),
+                "detail": (
+                    f"Key set · model {settings.OPENAI_MODEL}"
+                    if settings.OPENAI_API_KEY
+                    else "No OPENAI_API_KEY - rationales use the template"
+                ),
+            },
+            {
+                "name": "Debug mode",
+                "ok": not settings.DEBUG,
+                "detail": "Off (correct for production)" if not settings.DEBUG
+                          else "ON - leaks tracebacks, must be off in production",
+            },
+            {
+                "name": "Secret key",
+                "ok": not settings.SECRET_KEY.startswith("django-insecure-"),
+                "detail": "Set from the environment"
+                          if not settings.SECRET_KEY.startswith("django-insecure-")
+                          else "Using the insecure development default",
+            },
+        ]
 
     def dashboard_stats(self):
         from opportunities.models import Category, Opportunity, Tag

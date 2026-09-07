@@ -36,6 +36,19 @@
     </div>
   </div>
 
+  {% if digest_config %}
+  <div class="cd-panel" style="margin-bottom:14px;">
+    <h3>{% translate "Configuration" %}</h3>
+    {% for row in digest_config %}
+    <div class="cd-row">
+      <span class="cd-name">{{ row.name }}</span>
+      <span style="flex:0 0 18px;">{% if row.ok %}✓{% else %}<span class="cd-warn">!</span>{% endif %}</span>
+      <span style="flex:1;{% if not row.ok %}color:var(--cd-accent-2){% endif %}">{{ row.detail }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <div class="cd-split">
     <div class="cd-panel">
       <h3>{% translate "Catalogue coverage" %}</h3>
