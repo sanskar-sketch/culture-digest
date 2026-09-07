@@ -31,14 +31,21 @@ class SiteConfig(models.Model):
     site_name = models.CharField(max_length=80, default="The Ether")
     tagline = models.CharField(
         max_length=200,
-        default="a handful of things worth your time, picked for you.",
+        default="the cultural world, filtered down to what's worth your time.",
         help_text="Shown in the site footer and at the foot of the newsletter.",
     )
-    hero_eyebrow = models.CharField(max_length=120, default="Personalised. Weekly. Worth it.")
-    hero_headline = models.CharField(max_length=200, default="Culture, curated just for you.")
+    hero_eyebrow = models.CharField(
+        max_length=120, default="Personalised. Weekly. Worth it.")
+    hero_headline = models.CharField(
+        max_length=200,
+        default="The cultural world, filtered.",
+        help_text="The line under the name in the hero. Keep it short - it sits at "
+                  "display size.",
+    )
     hero_subhead = models.TextField(
-        default="A handful of things to see, hear, eat and do — matched to your "
-                "taste, your budget, and your week. Not everyone's.",
+        default="Theatre, music, film, exhibitions, talks, food and the genuinely "
+                "odd — narrowed each week to a handful chosen for your taste, your "
+                "budget and the time you actually have.",
     )
 
     # --- Sending --------------------------------------------------------

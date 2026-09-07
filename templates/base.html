@@ -67,7 +67,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 52px;
+      height: 60px;
       background: rgba(255, 255, 255, 0);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
@@ -79,9 +79,9 @@
       border-bottom: 1px solid var(--hairline);
     }
     .site-nav .wordmark {
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
       text-decoration: none;
       color: var(--text);
       display: flex;
@@ -89,7 +89,7 @@
       gap: 6px;
     }
     .site-nav .wordmark .dot {
-      width: 7px; height: 7px;
+      width: 10px; height: 10px;
       border-radius: 50%;
       background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
       display: inline-block;
@@ -200,7 +200,36 @@
       50% { transform: translate(-30px, -20px) scale(1.05); }
     }
 
-    .hero-content { position: relative; z-index: 2; max-width: 780px; }
+    .hero-content { position: relative; z-index: 2; max-width: 860px; }
+
+    /* The name, at display size - the hero leads with the brand. */
+    .hero-brand {
+      font-size: clamp(58px, 13vw, 148px);
+      font-weight: 700;
+      letter-spacing: -0.045em;
+      line-height: 0.92;
+      margin: 0 0 22px;
+      background: linear-gradient(120deg, #ffffff 20%, #cfcfe6 55%, var(--accent-2) 130%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero-brand .brand-dot {
+      display: inline-block;
+      width: 0.13em; height: 0.13em;
+      border-radius: 50%;
+      margin-left: 0.06em;
+      vertical-align: baseline;
+      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+    }
+    .hero-lockup-line {
+      font-size: clamp(22px, 3.4vw, 38px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--text-dark);
+      margin: 0 0 20px;
+    }
     .hero h1 { margin-bottom: 20px; }
     .hero .lede { margin: 0 auto 40px; }
 
@@ -454,11 +483,11 @@
     @media (prefers-reduced-motion: reduce) { .other-field { animation: none; } }
 
     /* ---------- step wizard ---------- */
-    .wizard { scroll-margin-top: 52px; }
+    .wizard { scroll-margin-top: 60px; }
 
     .wizard-progress {
       position: sticky;
-      top: 52px;
+      top: 60px;
       z-index: 500;
       background: rgba(0, 0, 0, 0.72);
       backdrop-filter: blur(20px);

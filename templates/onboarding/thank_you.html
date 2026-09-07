@@ -6,6 +6,7 @@
     <div class="orb orb-2"></div>
     <div class="hero-content reveal is-visible">
       <span class="eyebrow">You're in</span>
+      <p class="hero-brand" style="font-size:clamp(34px,6vw,64px);margin-bottom:10px;">{{ site_config.site_name }}<span class="brand-dot"></span></p>
       <h1>Welcome{% if reader.name %}, {{ reader.name }}{% endif %}.</h1>
       <p class="lede" style="margin-left:auto;margin-right:auto;">
         We'll send your first newsletter to <strong>{{ reader.email }}</strong> soon.
