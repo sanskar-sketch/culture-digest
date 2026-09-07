@@ -39,7 +39,7 @@ SECURE_SSL_REDIRECT = not DEBUG
 
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "config.apps.DigestAdminConfig",  # branded admin site, replaces django.contrib.admin
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

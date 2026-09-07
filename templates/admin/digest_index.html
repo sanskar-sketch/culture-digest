@@ -1,0 +1,93 @@
+{% extends "admin/index.html" %}
+{% load i18n %}
+
+{% block content %}
+{% if digest_stats %}
+{% with s=digest_stats %}
+<div class="cd-dash">
+
+  <div class="cd-cards">
+    <div class="cd-card cd-accent">
+      <span class="cd-label">Live catalogue</span>
+      <span class="cd-value">{{ s.opportunities.live }}</span>
+      <span class="cd-sub">
+        {{ s.opportunities.published }} published &middot; {{ s.opportunities.draft }} draft
+      </span>
+    </div>
+    <div class="cd-card">
+      <span class="cd-label">Readers</span>
+      <span class="cd-value">{{ s.readers.active }}</span>
+      <span class="cd-sub">
+        {{ s.readers.new_this_week }} new this week &middot;
+        {{ s.readers.open_to_surprise }} up for a wildcard
+      </span>
+    </div>
+    <div class="cd-card">
+      <span class="cd-label">Recommendations</span>
+      <span class="cd-value">{{ s.feedback.total }}</span>
+      <span class="cd-sub">
+        across {{ s.issues_total }} issue{{ s.issues_total|pluralize }}{% if s.issues_unsent %} &middot; {{ s.issues_unsent }} unsent{% endif %}
+      </span>
+    </div>
+    <div class="cd-card">
+      <span class="cd-label">Feedback rate</span>
+      <span class="cd-value">{{ s.feedback.response_rate }}%</span>
+      <span class="cd-sub">{{ s.feedback.responded }} of {{ s.feedback.total }} replied to</span>
+    </div>
+  </div>
+
+  <div class="cd-split">
+    <div class="cd-panel">
+      <h3>{% translate "Catalogue coverage" %}</h3>
+      {% for row in s.coverage %}
+      <div class="cd-row">
+        <span class="cd-name">{{ row.label }}</span>
+        <span class="cd-bar">
+          <span style="width: {% widthratio row.count s.opportunities.live|default:1 100 %}%"></span>
+        </span>
+        <span class="cd-num {% if not row.count %}cd-warn{% endif %}">{{ row.count }}</span>
+      </div>
+      {% endfor %}
+      {% if s.empty_categories %}
+      <p style="font-size:12px;margin:12px 0 0;" class="cd-warn">
+        Nothing live in
+        {% for row in s.empty_categories %}{{ row.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+      </p>
+      {% endif %}
+    </div>
+
+    <div class="cd-panel">
+      <h3>{% translate "What readers said" %}</h3>
+      <div class="cd-row">
+        <span class="cd-name">More like this</span>
+        <span class="cd-bar"><span style="width: {% widthratio s.feedback.more_like_this s.feedback.total|default:1 100 %}%"></span></span>
+        <span class="cd-num">{{ s.feedback.more_like_this }}</span>
+      </div>
+      <div class="cd-row">
+        <span class="cd-name">Booked</span>
+        <span class="cd-bar"><span style="width: {% widthratio s.feedback.booked s.feedback.total|default:1 100 %}%"></span></span>
+        <span class="cd-num">{{ s.feedback.booked }}</span>
+      </div>
+      <div class="cd-row">
+        <span class="cd-name">Saved</span>
+        <span class="cd-bar"><span style="width: {% widthratio s.feedback.saved s.feedback.total|default:1 100 %}%"></span></span>
+        <span class="cd-num">{{ s.feedback.saved }}</span>
+      </div>
+      <div class="cd-row">
+        <span class="cd-name">Not for me</span>
+        <span class="cd-bar"><span style="width: {% widthratio s.feedback.not_for_me s.feedback.total|default:1 100 %}%"></span></span>
+        <span class="cd-num">{{ s.feedback.not_for_me }}</span>
+      </div>
+      <p style="font-size:12px;color:var(--cd-muted);margin:12px 0 0;">
+        {{ s.tags_total }} interest tag{{ s.tags_total|pluralize }}{% if s.tags_unused %},
+        <span class="cd-warn">{{ s.tags_unused }} not yet on any opportunity</span>{% endif %}.
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endwith %}
+{% endif %}
+
+{{ block.super }}
+{% endblock %}
