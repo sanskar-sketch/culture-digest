@@ -112,6 +112,12 @@ class Opportunity(models.Model):
     critic_rating_source = models.CharField(
         max_length=120, blank=True, help_text="e.g. 'The Guardian, 4/5'."
     )
+    critic_quote = models.TextField(
+        blank=True,
+        help_text="A short quote from an actual review, if you have one. Only ever "
+                  "paste something real - the newsletter attributes it by name, and "
+                  "nothing will invent one for you.",
+    )
     mainstream_to_unusual = models.PositiveSmallIntegerField(
         choices=[(i, i) for i in range(1, 6)],
         help_text="1 = mainstream/crowd-pleasing, 5 = niche/unusual.",

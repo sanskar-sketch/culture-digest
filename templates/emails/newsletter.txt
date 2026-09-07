@@ -1,17 +1,26 @@
-{% autoescape off %}{% if reader.name %}For {{ reader.name }}{% else %}Picked for you{% endif %} - {{ site_config.site_name }}
+{% autoescape off %}{% if reader.name %}{{ reader.name|upper }}'S {{ recommendations|length }}{% else %}THIS WEEK'S {{ recommendations|length }}{% endif %}
+{{ issue_dates }}{% if reader.location %} · {{ reader.location }}{% endif %}
 {% for rec in recommendations %}
-----
-{{ rec.opportunity.title }} ({{ rec.opportunity.get_category_display }}{% if rec.opportunity.location_area %}, {{ rec.opportunity.location_area }}{% endif %})
+{{ forloop.counter }}. {{ rec.opportunity.title|upper }}
+{{ rec.opportunity.get_category_display }}{% if rec.opportunity.location_name %} · {{ rec.opportunity.location_name }}{% endif %}{% if rec.opportunity.price_display %} · {{ rec.opportunity.price_display }}{% endif %}{% if rec.dates %} · {{ rec.dates }}{% endif %}
+{{ rec.fit_display }} fit for you
 
 {{ rec.rationale }}
-
+{% if rec.opportunity.critic_quote %}
+"{{ rec.opportunity.critic_quote }}"{% if rec.opportunity.critic_rating_source %} — {{ rec.opportunity.critic_rating_source }}{% endif %}
+{% elif rec.opportunity.critic_rating_source %}
+Critics: {{ rec.opportunity.critic_rating_source }}
+{% endif %}{% if rec.verdict %}
+VERDICT: {{ rec.verdict }}
+{% endif %}
 Book / learn more: {{ rec.booking_url }}
 
-More like this: {{ rec.more_like_this_url }}
+More like this:  {{ rec.more_like_this_url }}
 Not for me:      {{ rec.not_for_me_url }}
 Save:            {{ rec.save_url }}
 I booked this:   {{ rec.booked_url }}
 {% endfor %}
 ----
+{{ site_config.site_name }} — {{ site_config.tagline }}
 Unsubscribe: {{ unsubscribe_url }}
 {% endautoescape %}

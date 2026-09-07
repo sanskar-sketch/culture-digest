@@ -69,10 +69,12 @@ def send_issue_for_reader(
     with transaction.atomic():
         issue = NewsletterIssue.objects.create(reader=reader)
         for match in matches:
+            rationale, verdict = matching.build_rationale(match, reader, budget=budget)
             Recommendation.objects.create(
                 issue=issue,
                 opportunity=match.opportunity,
-                rationale=matching.build_rationale(match, reader, budget=budget),
+                rationale=rationale,
+                verdict=verdict,
                 score=match.score,
             )
 

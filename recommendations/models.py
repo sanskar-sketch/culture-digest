@@ -44,6 +44,9 @@ class Recommendation(models.Model):
     )
     rationale = models.TextField(help_text="Short reader-facing explanation of why this fits.")
     score = models.FloatField(default=0, help_text="Internal matching score, for debugging/tuning.")
+    verdict = models.CharField(
+        max_length=200, blank=True,
+        help_text="The editorial call, e.g. 'GO.' or 'I think you'll love this.'")
 
     feedback = models.CharField(
         max_length=20, choices=Feedback.choices, default=Feedback.NONE
@@ -62,3 +65,19 @@ class Recommendation(models.Model):
     @property
     def reader(self):
         return self.issue.reader
+
+    # Score bands for the reader-facing fit rating. Absolute rather than
+    # relative to the issue: scoring against the rest of a weak week would
+    # award five stars to the least bad thing available.
+    FIT_BANDS = ((6.0, 5), (4.0, 4), (2.5, 3), (1.0, 2))
+
+    @property
+    def fit_stars(self) -> int:
+        for threshold, stars in self.FIT_BANDS:
+            if self.score >= threshold:
+                return stars
+        return 1
+
+    @property
+    def fit_display(self) -> str:
+        return "★" * self.fit_stars + "☆" * (5 - self.fit_stars)

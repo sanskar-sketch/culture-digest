@@ -126,9 +126,10 @@ class SiteConfig(models.Model):
 
     subject_template = models.CharField(
         max_length=200,
-        default="{name}{count} things you'll probably love this week",
-        help_text="Placeholders: {name} (ends with a comma and space, or empty) "
-                  "and {count}.",
+        default="{name}{count} thing{plural} worth your time",
+        help_text="Placeholders: {name} (their first name plus a comma, or empty), "
+                  "{first_name} (bare), {count}, and {plural} (an 's' unless there is "
+                  "exactly one pick - so 'thing{plural}' reads correctly either way).",
     )
 
     # --- Matching weights ----------------------------------------------

@@ -29,6 +29,44 @@ def build_unsubscribe_url(reader) -> str:
 
 
 
+def _paragraphs(text: str):
+    """The editor writes in paragraphs; email HTML needs them marked up."""
+    from django.utils.html import escape, mark_safe
+
+    blocks = [b.strip() for b in (text or "").split("\n") if b.strip()]
+    return mark_safe("".join(
+        f'<p style="margin:0 0 12px;">{escape(b)}</p>' for b in blocks
+    ))
+
+
+def _date_range(opportunity) -> str:
+    """'Mon 7 - Sat 12 Sep', or a single date, or nothing."""
+    start, end = opportunity.start_date, opportunity.end_date
+    if not start and not end:
+        return ""
+    if start and end and start != end:
+        if (start.year, start.month) == (end.year, end.month):
+            return f"{start:%a %-d}\u2013{end:%a %-d %b}"
+        return f"{start:%-d %b}\u2013{end:%-d %b}"
+    return f"{(start or end):%a %-d %b}"
+
+
+def _issue_dates(recs) -> str:
+    """The week this issue covers, from the picks themselves."""
+    from django.utils import timezone
+
+    today = timezone.localdate()
+    dates = [r.opportunity.start_date for r in recs if r.opportunity.start_date]
+    if not dates:
+        return f"{today:%-d %B %Y}"
+    first, last = min(dates), max(dates)
+    if first == last:
+        return f"{first:%-d %B %Y}"
+    if (first.year, first.month) == (last.year, last.month):
+        return f"{first:%-d}\u2013{last:%-d %B %Y}"
+    return f"{first:%-d %b}\u2013{last:%-d %b %Y}"
+
+
 def profile_summary(reader) -> list[tuple[str, str]]:
     """The answers we actually have, for showing back to a new reader.
 
@@ -126,6 +164,10 @@ def render_newsletter(issue) -> tuple[str, str, str]:
             {
                 "opportunity": rec.opportunity,
                 "rationale": rec.rationale,
+                "rationale_html": _paragraphs(rec.rationale),
+                "verdict": rec.verdict,
+                "fit_display": rec.fit_display,
+                "dates": _date_range(rec.opportunity),
                 "booking_url": rec.opportunity.booking_url,
                 "more_like_this_url": build_feedback_url(rec.feedback_token, "more-like-this"),
                 "not_for_me_url": build_feedback_url(rec.feedback_token, "not-for-me"),
@@ -137,6 +179,7 @@ def render_newsletter(issue) -> tuple[str, str, str]:
     context = {
         "reader": reader,
         "site_config": config,
+        "issue_dates": _issue_dates(recs),
         "recommendations": rec_contexts,
         "unsubscribe_url": build_unsubscribe_url(reader),
     }
@@ -144,14 +187,18 @@ def render_newsletter(issue) -> tuple[str, str, str]:
     first_name = reader.name.split(" ")[0] if reader.name else ""
     try:
         subject = config.subject_template.format(
-            name=f"{first_name}, " if first_name else "", count=len(recs)
+            name=f"{first_name}, " if first_name else "",
+            first_name=first_name,
+            count=len(recs),
+            plural="" if len(recs) == 1 else "s",
         )
     except (KeyError, IndexError, ValueError):
         # An editor can mistype a placeholder - a broken subject template
         # must not stop the newsletter going out.
         logger.warning("Bad subject_template %r - using the default",
                        config.subject_template)
-        subject = f"{first_name + ', ' if first_name else ''}{len(recs)} things you'll probably love this week"
+        subject = (f"{first_name + ', ' if first_name else ''}{len(recs)} "
+                   f"thing{'' if len(recs) == 1 else 's'} worth your time")
 
     from siteconfig.emails import EmailTemplate, render_email
 

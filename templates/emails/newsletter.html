@@ -21,9 +21,12 @@
             <div style="font-size:13px; line-height:1.5; color:#a1a1a6; margin-top:10px;">
               {{ site_config.tagline }}
             </div>
-            <h1 style="font-size:22px; line-height:1.3; margin:22px 0 0; color:#ffffff; font-weight:600; letter-spacing:-0.01em;">
-              {% if reader.name %}For {{ reader.name }}{% else %}Picked for you{% endif %}
+            <h1 style="font-size:30px; line-height:1.2; margin:20px 0 0; color:#ffffff; font-weight:700; letter-spacing:-0.02em; text-transform:uppercase;">
+              {% if reader.name %}{{ reader.name }}'s {{ recommendations|length }}{% else %}This week's {{ recommendations|length }}{% endif %}
             </h1>
+            <div style="font-size:13px; color:#a1a1a6; margin-top:8px;">
+              {{ issue_dates }}{% if reader.location %} &middot; {{ reader.location }}{% endif %}
+            </div>
           </td>
         </tr>
 
@@ -36,11 +39,36 @@
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff; border:1px solid #e5e5ea; border-radius:18px;">
               <tr>
                 <td style="padding:28px 28px 24px;">
-                  <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#ff375f;">
-                    {{ rec.opportunity.get_category_display }}{% if rec.opportunity.location_area %} &middot; {{ rec.opportunity.location_area }}{% endif %}{% if rec.opportunity.price_display %} &middot; {{ rec.opportunity.price_display }}{% endif %}
-                  </span>
-                  <h2 style="font-size:21px; line-height:1.3; margin:10px 0 10px; font-weight:600; letter-spacing:-0.01em; color:#1d1d1f;">{{ rec.opportunity.title }}</h2>
-                  <p style="font-size:15px; line-height:1.6; margin:0 0 20px; color:#4a4a4f;">{{ rec.rationale }}</p>
+                  <div style="font-size:26px; font-weight:700; color:#d2d2d7; line-height:1; margin-bottom:8px;">{{ forloop.counter }}</div>
+                  <h2 style="font-size:21px; line-height:1.3; margin:0 0 8px; font-weight:700; letter-spacing:-0.01em; color:#1d1d1f; text-transform:uppercase;">{{ rec.opportunity.title }}</h2>
+                  <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#ff375f; margin-bottom:10px;">
+                    {{ rec.opportunity.get_category_display }}{% if rec.opportunity.location_name %} &middot; {{ rec.opportunity.location_name }}{% elif rec.opportunity.location_area %} &middot; {{ rec.opportunity.location_area }}{% endif %}{% if rec.opportunity.price_display %} &middot; {{ rec.opportunity.price_display }}{% endif %}{% if rec.dates %} &middot; {{ rec.dates }}{% endif %}
+                  </div>
+                  <div style="font-size:14px; color:#1d1d1f; margin-bottom:14px;">
+                    <span style="letter-spacing:1px;">{{ rec.fit_display }}</span>
+                    <span style="color:#86868b; font-size:12px;">&nbsp;fit for you</span>
+                  </div>
+
+                  <div style="font-size:15px; line-height:1.65; margin:0 0 16px; color:#4a4a4f;">
+                    {{ rec.rationale_html }}
+                  </div>
+
+                  {% if rec.opportunity.critic_quote %}
+                  <p style="font-size:14px; line-height:1.6; margin:0 0 16px; padding-left:14px; border-left:3px solid #e5e5ea; color:#4a4a4f;">
+                    &ldquo;{{ rec.opportunity.critic_quote }}&rdquo;{% if rec.opportunity.critic_rating_source %}
+                    <span style="color:#86868b;">&mdash; {{ rec.opportunity.critic_rating_source }}</span>{% endif %}
+                  </p>
+                  {% elif rec.opportunity.critic_rating_source %}
+                  <p style="font-size:13px; margin:0 0 16px; color:#86868b;">
+                    Critics: {{ rec.opportunity.critic_rating_source }}
+                  </p>
+                  {% endif %}
+
+                  {% if rec.verdict %}
+                  <p style="font-size:14px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; margin:0 0 18px; color:#1d1d1f;">
+                    Verdict: {{ rec.verdict }}
+                  </p>
+                  {% endif %}
                   <a href="{{ rec.booking_url }}" style="display:inline-block; background:#000000; color:#ffffff; text-decoration:none; padding:12px 24px; border-radius:999px; font-size:14px; font-weight:500;">Book / learn more &rarr;</a>
 
                   <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:22px; border-top:1px solid #eeeeef; padding-top:16px; width:100%;">

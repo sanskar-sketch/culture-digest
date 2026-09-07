@@ -258,7 +258,7 @@ def _pick_wildcard(reader: Reader, remaining: list[Match]) -> Match | None:
     return None
 
 
-def build_rationale(match: Match, reader: Reader | None = None, budget=None) -> str:
+def build_rationale(match: Match, reader: Reader | None = None, budget=None) -> tuple[str, str]:
     """Turn a Match into a short reader-facing 'why this suits you' blurb.
 
     Written by AI when a reader is given and AI is configured, so the line
@@ -277,5 +277,5 @@ def build_rationale(match: Match, reader: Reader | None = None, budget=None) -> 
     base = (opportunity.editorial_note or opportunity.description).strip().split("\n")[0]
     reasons = match.reasons[:3]
     if reasons:
-        return f"{base} We picked this because it's {'; '.join(reasons)}."
-    return base
+        return f"{base} We picked this because it's {'; '.join(reasons)}.", ""
+    return base, ""

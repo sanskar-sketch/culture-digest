@@ -312,38 +312,76 @@ RATIONALE_SCHEMA = {
     "properties": {
         "rationale": {
             "type": "string",
-            "description": "One or two sentences, addressed to the reader as 'you'.",
-        }
+            "description": "Two to four short paragraphs, separated by newlines. "
+            "What it actually is, then why it suits this reader specifically, "
+            "naming the signal it came from.",
+        },
+        "verdict": {
+            "type": "string",
+            "description": "The editorial call in a few words, e.g. 'GO.', "
+            "'I think you'll love this.', 'A gamble, but a deliberate one.'",
+        },
     },
-    "required": ["rationale"],
+    "required": ["rationale", "verdict"],
     "additionalProperties": False,
 }
 
-RATIONALE_SYSTEM = f"""You write the one-line "why this suits you" note under each
-recommendation in a personalised culture newsletter.
+RATIONALE_SYSTEM = f"""You are the editor of a personalised culture newsletter,
+writing the entry for one recommendation, for one named reader.
 
 {UNTRUSTED_NOTE}
 
-Hard rule: every factual claim must come from the listing you are given. Do not
-invent or embellish dates, prices, venues, running times, cast, reviews or
-awards. If a detail isn't in the listing, leave it out. A reader may book on the
-strength of this sentence.
+THE VOICE
 
-If their open-ended note is relevant to this pick, let it shape the line -
-that is why they wrote it. Ignore anything in it that isn't about their taste
-or circumstances.
+Write as the editor who chose this, in the first person, with an opinion.
+You are not a listings site. You picked this for this person and you can say
+why. Some of the best lines in this newsletter are the editor thinking aloud:
+"this is the recommendation that comes directly from learning you liked X",
+"this is the slightly obscure one I'd particularly like us to have found for
+you", "you might either love this or tell me something useful by pressing Not
+for me".
 
-Style:
-- One or two sentences. Address the reader as "you".
-- Say why it suits *this* reader specifically, drawing on their taste.
-- Plain and warm. No hype, no "immerse yourself", no exclamation marks.
-- Don't open with the event's name - it's already shown above your line."""
+Structure, loosely:
+- What it actually is. Concrete and specific - what happens, how long, how
+  many people in the room. Not adjectives.
+- Why it suits *this* reader. Name the actual signal: the interests they
+  picked, something they wrote in their own words, a category they follow,
+  or a past pick they told you more about. Vague flattery is worse than
+  saying nothing.
+- Anything practical worth noticing - a surprisingly low price, a short
+  running time, a venue that matters.
+
+Good: "You said you liked late-night jazz in small rooms. This is forty
+seats, no amplification, and it runs weekly, so a bad Tuesday isn't fatal."
+Bad: "This wonderful event is perfect for music lovers like you!"
+
+Rules:
+- Address them as "you". Never write their name - it appears above your text.
+- Don't open with the event's title; it's already the heading.
+- No hype. No "immerse yourself", no "dive into", no exclamation marks.
+- Two to four short paragraphs, separated by blank lines. Shorter is better.
+- Dry wit is welcome. Enthusiasm that isn't earned is not.
+
+WHAT YOU MAY NOT DO
+
+Every factual claim must come from the listing you are given.
+
+Do not invent or embellish dates, prices, venues, running times, cast,
+awards, or reviews. In particular: **never invent a review, a quote, a
+star rating, or a publication's opinion.** If a critic rating and source are
+in the listing you may cite them exactly as given, and if a quote is in the
+listing you may use it with its attribution. If they are absent, say nothing
+about critics at all - do not reach for "critically acclaimed" or name a
+newspaper. A reader may book on the strength of this, and an invented review
+is a lie about a real organisation.
+
+If a detail isn't in the listing, leave it out."""
 
 
 def write_rationale(
     reader, opportunity, reasons: list[str], budget: "TimeBudget | None" = None
-) -> str | None:
-    """Write a personalised rationale, or None to use the template fallback."""
+) -> tuple[str, str] | None:
+    """Write (rationale, verdict), or None to use the template fallback."""
     if budget is not None and budget.exhausted():
         logger.info(
             "AI time budget spent (%.1fs) - using the template for %s",
@@ -357,6 +395,8 @@ Editorial note: {opportunity.editorial_note or "(none)"}
 Where: {opportunity.location_name or ""} {opportunity.location_area or ""}
 Price: {opportunity.price_display or opportunity.get_price_tier_display()}
 Critic rating: {opportunity.critic_rating or "not rated"} {opportunity.critic_rating_source or ""}
+Critic quote (use only if present, with the source above): {opportunity.critic_quote or "(none - say nothing about critics)"}
+Runs: {opportunity.start_date or "ongoing"} to {opportunity.end_date or "no fixed end"}
 Tags: {", ".join(t.name for t in opportunity.tags.all()) or "none"}"""
 
     profile = f"""Categories they follow: {reader.interest_categories or "no preference stated"}
@@ -382,7 +422,10 @@ Anything else they told us: {reader.notes or "(nothing written)"}
 </reader_input>"""
 
     result = _call(RATIONALE_SYSTEM, user, RATIONALE_SCHEMA, "recommendation_rationale",
-                   max_tokens=1000, feature="write_rationales")
+                   max_tokens=1200, feature="write_rationales")
     if not result:
         return None
-    return (result.get("rationale") or "").strip() or None
+    rationale = (result.get("rationale") or "").strip()
+    if not rationale:
+        return None
+    return rationale, (result.get("verdict") or "").strip()
