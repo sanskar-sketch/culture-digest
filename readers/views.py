@@ -1,6 +1,8 @@
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_http_methods
 
+from recommendations.emailing import send_welcome
+
 from .forms import ReaderOnboardingForm
 from .models import Reader
 
@@ -25,6 +27,7 @@ def onboarding_view(request):
     if request.method == "POST" and form.is_valid():
         if existing is None:
             reader = form.save()
+            send_welcome(reader)
         else:
             reader = _merge_into(form, existing)
         return render(

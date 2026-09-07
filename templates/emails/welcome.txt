@@ -1,0 +1,17 @@
+{% autoescape off %}You're in{% if reader.name %}, {{ reader.name }}{% endif %}.
+
+Thanks for signing up to {{ site_config.site_name }} - {{ site_config.tagline }}
+
+From here on we'll do the filtering: a small number of things worth your time,
+chosen for what you told us, with a line on why each one suits you.
+{% if summary %}
+WHAT WE'VE GOT SO FAR
+{% for label, value in summary %}{{ label }}: {{ value }}
+{% endfor %}{% endif %}
+Got that wrong, or want to add something? Change any of it here:
+{{ preferences_url }}
+
+----
+Update your preferences: {{ preferences_url }}
+Unsubscribe: {{ unsubscribe_url }}
+{% endautoescape %}

@@ -70,6 +70,15 @@ class SiteConfig(models.Model):
                   "Blank uses the EMAIL_FROM environment variable. Must be a verified "
                   "sender in SendGrid or sends are rejected.",
     )
+    send_welcome_email = models.BooleanField(
+        default=True,
+        help_text="Email a confirmation the moment someone signs up, showing back "
+                  "what they told us and how to change it.",
+    )
+    welcome_subject = models.CharField(
+        max_length=200, default="You're in - welcome to {site}",
+        help_text="Subject for the welcome email. {site} is replaced with the site name.",
+    )
     subject_template = models.CharField(
         max_length=200,
         default="{name}{count} things you'll probably love this week",

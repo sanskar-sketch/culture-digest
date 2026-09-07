@@ -23,7 +23,8 @@ class SiteConfigAdmin(admin.ModelAdmin):
             "description": "How many picks go out, to whom, and how often the same "
                            "thing may reappear.",
             "fields": ("recommendations_per_send", "min_recommendations",
-                       "cooldown_days", "email_from", "subject_template"),
+                       "cooldown_days", "email_from", "subject_template",
+                       "send_welcome_email", "welcome_subject"),
         }),
         ("Matching — what raises a score", {
             "description": "Higher numbers mean a stronger pull. These decide which "

@@ -33,6 +33,82 @@ def build_preferences_url(reader) -> str:
     return settings.SITE_BASE_URL.rstrip("/") + path
 
 
+def profile_summary(reader) -> list[tuple[str, str]]:
+    """The answers we actually have, for showing back to a new reader.
+
+    Only what they filled in - listing blanks would read as a reproach for
+    skipping optional questions.
+    """
+    rows = []
+    if reader.interest_categories:
+        rows.append(("Following", ", ".join(reader.interest_categories)))
+    tags = list(reader.interest_tags.values_list("name", flat=True))
+    if tags:
+        rows.append(("Interests", ", ".join(tags)))
+    if reader.location:
+        rows.append(("Based in", reader.location))
+    if reader.budget:
+        rows.append(("Budget", reader.get_budget_display()))
+    if reader.travel_radius:
+        rows.append(("Will travel", reader.get_travel_radius_display()))
+    if reader.availability:
+        rows.append(("Free", ", ".join(reader.availability)))
+    if reader.open_to_surprise:
+        rows.append(("Wildcards", "Yes - surprise me sometimes"))
+    return rows
+
+
+def send_welcome(reader) -> str | None:
+    """Confirm a new signup. Never allowed to break the signup itself.
+
+    This runs inside the web request, so a provider that is slow or down
+    must not cost someone their subscription - they filled in the form and
+    we saved it, which is the part that matters.
+    """
+    from siteconfig.models import SiteConfig
+
+    config = SiteConfig.load()
+    if not config.send_welcome_email:
+        return None
+
+    context = {
+        "reader": reader,
+        "site_config": config,
+        "summary": profile_summary(reader),
+        "preferences_url": build_preferences_url(reader),
+        "unsubscribe_url": build_unsubscribe_url(reader),
+    }
+    subject = config.welcome_subject.replace("{site}", config.site_name)
+
+    if not settings.SENDGRID_API_KEY:
+        logger.info("[dry-run] Would send welcome email to %s", reader.email)
+        return None
+
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
+
+        message = Mail(
+            from_email=config.resolved_email_from,
+            to_emails=reader.email,
+            subject=subject,
+            plain_text_content=render_to_string("emails/welcome.txt", context),
+            html_content=render_to_string("emails/welcome.html", context),
+        )
+        response = SendGridAPIClient(settings.SENDGRID_API_KEY).send(message)
+        if response.status_code >= 300:
+            logger.error("Welcome email rejected for %s: HTTP %s %r",
+                         reader.email, response.status_code, getattr(response, "body", b""))
+            return None
+        headers = response.headers or {}
+        message_id = headers.get("X-Message-Id") or headers.get("x-message-id")
+        logger.info("Welcome email accepted for %s (message id %s)", reader.email, message_id)
+        return message_id
+    except Exception:
+        logger.exception("Welcome email failed for %s", reader.email)
+        return None
+
+
 def render_newsletter(issue) -> tuple[str, str, str]:
     """Return (subject, html_body, text_body) for a NewsletterIssue."""
     from siteconfig.models import SiteConfig
