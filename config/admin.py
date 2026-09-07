@@ -12,6 +12,59 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 
+# The admin index, arranged by what an editor is trying to do rather than
+# by which Django app a model happens to live in. "SITECONFIG" and
+# "RECOMMENDATIONS" are facts about the codebase, not about the job.
+SECTIONS = [
+    {
+        "title": "The catalogue",
+        "blurb": "Everything the newsletter can draw on. This is where the work is.",
+        "models": [
+            ("opportunities.opportunity", "Shows, exhibitions, meals, talks. Draft "
+                                          "until you publish them."),
+            ("opportunities.tag", "The interest vocabulary — what readers pick from, "
+                                  "and what listings get tagged with."),
+        ],
+    },
+    {
+        "title": "Readers",
+        "blurb": "Who is subscribed, and what they told us about their taste.",
+        "models": [
+            ("readers.reader", "Profiles, what each person was sent, and how they "
+                               "responded."),
+        ],
+    },
+    {
+        "title": "What goes out",
+        "blurb": "The newsletters themselves, and how they read.",
+        "models": [
+            ("recommendations.newsletterissue", "Every send, and what was in it."),
+            ("recommendations.recommendation", "Individual picks and the feedback "
+                                               "readers gave on them."),
+            ("siteconfig.emailtemplate", "Write and preview the emails. Leave empty "
+                                         "to use the built-in ones."),
+        ],
+    },
+    {
+        "title": "Settings",
+        "blurb": "How the whole thing behaves — branding, schedule, matching, AI.",
+        "models": [
+            ("siteconfig.siteconfig", "One page, tabbed: branding, sending, schedule, "
+                                      "matching weights, feedback learning and AI."),
+        ],
+    },
+    {
+        "title": "Access",
+        "blurb": "Who can get in here.",
+        "collapsed": True,
+        "models": [
+            ("auth.user", "Editor accounts."),
+            ("auth.group", "Permission groups, if you want more than one kind of editor."),
+        ],
+    },
+]
+
+
 class DigestAdminSite(AdminSite):
     site_header = "The Ether"
     site_title = "The Ether"
@@ -25,8 +78,46 @@ class DigestAdminSite(AdminSite):
             **(extra_context or {}),
             "digest_stats": self.dashboard_stats(),
             "digest_config": self.configuration(),
+            "digest_sections": self.sections(request),
         }
         return super().index(request, extra_context=extra_context)
+
+    def sections(self, request):
+        """The registered models, grouped by task and described.
+
+        Anything registered but not placed in SECTIONS still appears, under
+        "Everything else" - a new model should never become invisible just
+        because nobody added it here.
+        """
+        available = {}
+        for app in super().get_app_list(request):
+            for model in app["models"]:
+                key = f"{app['app_label']}.{model['object_name']}".lower()
+                available[key] = model
+
+        sections, placed = [], set()
+        for section in SECTIONS:
+            rows = []
+            for key, blurb in section["models"]:
+                model = available.get(key)
+                if not model:
+                    continue  # not registered, or this user can't see it
+                rows.append({**model, "blurb": blurb})
+                placed.add(key)
+            if rows:
+                sections.append({**section, "rows": rows})
+
+        leftover = [
+            {**model, "blurb": ""}
+            for key, model in available.items() if key not in placed
+        ]
+        if leftover:
+            sections.append({
+                "title": "Everything else",
+                "blurb": "Registered but not yet placed in a section.",
+                "rows": leftover,
+            })
+        return sections
 
     def configuration(self):
         """What's wired up, for the dashboard.
@@ -96,6 +187,16 @@ class DigestAdminSite(AdminSite):
         ]
 
     def dashboard_stats(self):
+        from django.core.cache import cache
+
+        cached = cache.get("digest_dashboard_stats")
+        if cached is not None:
+            return cached
+        stats = self._compute_dashboard_stats()
+        cache.set("digest_dashboard_stats", stats, 60)
+        return stats
+
+    def _compute_dashboard_stats(self):
         from opportunities.models import Category, Opportunity, Tag
         from readers.models import Reader
         from recommendations.models import NewsletterIssue, Recommendation

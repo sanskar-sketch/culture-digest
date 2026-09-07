@@ -100,6 +100,56 @@
   .cd-row .cd-num { flex: 0 0 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--cd-muted); }
   .cd-warn { color: var(--cd-accent-2); font-weight: 600; }
 
+  /* ---------- task-grouped index ---------- */
+  .cd-sections { display: grid; gap: 14px; }
+  .cd-section {
+    border: 1px solid var(--hairline-color, #e1e1e3);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .cd-section-head { padding: 15px 18px 13px; border-bottom: 1px solid var(--hairline-color, #e1e1e3); }
+  .cd-section-head h2 {
+    margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+    text-transform: none; color: var(--body-fg, #1d1d1f); background: none; padding: 0;
+  }
+  .cd-section-head p { margin: 3px 0 0; font-size: 13px; color: var(--cd-muted); }
+  .cd-section-quiet { opacity: 0.72; }
+  .cd-section-quiet:hover { opacity: 1; }
+
+  .cd-model {
+    display: flex; align-items: center; gap: 16px;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--hairline-color, #f0f0f2);
+  }
+  .cd-model:last-child { border-bottom: none; }
+  .cd-model:hover { background: rgba(94,92,230,0.045); }
+  .cd-model-main { flex: 1; min-width: 0; }
+  .cd-model-name {
+    font-size: 15px; font-weight: 600; text-decoration: none;
+    color: var(--cd-accent-1); letter-spacing: -0.01em;
+  }
+  .cd-model-name:hover { text-decoration: underline; }
+  .cd-model-blurb { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: var(--cd-muted); }
+  .cd-model-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .cd-act {
+    font-size: 13px; font-weight: 600; text-decoration: none;
+    padding: 6px 14px; border-radius: 999px;
+    border: 1px solid var(--hairline-color, #dcdce0);
+    color: var(--body-fg, #333); white-space: nowrap;
+  }
+  .cd-act:hover { border-color: var(--cd-accent-1); color: var(--cd-accent-1); }
+  .cd-act-add { background: var(--cd-accent-1); border-color: transparent; color: #fff; }
+  .cd-act-add:hover { background: #4a48c4; color: #fff; }
+
+  @media (max-width: 620px) {
+    .cd-model { flex-direction: column; align-items: flex-start; gap: 10px; }
+  }
+  @media (prefers-color-scheme: dark) {
+    .cd-section, .cd-section-head { border-color: rgba(255,255,255,0.12); }
+    .cd-model { border-bottom-color: rgba(255,255,255,0.07); }
+    .cd-act { border-color: rgba(255,255,255,0.16); color: #e6e6e9; }
+  }
+
   .cd-pill {
     display: inline-block; padding: 2px 9px; border-radius: 999px;
     font-size: 11px; font-weight: 600; letter-spacing: 0.02em;

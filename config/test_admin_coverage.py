@@ -92,3 +92,55 @@ class AdminCoverageTests(TestCase):
             self.assertNotIn("critic_quote", reachable_fields(admin_instance))
         finally:
             OpportunityAdmin.fieldsets = original
+
+
+class AdminIndexSectionTests(TestCase):
+    """The index is grouped by editorial task rather than by Django app, which
+    means the grouping is hand-written - so it can fall out of date."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.user = get_user_model().objects.create_user(
+            "sections", password="x", is_staff=True, is_superuser=True)
+
+    def _sections(self):
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/admin/")
+        request.user = self.user
+        return django_admin.site.sections(request)
+
+    def test_every_registered_model_appears_somewhere(self):
+        listed = {
+            row["object_name"].lower()
+            for section in self._sections() for row in section["rows"]
+        }
+        registered = {m._meta.model_name for m in django_admin.site._registry}
+
+        self.assertEqual(
+            registered - listed, set(),
+            "These models are registered but missing from the index - add them to "
+            "SECTIONS in config/admin.py.")
+
+    def test_an_unplaced_model_still_shows_rather_than_disappearing(self):
+        """A model nobody remembered to place must not become invisible."""
+        from config import admin as digest_admin
+
+        original = digest_admin.SECTIONS
+        try:
+            digest_admin.SECTIONS = [s for s in original if s["title"] != "Readers"]
+            titles = [s["title"] for s in self._sections()]
+            listed = {
+                row["object_name"].lower()
+                for section in self._sections() for row in section["rows"]
+            }
+            self.assertIn("Everything else", titles)
+            self.assertIn("reader", listed)
+        finally:
+            digest_admin.SECTIONS = original
+
+    def test_every_section_explains_what_it_is_for(self):
+        for section in self._sections():
+            self.assertTrue(section["title"])
+            self.assertTrue(section["blurb"], f"{section['title']} has no description")
