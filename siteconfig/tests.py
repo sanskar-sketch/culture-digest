@@ -1,3 +1,165 @@
-from django.test import TestCase
+from datetime import date
 
-# Create your tests here.
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.test import TestCase, override_settings
+from django.urls import reverse
+
+from siteconfig.emails import EmailTemplate, render_email
+from siteconfig.models import SiteConfig
+
+
+# The production static storage needs a manifest built by collectstatic,
+# which tests don't run - swap it out for anything that renders admin pages.
+plain_static = override_settings(STORAGES={
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+})
+
+
+def staff():
+    User = get_user_model()
+    user = User.objects.create_user("editor", password="x", is_staff=True, is_superuser=True)
+    return user
+
+
+@plain_static
+class EmailTemplateTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_a_selected_template_is_used_instead_of_the_built_in_one(self):
+        template = EmailTemplate.objects.create(
+            name="Custom", kind=EmailTemplate.Kind.WELCOME,
+            html_body="<p>Hello {{ reader.name }}</p>", text_body="Hello {{ reader.name }}")
+        config = SiteConfig.load()
+        config.welcome_template = template
+        config.save()
+        cache.clear()
+
+        from types import SimpleNamespace
+        html, text, _ = render_email(
+            EmailTemplate.Kind.WELCOME,
+            {"reader": SimpleNamespace(name="Ada"), "site_config": SiteConfig.load(),
+             "summary": [], "unsubscribe_url": "u"},
+            ("emails/welcome.html", "emails/welcome.txt"))
+
+        self.assertIn("Hello Ada", html)
+        self.assertIn("Hello Ada", text)
+
+    def test_no_selection_falls_back_to_the_built_in_email(self):
+        from types import SimpleNamespace
+        cache.clear()
+        html, _, subject = render_email(
+            EmailTemplate.Kind.WELCOME,
+            {"reader": SimpleNamespace(name="Ada", email="a@b.c"),
+             "site_config": SiteConfig.load(), "summary": [], "unsubscribe_url": "u"},
+            ("emails/welcome.html", "emails/welcome.txt"))
+        self.assertIn("You're in", html)
+        self.assertIsNone(subject)
+
+    def test_a_template_that_breaks_at_send_time_falls_back(self):
+        # Syntax is checked on save, but a runtime failure (a filter given the
+        # wrong type, say) must not stop the email going out.
+        template = EmailTemplate.objects.create(
+            name="Breaks", kind=EmailTemplate.Kind.WELCOME,
+            html_body="{{ reader.name|date:'x'|add:reader.missing.deeper }}")
+        config = SiteConfig.load()
+        config.welcome_template = template
+        config.save()
+        cache.clear()
+
+        from types import SimpleNamespace
+        html, _, _ = render_email(
+            EmailTemplate.Kind.WELCOME,
+            {"reader": SimpleNamespace(name="Ada", email="a@b.c"),
+             "site_config": SiteConfig.load(), "summary": [], "unsubscribe_url": "u"},
+            ("emails/welcome.html", "emails/welcome.txt"))
+        self.assertIn("You're in", html)  # the built-in one
+
+    def test_broken_syntax_is_rejected_before_it_can_be_saved(self):
+        self.client.force_login(staff())
+        response = self.client.post(
+            reverse("admin:siteconfig_emailtemplate_add"),
+            {"name": "Bad", "kind": "welcome", "subject": "",
+             "html_body": "{% for x in %}", "text_body": "", "notes": ""})
+        self.assertContains(response, "won&#x27;t render", status_code=200)
+        self.assertFalse(EmailTemplate.objects.filter(name="Bad").exists())
+
+    def test_starting_from_the_built_in_version_copies_it(self):
+        self.client.force_login(staff())
+        self.client.get(
+            reverse("admin:siteconfig_emailtemplate_from_builtin", args=["newsletter"]),
+            follow=True)
+        template = EmailTemplate.objects.get(kind="newsletter")
+        self.assertIn("{% for rec in recommendations %}", template.html_body)
+        self.assertIsNone(template.check_syntax())
+
+    def test_preview_renders_without_touching_a_reader(self):
+        self.client.force_login(staff())
+        template = EmailTemplate.objects.create(
+            name="P", kind=EmailTemplate.Kind.NEWSLETTER,
+            html_body="{% for rec in recommendations %}<b>{{ rec.opportunity.title }}</b>{% endfor %}")
+        html = self.client.get(
+            reverse("admin:siteconfig_emailtemplate_preview", args=[template.pk])
+        ).content.decode()
+        self.assertIn("basement jazz room", html)
+
+
+class SendScheduleTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.config = SiteConfig.load()
+
+    def test_manual_never_sends_on_a_schedule(self):
+        self.config.send_frequency = SiteConfig.Frequency.MANUAL
+        should, why = self.config.is_send_day(date(2026, 9, 10))
+        self.assertFalse(should)
+        self.assertIn("manual", why.lower())
+
+    def test_weekly_only_sends_on_the_chosen_day(self):
+        self.config.send_frequency = SiteConfig.Frequency.WEEKLY
+        self.config.send_weekday = 3  # Thursday
+        self.assertTrue(self.config.is_send_day(date(2026, 9, 10))[0])   # a Thursday
+        self.assertFalse(self.config.is_send_day(date(2026, 9, 11))[0])  # Friday
+
+    def test_it_will_not_send_twice_in_one_day(self):
+        self.config.send_frequency = SiteConfig.Frequency.WEEKLY
+        self.config.send_weekday = 3
+        self.config.last_sent_on = date(2026, 9, 10)
+        should, why = self.config.is_send_day(date(2026, 9, 10))
+        self.assertFalse(should)
+        self.assertIn("Already sent", why)
+
+    def test_fortnightly_skips_the_intervening_week(self):
+        self.config.send_frequency = SiteConfig.Frequency.FORTNIGHTLY
+        self.config.send_weekday = 3
+        self.config.last_sent_on = date(2026, 9, 3)
+        self.assertFalse(self.config.is_send_day(date(2026, 9, 10))[0])
+        self.assertTrue(self.config.is_send_day(date(2026, 9, 17))[0])
+
+    def test_monthly_sends_on_the_chosen_date(self):
+        self.config.send_frequency = SiteConfig.Frequency.MONTHLY
+        self.config.send_day_of_month = 15
+        self.assertTrue(self.config.is_send_day(date(2026, 9, 15))[0])
+        self.assertFalse(self.config.is_send_day(date(2026, 9, 16))[0])
+
+
+@plain_static
+class TabbedAdminTests(TestCase):
+    def setUp(self):
+        # SiteConfig.load() caches, and test transactions roll back without
+        # invalidating it - so a config cached by another test would point at
+        # a row that no longer exists here.
+        cache.clear()
+
+    def test_the_settings_page_renders_tabs(self):
+        self.client.force_login(staff())
+        response = self.client.get(
+            reverse("admin:siteconfig_siteconfig_change", args=[SiteConfig.load().pk]))
+        self.assertEqual(response.status_code, 200, f"got {response.status_code} "
+                         f"-> {response.get('Location', '')}")
+        html = response.content.decode()
+        self.assertIn("cd-tabs", html)
+        for section in ["Branding", "Sending", "Schedule", "Email templates",
+                        "Learning from feedback", "AI assistance"]:
+            self.assertIn(section, html)

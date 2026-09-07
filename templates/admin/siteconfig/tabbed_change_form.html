@@ -1,0 +1,78 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% comment %}
+Turns the fieldsets on this form into tabs. Django has no native tabs, and a
+form with this many settings is unusable as one long scroll - you cannot see
+what groups exist without reading all of it.
+
+Progressive enhancement: without JavaScript every fieldset simply renders as
+normal, so nothing becomes unreachable.
+{% endcomment %}
+
+{% block extrahead %}{{ block.super }}
+<style>
+  .cd-tabs { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 18px; padding:0; list-style:none; }
+  .cd-tabs button {
+    font: inherit; font-size: 13px; font-weight: 600;
+    padding: 9px 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--hairline-color, #dcdce0);
+    background: transparent; color: var(--body-fg, #333);
+  }
+  .cd-tabs button[aria-selected="true"] {
+    background: var(--cd-accent-1, #5e5ce6); border-color: transparent; color: #fff;
+  }
+  .cd-tabs button:hover:not([aria-selected="true"]) { border-color: var(--cd-accent-1, #5e5ce6); }
+  fieldset.module[hidden] { display: none !important; }
+  @media (prefers-color-scheme: dark) {
+    .cd-tabs button { border-color: rgba(255,255,255,.16); }
+  }
+</style>
+{% endblock %}
+
+{% block admin_change_form_document_ready %}{{ block.super }}
+<script>
+(function () {
+  var form = document.getElementById('content-main');
+  if (!form) return;
+  var sets = Array.prototype.slice.call(
+    form.querySelectorAll('fieldset.module')
+  ).filter(function (fs) { return fs.querySelector('h2'); });
+  if (sets.length < 2) return;
+
+  var tabs = document.createElement('ul');
+  tabs.className = 'cd-tabs';
+  tabs.setAttribute('role', 'tablist');
+
+  function select(index) {
+    sets.forEach(function (fs, i) {
+      fs.hidden = i !== index;
+      tabs.children[i].firstChild.setAttribute('aria-selected', i === index);
+    });
+    try { sessionStorage.setItem(key, String(index)); } catch (e) {}
+  }
+
+  var key = 'cd-tab:' + location.pathname;
+
+  sets.forEach(function (fs, i) {
+    var heading = fs.querySelector('h2');
+    var li = document.createElement('li');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('role', 'tab');
+    btn.textContent = heading.textContent.trim();
+    btn.addEventListener('click', function () { select(i); });
+    li.appendChild(btn);
+    tabs.appendChild(li);
+    heading.hidden = true;          // the tab is the heading now
+  });
+
+  sets[0].parentNode.insertBefore(tabs, sets[0]);
+
+  // A field with an error must not be hidden behind an unselected tab.
+  var errored = sets.findIndex(function (fs) { return fs.querySelector('.errorlist'); });
+  var remembered = parseInt(sessionStorage.getItem(key) || '0', 10);
+  select(errored > -1 ? errored : (remembered >= 0 && remembered < sets.length ? remembered : 0));
+})();
+</script>
+{% endblock %}

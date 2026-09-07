@@ -75,6 +75,14 @@ def send_welcome(reader) -> str | None:
     }
     subject = config.welcome_subject.replace("{site}", config.site_name)
 
+    from siteconfig.emails import EmailTemplate, render_email
+
+    html_body, text_body, subject_override = render_email(
+        EmailTemplate.Kind.WELCOME, context,
+        ("emails/welcome.html", "emails/welcome.txt"),
+    )
+    subject = subject_override or subject
+
     if not settings.SENDGRID_API_KEY:
         logger.info("[dry-run] Would send welcome email to %s", reader.email)
         return None
@@ -87,8 +95,8 @@ def send_welcome(reader) -> str | None:
             from_email=config.resolved_email_from,
             to_emails=reader.email,
             subject=subject,
-            plain_text_content=render_to_string("emails/welcome.txt", context),
-            html_content=render_to_string("emails/welcome.html", context),
+            plain_text_content=text_body,
+            html_content=html_body,
         )
         response = SendGridAPIClient(settings.SENDGRID_API_KEY).send(message)
         if response.status_code >= 300:
@@ -145,9 +153,13 @@ def render_newsletter(issue) -> tuple[str, str, str]:
                        config.subject_template)
         subject = f"{first_name + ', ' if first_name else ''}{len(recs)} things you'll probably love this week"
 
-    html_body = render_to_string("emails/newsletter.html", context)
-    text_body = render_to_string("emails/newsletter.txt", context)
-    return subject, html_body, text_body
+    from siteconfig.emails import EmailTemplate, render_email
+
+    html_body, text_body, subject_override = render_email(
+        EmailTemplate.Kind.NEWSLETTER, context,
+        ("emails/newsletter.html", "emails/newsletter.txt"),
+    )
+    return subject_override or subject, html_body, text_body
 
 
 def send_newsletter(issue, dry_run: bool = False) -> str | None:

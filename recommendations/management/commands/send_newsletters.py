@@ -28,6 +28,12 @@ class Command(BaseCommand):
             help="Only process the first N active readers.",
         )
         parser.add_argument(
+            "--scheduled",
+            action="store_true",
+            help="Only send if today matches the cadence set in the admin. Use this "
+                 "from a daily cron so the schedule stays editable there.",
+        )
+        parser.add_argument(
             "--min-recommendations",
             type=int,
             default=DEFAULT_MIN_RECOMMENDATIONS,
@@ -35,6 +41,18 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        from django.utils import timezone
+
+        from siteconfig.models import SiteConfig
+
+        config = SiteConfig.load()
+        if options["scheduled"]:
+            should_send, why = config.is_send_day()
+            if not should_send:
+                self.stdout.write(self.style.WARNING(f"Not sending: {why}"))
+                return
+            self.stdout.write(f"Scheduled run: {why}")
+
         readers = Reader.objects.filter(is_active=True).order_by("id")
         if options["reader"]:
             readers = readers.filter(email=options["reader"].strip().lower())
@@ -55,5 +73,9 @@ class Command(BaseCommand):
             else:
                 skipped += 1
                 self.stdout.write(self.style.WARNING(f"{reader.email}: {result.message}"))
+
+        if options["scheduled"] and sent and not options["dry_run"]:
+            config.last_sent_on = timezone.localdate()
+            config.save(update_fields=["last_sent_on"])
 
         self.stdout.write(self.style.SUCCESS(f"Done. Sent: {sent}, skipped: {skipped}."))

@@ -20,6 +20,8 @@ from django.core.cache import cache
 from django.core.validators import MinValueValidator
 from django.db import models
 
+from .emails import EmailTemplate  # noqa: F401  (registered via this module)
+
 CACHE_KEY = "siteconfig"
 CACHE_TTL = 300
 
@@ -79,6 +81,49 @@ class SiteConfig(models.Model):
         max_length=200, default="You're in - welcome to {site}",
         help_text="Subject for the welcome email. {site} is replaced with the site name.",
     )
+    # --- Which template each email uses --------------------------------
+    welcome_template = models.ForeignKey(
+        "siteconfig.EmailTemplate", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+", limit_choices_to={"kind": "welcome"},
+        help_text="Leave empty to use the built-in welcome email.",
+    )
+    newsletter_template = models.ForeignKey(
+        "siteconfig.EmailTemplate", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+", limit_choices_to={"kind": "newsletter"},
+        help_text="Leave empty to use the built-in newsletter.",
+    )
+
+    # --- When the newsletter goes out ----------------------------------
+    class Frequency(models.TextChoices):
+        MANUAL = "manual", "Only when I trigger it"
+        WEEKLY = "weekly", "Weekly"
+        FORTNIGHTLY = "fortnightly", "Every two weeks"
+        MONTHLY = "monthly", "Monthly"
+
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, "Monday"
+        TUESDAY = 1, "Tuesday"
+        WEDNESDAY = 2, "Wednesday"
+        THURSDAY = 3, "Thursday"
+        FRIDAY = 4, "Friday"
+        SATURDAY = 5, "Saturday"
+        SUNDAY = 6, "Sunday"
+
+    send_frequency = models.CharField(
+        max_length=20, choices=Frequency.choices, default=Frequency.MANUAL,
+        help_text="How often the newsletter goes out. Anything other than manual "
+                  "needs something to call send_newsletters daily - see the note below.",
+    )
+    send_weekday = models.IntegerField(
+        choices=Weekday.choices, default=Weekday.THURSDAY,
+        help_text="Which day it goes out on, for weekly and fortnightly.")
+    send_day_of_month = models.PositiveSmallIntegerField(
+        default=1, help_text="Which date it goes out on, for monthly (1-28).")
+    last_sent_on = models.DateField(
+        null=True, blank=True,
+        help_text="Set automatically after a scheduled run, so a cadence isn't "
+                  "repeated if the trigger fires more than once a day.")
+
     subject_template = models.CharField(
         max_length=200,
         default="{name}{count} things you'll probably love this week",
@@ -187,6 +232,43 @@ class SiteConfig(models.Model):
         }
 
     # Convenience accessors that fall back to the environment ------------
+
+    def is_send_day(self, today=None) -> tuple[bool, str]:
+        """Should a scheduled run send today? Returns (yes/no, why).
+
+        The trigger is expected to fire daily; this decides whether today is
+        actually a send day, so the schedule lives here rather than in cron
+        syntax an editor can't see or change.
+        """
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        today = today or timezone.localdate()
+
+        if self.send_frequency == self.Frequency.MANUAL:
+            return False, "Sending is set to manual."
+        if self.last_sent_on == today:
+            return False, f"Already sent today ({today})."
+
+        if self.send_frequency == self.Frequency.WEEKLY:
+            if today.weekday() != self.send_weekday:
+                return False, f"Not the send day ({self.get_send_weekday_display()})."
+            return True, "Weekly send day."
+
+        if self.send_frequency == self.Frequency.FORTNIGHTLY:
+            if today.weekday() != self.send_weekday:
+                return False, f"Not the send day ({self.get_send_weekday_display()})."
+            if self.last_sent_on and (today - self.last_sent_on) < timedelta(days=13):
+                return False, f"Last send was {self.last_sent_on}; not two weeks yet."
+            return True, "Fortnightly send day."
+
+        if self.send_frequency == self.Frequency.MONTHLY:
+            if today.day != self.send_day_of_month:
+                return False, f"Not the send date ({self.send_day_of_month})."
+            return True, "Monthly send date."
+
+        return False, "Unrecognised frequency."
 
     @property
     def resolved_email_from(self) -> str:
