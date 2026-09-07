@@ -151,7 +151,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
     admin index lands straight on the one editable record."""
 
     save_on_top = True
-    readonly_fields = ("updated_at", "last_sent_on")
+    readonly_fields = ("updated_at", "last_sent_on", "wording_drift")
     change_form_template = "admin/siteconfig/tabbed_change_form.html"
 
     fieldsets = (
@@ -206,8 +206,44 @@ class SiteConfigAdmin(admin.ModelAdmin):
                        "ai_classify_opportunities", "ai_model", "ai_timeout_seconds",
                        "ai_send_budget_seconds"),
         }),
+        ("Shipped wording", {
+            "description": "Text that ships with a default. Defaults only apply when "
+                           "this configuration is first created, so an improved default "
+                           "never reaches an existing site on its own - this shows where "
+                           "yours differs, and lets you take the newer wording if you "
+                           "want it.",
+            "fields": ("wording_drift",),
+        }),
         ("Metadata", {"classes": ("collapse",), "fields": ("updated_at",)}),
     )
+
+    @admin.display(description="Where your wording differs from the shipped default")
+    def wording_drift(self, obj):
+        drift = obj.drift_from_defaults() if obj and obj.pk else []
+        if not drift:
+            return format_html(
+                '<span style="color:#34c759">Everything matches the shipped '
+                'wording.</span>')
+
+        rows = format_html_join(
+            mark_safe(""),
+            '<tr><td style="padding:6px 12px 6px 0;vertical-align:top;white-space:nowrap">'
+            '<code>{}</code></td>'
+            '<td style="padding:6px 12px 6px 0;vertical-align:top">{}</td>'
+            '<td style="padding:6px 0;vertical-align:top;color:#8e8e93">{}</td></tr>',
+            ((d["field"], d["current"] or "(empty)", d["shipped"]) for d in drift),
+        )
+        return format_html(
+            '<table style="font-size:13px"><tr>'
+            '<th style="text-align:left;padding-right:12px">Field</th>'
+            '<th style="text-align:left;padding-right:12px">Yours</th>'
+            '<th style="text-align:left">Shipped</th></tr>{}</table>'
+            '<p style="margin-top:12px"><a class="button" href="{}">'
+            'Take the shipped wording for these {} field(s)</a></p>',
+            rows,
+            reverse("admin:siteconfig_reset_wording"),
+            len(drift),
+        )
 
     def has_add_permission(self, request):
         return False
@@ -218,3 +254,23 @@ class SiteConfigAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         config = SiteConfig.load()
         return redirect(reverse("admin:siteconfig_siteconfig_change", args=[config.pk]))
+
+    def get_urls(self):
+        return [
+            path("reset-wording/", self.admin_site.admin_view(self.reset_wording),
+                 name="siteconfig_reset_wording"),
+        ] + super().get_urls()
+
+    def reset_wording(self, request):
+        config = SiteConfig.load()
+        changed = config.reset_to_defaults()
+        if changed:
+            self.message_user(
+                request,
+                f"Restored the shipped wording for: {', '.join(changed)}.",
+                messages.SUCCESS)
+        else:
+            self.message_user(request, "Nothing to restore - it already matches.",
+                              messages.INFO)
+        return redirect(
+            reverse("admin:siteconfig_siteconfig_change", args=[config.pk]))

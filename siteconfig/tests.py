@@ -163,3 +163,76 @@ class TabbedAdminTests(TestCase):
         for section in ["Branding", "Sending", "Schedule", "Email templates",
                         "Learning from feedback", "AI assistance"]:
             self.assertIn(section, html)
+
+
+@plain_static
+class ShippedWordingTests(TestCase):
+    """Defaults only apply when a row is created, so an improved default in
+    code never reaches an existing site. That has already caught us twice -
+    the tagline and the subject line both had to be corrected by hand."""
+
+    def setUp(self):
+        cache.clear()
+        self.config = SiteConfig.load()
+
+    def test_a_fresh_configuration_reports_no_drift(self):
+        self.config.reset_to_defaults()
+        self.assertEqual(self.config.drift_from_defaults(), [])
+
+    def test_customised_wording_is_reported_as_drift(self):
+        self.config.tagline = "something an editor wrote"
+        self.config.save()
+
+        drift = {d["field"]: d for d in self.config.drift_from_defaults()}
+
+        self.assertIn("tagline", drift)
+        self.assertEqual(drift["tagline"]["current"], "something an editor wrote")
+        self.assertIn("filtered", drift["tagline"]["shipped"])
+
+    def test_stale_wording_from_an_older_default_is_reported(self):
+        # Exactly the case that bit us: the row holds last release's text.
+        self.config.subject_template = "{name}{count} things you'll probably love this week"
+        self.config.save()
+
+        fields = [d["field"] for d in self.config.drift_from_defaults()]
+
+        self.assertIn("subject_template", fields)
+
+    def test_resetting_restores_the_shipped_wording(self):
+        self.config.tagline = "stale"
+        self.config.hero_headline = "also stale"
+        self.config.save()
+
+        changed = self.config.reset_to_defaults()
+
+        self.assertEqual(set(changed), {"tagline", "hero_headline"})
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.drift_from_defaults(), [])
+
+    def test_resetting_leaves_settings_that_are_not_wording_alone(self):
+        self.config.tagline = "stale"
+        self.config.recommendations_per_send = 9
+        self.config.weight_tag_overlap = 7.5
+        self.config.save()
+
+        self.config.reset_to_defaults()
+
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.recommendations_per_send, 9)
+        self.assertEqual(self.config.weight_tag_overlap, 7.5)
+
+    def test_the_admin_offers_the_reset_and_it_works(self):
+        self.config.tagline = "stale wording"
+        self.config.save()
+        cache.clear()
+        self.client.force_login(staff())
+
+        page = self.client.get(reverse(
+            "admin:siteconfig_siteconfig_change", args=[self.config.pk])).content.decode()
+        self.assertIn("stale wording", page)
+        self.assertIn("Take the shipped wording", page)
+
+        self.client.get(reverse("admin:siteconfig_reset_wording"), follow=True)
+
+        self.config.refresh_from_db()
+        self.assertIn("filtered", self.config.tagline)

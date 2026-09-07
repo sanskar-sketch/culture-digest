@@ -234,6 +234,48 @@ class SiteConfig(models.Model):
 
     # Convenience accessors that fall back to the environment ------------
 
+    # Copy that ships as a model default, so an improved default can be
+    # offered to an existing configuration rather than being invisible.
+    RESETTABLE = (
+        "site_name", "tagline", "hero_eyebrow", "hero_headline", "hero_subhead",
+        "subject_template", "welcome_subject",
+    )
+
+    def drift_from_defaults(self) -> list[dict]:
+        """Fields whose stored value differs from the one shipped in code.
+
+        Defaults only apply when a row is created, so improving the wording
+        in code leaves every existing deployment on the old text with nothing
+        to indicate it. This makes that visible, and resettable.
+        """
+        drift = []
+        for name in self.RESETTABLE:
+            shipped = self._meta.get_field(name).get_default()
+            current = getattr(self, name)
+            if current != shipped:
+                drift.append({
+                    "field": name,
+                    "label": self._meta.get_field(name).verbose_name,
+                    "current": current,
+                    "shipped": shipped,
+                })
+        return drift
+
+    def reset_to_defaults(self, fields=None) -> list[str]:
+        """Put the shipped wording back. Returns the fields that changed."""
+        names = list(fields) if fields else [d["field"] for d in self.drift_from_defaults()]
+        changed = []
+        for name in names:
+            if name not in self.RESETTABLE:
+                continue
+            shipped = self._meta.get_field(name).get_default()
+            if getattr(self, name) != shipped:
+                setattr(self, name, shipped)
+                changed.append(name)
+        if changed:
+            self.save()
+        return changed
+
     def is_send_day(self, today=None) -> tuple[bool, str]:
         """Should a scheduled run send today? Returns (yes/no, why).
 
