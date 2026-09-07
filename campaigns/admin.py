@@ -151,10 +151,10 @@ class CampaignAdmin(admin.ModelAdmin):
             return ("A draft. Nothing goes out until you press Schedule or Send now.")
         if obj.status == s.SCHEDULED:
             when = (f"at {timezone.localtime(obj.send_at):%a %-d %b %Y, %H:%M} ({timezone.get_current_timezone_name()})"
-                    if obj.send_at else "on the scheduler's next pass, within 15 minutes")
+                    if obj.send_at else "on the scheduler's next pass, within a few minutes")
             return f"Scheduled. It goes {when}. Cancel above if you change your mind."
         if obj.status == s.SENDING:
-            return ("Being sent. The scheduler keeps going every 15 minutes until "
+            return ("Being sent. The scheduler keeps going every few minutes until "
                     "everyone has theirs.")
         if obj.status == s.SENT:
             return "Sent. Retry failed deliveries with the action on the list page if needed."
@@ -250,7 +250,7 @@ class CampaignAdmin(admin.ModelAdmin):
         campaign.status = Campaign.Status.SCHEDULED
         campaign.save(update_fields=["status", "updated_at"])
         when = (f"for {timezone.localtime(campaign.send_at):%a %-d %b, %H:%M}"
-                if campaign.send_at else "for the scheduler's next pass (within 15 minutes)")
+                if campaign.send_at else "for the scheduler's next pass (within a few minutes)")
         self.message_user(request, f"{campaign}: scheduled {when}.", messages.SUCCESS)
         return True
 
@@ -328,5 +328,5 @@ class CampaignAdmin(admin.ModelAdmin):
             self.message_user(
                 request,
                 f"{campaign}: {n} delivery{'' if n == 1 else 'ies'} queued again."
-                + (" The scheduler picks them up within 15 minutes." if n else ""),
+                + (" The scheduler picks them up within a few minutes." if n else ""),
                 messages.SUCCESS if n else messages.INFO)

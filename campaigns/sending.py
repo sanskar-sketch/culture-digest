@@ -51,7 +51,7 @@ class CampaignRun:
         text = ", ".join(bits) + "."
         if self.remaining:
             text += (f" {self.remaining} still to go - the scheduler carries on "
-                     "within 15 minutes.")
+                     "within a few minutes.")
         elif self.finished:
             text += " Done."
         return text

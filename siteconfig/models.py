@@ -117,7 +117,7 @@ class SiteConfig(models.Model):
     send_frequency = models.CharField(
         max_length=20, choices=Frequency.choices, default=Frequency.MANUAL,
         help_text="How often the newsletter goes out. The scheduler checks every "
-                  "15 minutes and sends on the day and hour set here.",
+                  "few minutes and sends on the day and hour set here.",
     )
     send_weekday = models.IntegerField(
         choices=Weekday.choices, default=Weekday.THURSDAY,

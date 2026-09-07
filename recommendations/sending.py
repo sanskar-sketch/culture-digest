@@ -8,6 +8,7 @@ prove much about the real one.
 from __future__ import annotations
 
 import dataclasses
+import logging
 
 from django.conf import settings
 from django.db import transaction
@@ -16,6 +17,8 @@ from django.utils import timezone
 from . import ai, matching
 from .emailing import send_newsletter
 from .models import NewsletterIssue, Recommendation
+
+logger = logging.getLogger(__name__)
 
 # Below this many strong matches, a reader is skipped rather than sent a
 # padded-out issue. Quality over volume is the whole premise.
@@ -29,6 +32,53 @@ class SendResult:
     match_count: int
     message: str
     issue: NewsletterIssue | None = None
+
+
+def send_scheduled_newsletter(*, budget_seconds: float, dry_run: bool = False) -> dict:
+    """One resumable pass of the cadence send.
+
+    Readers who already have an issue from today are skipped, so passes can
+    be short and frequent; when a pass reaches the end of the list the day
+    is marked sent and later passes stop at `should_send_now`.
+    """
+    from readers.models import Reader
+    from siteconfig.models import SiteConfig
+
+    config = SiteConfig.load()
+    should, why = config.should_send_now()
+    report = {"ran": False, "why": why, "sent": 0, "skipped": 0, "failed": 0,
+              "remaining": 0, "done": False}
+    if not should:
+        return report
+    report["ran"] = True
+
+    today = timezone.localdate()
+    already = NewsletterIssue.objects.filter(created_at__date=today).values_list(
+        "reader_id", flat=True)
+    readers = list(Reader.objects.filter(is_active=True).exclude(pk__in=already).order_by("pk"))
+    if dry_run:
+        report["remaining"] = len(readers)
+        return report
+
+    budget = ai.TimeBudget(budget_seconds)
+    processed = 0
+    for reader in readers:
+        if budget.exhausted():
+            break
+        try:
+            result = send_issue_for_reader(reader)
+            report["sent" if result.sent else "skipped"] += 1
+        except Exception:
+            logger.exception("Scheduled newsletter to %s failed", reader.email)
+            report["failed"] += 1
+        processed += 1
+
+    report["remaining"] = len(readers) - processed
+    if report["remaining"] == 0:
+        config.last_sent_on = today
+        config.save(update_fields=["last_sent_on", "updated_at"])
+        report["done"] = True
+    return report
 
 
 def send_issue_for_reader(

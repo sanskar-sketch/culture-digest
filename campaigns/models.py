@@ -92,7 +92,7 @@ class Campaign(models.Model):
     send_at = models.DateTimeField(
         null=True, blank=True,
         help_text="When to send. Leave blank to send as soon as it's scheduled. The "
-                  "scheduler checks every 15 minutes, so a time is honoured to within "
+                  "scheduler checks every few minutes, so a time is honoured to within "
                   "that.")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     started_at = models.DateTimeField(null=True, blank=True)

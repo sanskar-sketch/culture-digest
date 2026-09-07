@@ -135,6 +135,12 @@ SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "http://127.0.0.1:8000")
 # SendGrid is used to send the newsletter emails. Unset = dry-run mode.
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 
+# The scheduler ping (see campaigns.views). Unset means the endpoint refuses.
+# Each ping runs one background pass of at most this many seconds - keep it
+# under the interval the monitor pings at.
+SCHEDULER_TOKEN = os.environ.get("SCHEDULER_TOKEN", "")
+SCHEDULER_BUDGET_SECONDS = float(os.environ.get("SCHEDULER_BUDGET_SECONDS", "240"))
+
 # The "From" address newsletters are sent from. Must be a verified sender
 # (single sender or authenticated domain) in SendGrid before real sending
 # will work - SendGrid rejects unverified senders with a 403.

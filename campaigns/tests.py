@@ -1,3 +1,5 @@
+import threading
+import time
 from datetime import datetime, timedelta, timezone as dt_timezone
 from io import StringIO
 from unittest.mock import patch
@@ -11,8 +13,11 @@ from django.utils import timezone
 
 from opportunities.models import Tag
 from readers.models import Reader
+from recommendations.models import NewsletterIssue
+from recommendations.sending import SendResult, send_scheduled_newsletter
 from siteconfig.models import SiteConfig
 
+from . import scheduler
 from .models import Campaign, CampaignDelivery
 from .sending import send_campaign
 
@@ -211,18 +216,18 @@ class ScheduledRunTests(TestCase):
         self.assertEqual(c.status, Campaign.Status.SCHEDULED)
         self.assertIn("Would send 'asap' to 1 reader", out.getvalue())
 
-    @patch("campaigns.management.commands.run_scheduled.call_command")
-    def test_the_newsletter_goes_on_its_day_once_the_hour_has_passed(self, call):
+    def test_the_newsletter_goes_on_its_day_once_the_hour_has_passed(self):
         config = SiteConfig.load()
         config.send_frequency = SiteConfig.Frequency.WEEKLY
         config.send_weekday = timezone.localtime().weekday()
         config.send_hour = 0
         config.save()
-        cache.clear()
-        call_command("run_scheduled", stdout=StringIO())
-        call.assert_called_once()
-        self.assertEqual(call.call_args.args[0], "send_newsletters")
-        self.assertTrue(call.call_args.kwargs["scheduled"])
+        out = StringIO()
+        call_command("run_scheduled", stdout=out)
+        # The one reader has nothing to be matched against, so they are
+        # skipped - but the pass reached the end, so the day is done.
+        self.assertIn("today's send is complete", out.getvalue())
+        self.assertEqual(SiteConfig.load().last_sent_on, timezone.localdate())
 
 
 class SendHourTests(TestCase):
@@ -334,3 +339,115 @@ class PreviewEscapingTests(TestCase):
         response = self.client.get(reverse("admin:campaigns_campaign_preview", args=[c.pk]))
         self.assertContains(response, 'srcdoc="&lt;!doctype html&gt;')
         self.assertNotContains(response, 'srcdoc="<!doctype')
+
+
+def _weekly_today():
+    config = SiteConfig.load()
+    config.send_frequency = SiteConfig.Frequency.WEEKLY
+    config.send_weekday = timezone.localtime().weekday()
+    config.send_hour = 0
+    config.save()
+    return config
+
+
+class ScheduledNewsletterPassTests(TestCase):
+    """The cadence send in short, resumable passes."""
+
+    def setUp(self):
+        cache.clear()
+        self.ada = Reader.objects.create(email="ada@example.com", name="Ada")
+        self.bob = Reader.objects.create(email="bob@example.com", name="Bob")
+        _weekly_today()
+
+    def test_not_a_send_moment_does_nothing(self):
+        config = SiteConfig.load()
+        config.send_frequency = SiteConfig.Frequency.MANUAL
+        config.save()
+        report = send_scheduled_newsletter(budget_seconds=30)
+        self.assertFalse(report["ran"])
+        self.assertIn("manual", report["why"].lower())
+
+    @patch("recommendations.sending.send_issue_for_reader")
+    def test_readers_already_sent_today_are_not_sent_again(self, send):
+        send.return_value = SendResult(reader_email="x", sent=True, match_count=3, message="ok")
+        NewsletterIssue.objects.create(reader=self.ada)
+        report = send_scheduled_newsletter(budget_seconds=30)
+        self.assertEqual([c.args[0] for c in send.call_args_list], [self.bob])
+        self.assertTrue(report["done"])
+        self.assertEqual(SiteConfig.load().last_sent_on, timezone.localdate())
+
+    @patch("recommendations.sending.send_issue_for_reader")
+    def test_out_of_budget_leaves_readers_for_the_next_pass(self, send):
+        report = send_scheduled_newsletter(budget_seconds=0)
+        send.assert_not_called()
+        self.assertEqual(report["remaining"], 2)
+        self.assertFalse(report["done"])
+        self.assertIsNone(SiteConfig.load().last_sent_on)
+
+    def test_a_completed_pass_stops_further_passes_today(self):
+        report = send_scheduled_newsletter(budget_seconds=30)  # nobody matches: all skipped
+        self.assertEqual((report["skipped"], report["done"]), (2, True))
+        again = send_scheduled_newsletter(budget_seconds=30)
+        self.assertFalse(again["ran"])
+        self.assertIn("Already sent today", again["why"])
+
+
+class SchedulerPingTests(TestCase):
+    """The URL an external monitor hits in place of cron."""
+
+    def url(self):
+        return reverse("run-scheduled")
+
+    @override_settings(SCHEDULER_TOKEN="")
+    def test_refuses_when_no_token_is_configured(self):
+        self.assertEqual(self.client.get(self.url()).status_code, 503)
+
+    @override_settings(SCHEDULER_TOKEN="s3cret")
+    def test_rejects_a_missing_or_wrong_token(self):
+        self.assertEqual(self.client.get(self.url()).status_code, 403)
+        self.assertEqual(self.client.get(self.url(), {"token": "nope"}).status_code, 403)
+
+    @override_settings(SCHEDULER_TOKEN="s3cret", SCHEDULER_BUDGET_SECONDS=42)
+    @patch("campaigns.views.start_background_run", return_value=True)
+    def test_a_valid_ping_starts_a_pass_and_returns_at_once(self, start):
+        response = self.client.get(self.url(), HTTP_X_SCHEDULER_TOKEN="s3cret")
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(response.json()["started"])
+        start.assert_called_once_with(42)
+        # Query-string form, for monitors that cannot set headers.
+        self.assertEqual(self.client.get(self.url(), {"token": "s3cret"}).status_code, 202)
+
+    @override_settings(SCHEDULER_TOKEN="s3cret")
+    @patch("campaigns.views.start_background_run", return_value=False)
+    def test_says_so_when_a_pass_is_already_running(self, start):
+        response = self.client.get(self.url(), {"token": "s3cret"})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["started"])
+
+    @override_settings(SCHEDULER_TOKEN="s3cret")
+    @patch("campaigns.views.start_background_run")
+    def test_head_checks_liveness_without_starting_anything(self, start):
+        self.assertEqual(self.client.head(self.url(), {"token": "s3cret"}).status_code, 200)
+        start.assert_not_called()
+
+
+class BackgroundRunTests(TestCase):
+    def test_only_one_pass_runs_at_a_time(self):
+        cache.clear()
+        gate = threading.Event()
+
+        def slow(budget_seconds, dry_run=False):
+            gate.wait(5)
+            return {"finished_at": timezone.now(), "seconds": 0.0, "lines": ["ok"]}
+
+        with patch("campaigns.scheduler.run_due", side_effect=slow):
+            self.assertTrue(scheduler.start_background_run(1))
+            self.assertTrue(scheduler.is_running())
+            self.assertFalse(scheduler.start_background_run(1))
+            gate.set()
+            for _ in range(200):
+                if not scheduler.is_running():
+                    break
+                time.sleep(0.02)
+        self.assertFalse(scheduler.is_running())
+        self.assertEqual(scheduler.last_run()["lines"], ["ok"])

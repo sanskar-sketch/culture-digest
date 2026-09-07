@@ -192,6 +192,7 @@ class DigestAdminSite(AdminSite):
                     else "No OPENAI_API_KEY - rationales use the template"
                 ),
             },
+            self._scheduler_row(),
             {
                 "name": "Debug mode",
                 "ok": not settings.DEBUG,
@@ -206,6 +207,26 @@ class DigestAdminSite(AdminSite):
                           else "Using the insecure development default",
             },
         ]
+
+    @staticmethod
+    def _scheduler_row():
+        from django.conf import settings
+        from django.utils.timesince import timesince
+
+        from campaigns import scheduler
+
+        if not settings.SCHEDULER_TOKEN:
+            return {"name": "Scheduler", "ok": False,
+                    "detail": "No SCHEDULER_TOKEN - scheduled campaigns and the newsletter "
+                              "cadence won't run until it is set and something pings "
+                              "/tasks/run-scheduled/"}
+        last = scheduler.last_run()
+        if not last:
+            return {"name": "Scheduler", "ok": True,
+                    "detail": "Token set · waiting for the first ping at /tasks/run-scheduled/"}
+        return {"name": "Scheduler", "ok": True,
+                "detail": f"Last pass {timesince(last['at'])} ago · "
+                          + " · ".join(last["lines"])}
 
     def dashboard_stats(self):
         from django.core.cache import cache
