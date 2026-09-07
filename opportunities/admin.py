@@ -5,7 +5,9 @@ from .models import Opportunity, Tag
 
 @admin.register(Tag)
 class TagAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug")
+    list_display = ("name", "category", "slug")
+    list_filter = ("category",)
+    list_editable = ("category",)
     search_fields = ("name",)
     prepopulated_fields = {"slug": ("name",)}
 

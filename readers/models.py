@@ -35,6 +35,11 @@ class Reader(models.Model):
     name = models.CharField(max_length=120, blank=True)
     age = models.PositiveSmallIntegerField(null=True, blank=True)
 
+    interest_categories = models.JSONField(
+        default=list, blank=True,
+        help_text="Broad categories picked during onboarding, e.g. ['music', 'theatre']. "
+        "Also decides which interest tags they're offered.",
+    )
     interest_tags = models.ManyToManyField(
         Tag, blank=True, related_name="interested_readers",
         help_text="Interests picked during onboarding.",

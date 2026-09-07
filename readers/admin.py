@@ -18,5 +18,6 @@ class ReaderAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_active", "open_to_surprise", "budget", "travel_radius", "location")
     search_fields = ("email", "name", "location", "travel_destinations")
+    list_display_links = ("email",)
     filter_horizontal = ("interest_tags",)
     readonly_fields = ("unsubscribe_token", "created_at", "updated_at")

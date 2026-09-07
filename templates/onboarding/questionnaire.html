@@ -23,7 +23,7 @@
 
     <div class="wizard-progress">
       <div class="wizard-progress-inner">
-        <span class="wizard-progress-label" id="wizard-label">Step 1 of 6</span>
+        <span class="wizard-progress-label" id="wizard-label">Step 1 of 7</span>
         <div class="wizard-track"><div class="wizard-fill" id="wizard-fill"></div></div>
       </div>
     </div>
@@ -71,18 +71,57 @@
 
     <section class="wizard-step" hidden>
       <div class="container-narrow">
+        <span class="eyebrow">Taste</span>
+        <h2>What pulls you in?</h2>
+        <p class="lede" style="margin-bottom:28px;">{{ form.interest_categories.help_text }}</p>
+        <div class="chip-group">
+          {% for choice in form.interest_categories %}
+          <label class="chip" for="{{ choice.id_for_label }}">
+            {{ choice.tag }}
+            <span>{{ choice.choice_label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="wizard-step" hidden>
+      <div class="container-narrow">
+        <span class="eyebrow">Taste, closer up</span>
+        <h2>Anything specific?</h2>
+        <p class="lede" style="margin-bottom:28px;" id="tag-intro">{{ form.interest_tags.help_text }}</p>
+        <div class="chip-group">
+          {% for choice in form.interest_tags %}
+          <label class="chip" for="{{ choice.id_for_label }}" data-tag-chip>
+            {{ choice.tag }}
+            <span>{{ choice.choice_label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <p class="field-help" id="tag-empty" hidden>
+          Nothing to narrow down here &mdash; go back and pick a category, or just carry on.
+        </p>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="wizard-step" hidden>
+      <div class="container-narrow">
         <span class="eyebrow">Getting around</span>
         <h2>Where would you go, for something worth it?</h2>
 
         <div style="margin:36px 0 32px;">
-          <label class="field-label" for="{{ form.travel_destinations.id_for_label }}">
-            {{ form.travel_destinations.label }}
-          </label>
-          <p class="field-help">Cities or places you love, or would love to visit.</p>
-          {{ form.travel_destinations }}
-        </div>
-
-        <div>
           <span class="field-label">{{ form.travel_radius.label }}</span>
           <div class="chip-group">
             {% for choice in form.travel_radius %}
@@ -96,28 +135,12 @@
           </div>
         </div>
 
-        <div class="wizard-nav">
-          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
-          <span class="spacer"></span>
-          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="wizard-step" hidden>
-      <div class="container-narrow">
-        <span class="eyebrow">Taste</span>
-        <h2>What moves you?</h2>
-        <p class="lede" style="margin-bottom:28px;">{{ form.interest_tags.help_text }}</p>
-        <div class="chip-group">
-          {% for choice in form.interest_tags %}
-          <label class="chip" for="{{ choice.id_for_label }}">
-            {{ choice.tag }}
-            <span>{{ choice.choice_label }}</span>
+        <div id="travel-destinations-field">
+          <label class="field-label" for="{{ form.travel_destinations.id_for_label }}">
+            {{ form.travel_destinations.label }}
           </label>
-          {% empty %}
-          <p class="field-help">No interest tags have been set up yet.</p>
-          {% endfor %}
+          <p class="field-help">Cities or places you love, or would love to visit.</p>
+          {{ form.travel_destinations }}
         </div>
 
         <div class="wizard-nav">
@@ -323,6 +346,55 @@
         if (canAdvance()) show(current + 1, { focus: true });
       }
     });
+
+    // --- Relevance: only offer interests under the categories they picked.
+    var categoryInputs = Array.prototype.slice.call(
+      form.querySelectorAll('input[name="interest_categories"]'));
+    var tagChips = Array.prototype.slice.call(form.querySelectorAll('[data-tag-chip]'));
+    var tagIntro = document.getElementById('tag-intro');
+    var tagEmpty = document.getElementById('tag-empty');
+
+    function syncTags() {
+      var chosen = categoryInputs.filter(function (i) { return i.checked; })
+                                 .map(function (i) { return i.value; });
+      var shown = 0;
+
+      tagChips.forEach(function (chip) {
+        var input = chip.querySelector('input');
+        var category = input.getAttribute('data-category');
+        // No category picked yet = show everything; an uncategorised tag
+        // is always relevant.
+        var relevant = !chosen.length || !category || chosen.indexOf(category) !== -1;
+        chip.hidden = !relevant;
+        // Never submit a pick the reader can no longer see.
+        if (!relevant && input.checked) input.checked = false;
+        if (relevant) shown++;
+      });
+
+      if (tagEmpty) tagEmpty.hidden = shown > 0;
+      if (tagIntro) tagIntro.hidden = !shown;
+    }
+    categoryInputs.forEach(function (i) { i.addEventListener('change', syncTags); });
+    syncTags();
+
+    // --- Relevance: where you'd travel only matters if you'd travel at all.
+    var radiusInputs = Array.prototype.slice.call(
+      form.querySelectorAll('input[name="travel_radius"]'));
+    var destinations = document.getElementById('travel-destinations-field');
+    var WILLING_TO_TRAVEL = ['regional', 'anywhere'];
+
+    function syncTravel() {
+      if (!destinations) return;
+      var picked = radiusInputs.filter(function (i) { return i.checked; })[0];
+      var relevant = !picked || WILLING_TO_TRAVEL.indexOf(picked.value) !== -1;
+      destinations.hidden = !relevant;
+      if (!relevant) {
+        var field = destinations.querySelector('textarea');
+        if (field) field.value = '';
+      }
+    }
+    radiusInputs.forEach(function (i) { i.addEventListener('change', syncTravel); });
+    syncTravel();
 
     var starter = document.querySelector('[data-start-wizard]');
     if (starter) {

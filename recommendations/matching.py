@@ -131,6 +131,14 @@ def score_opportunity(
         score += 2.0 * len(overlap)
         reasons.append("shared interest in " + ", ".join(t.name for t in overlap[:3]))
 
+    # Broad category affinity - a weaker signal than a specific tag match,
+    # but it means a reader who only picked categories still gets sensible
+    # picks. An empty list means no preference, so no bonus and no penalty.
+    if reader.interest_categories and opportunity.category in reader.interest_categories:
+        score += 1.5
+        if not overlap:
+            reasons.append(f"{opportunity.get_category_display().lower()} is one of their things")
+
     learned = sum(feedback_weights.get(t.id, 0) for t in opp_tags)
     if learned:
         if learned < -1:

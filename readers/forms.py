@@ -1,10 +1,26 @@
 from django import forms
 
-from opportunities.models import Tag
+from opportunities.models import Category, Tag
 
 from .models import Reader
 
 NO_PREFERENCE = ("", "No preference")
+
+
+class TagCategoryCheckboxes(forms.CheckboxSelectMultiple):
+    """Stamps each tag checkbox with its category, so the onboarding flow can
+    show only the interests relevant to the categories a reader picked."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._tag_categories = {}
+
+    def create_option(self, name, value, *args, **kwargs):
+        option = super().create_option(name, value, *args, **kwargs)
+        category = self._tag_categories.get(str(value))
+        if category:
+            option["attrs"]["data-category"] = category
+        return option
 
 
 class ReaderOnboardingForm(forms.ModelForm):
@@ -12,9 +28,16 @@ class ReaderOnboardingForm(forms.ModelForm):
     able to sign up with as little or as much detail as they want, and
     refine their profile later."""
 
+    interest_categories = forms.MultipleChoiceField(
+        choices=[c for c in Category.choices if c[0] != Category.OTHER],
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Which of these pull you in?",
+        help_text="We'll only ask about the ones you pick.",
+    )
     interest_tags = forms.ModelMultipleChoiceField(
         queryset=Tag.objects.all(),
-        widget=forms.CheckboxSelectMultiple,
+        widget=TagCategoryCheckboxes,
         required=False,
         label="What are you interested in?",
         help_text="Pick as many as apply.",
@@ -66,6 +89,7 @@ class ReaderOnboardingForm(forms.ModelForm):
             "travel_radius",
             "budget",
             "availability",
+            "interest_categories",
             "interest_tags",
             "mainstream_preference",
             "scale_preference",
@@ -98,6 +122,12 @@ class ReaderOnboardingForm(forms.ModelForm):
         for field_name in self.TEXT_INPUT_FIELDS:
             widget = self.fields[field_name].widget
             widget.attrs["class"] = ((widget.attrs.get("class", "") + " text-input").strip())
+
+        tags = self.fields["interest_tags"]
+        tags.widget._tag_categories = {
+            str(pk): category
+            for pk, category in tags.queryset.values_list("pk", "category")
+        }
 
     def clean_email(self):
         return self.cleaned_data["email"].strip().lower()

@@ -25,6 +25,13 @@ def make_opportunity(**overrides):
     return Opportunity.objects.create(**defaults)
 
 
+def make_tag(name, **overrides):
+    """Tags in the onboarding taxonomy are seeded by a data migration, so
+    tests have to reuse an existing tag rather than clash with it."""
+    tag, _ = Tag.objects.get_or_create(name=name, defaults=overrides)
+    return tag
+
+
 def make_reader(**overrides):
     defaults = dict(
         email="reader@example.com",
@@ -88,7 +95,7 @@ class LocationMatchingTests(TestCase):
 class TagAndFeedbackTests(TestCase):
     def test_shared_interest_tags_increase_score(self):
         reader = make_reader()
-        jazz = Tag.objects.create(name="jazz")
+        jazz = make_tag("jazz")
         reader.interest_tags.add(jazz)
 
         tagged = make_opportunity(title="Jazz night")
@@ -103,7 +110,7 @@ class TagAndFeedbackTests(TestCase):
         # A single dislike is a soft signal - down-rank the cluster, but
         # don't permanently blacklist it off one click.
         reader = make_reader()
-        comedy = Tag.objects.create(name="comedy")
+        comedy = make_tag("comedy")
 
         disliked = make_opportunity(title="Disliked comedy night")
         disliked.tags.add(comedy)
@@ -124,7 +131,7 @@ class TagAndFeedbackTests(TestCase):
     def test_repeated_not_for_me_feedback_excludes_future_matches(self):
         # A strong, repeated dislike signal should drop the cluster entirely.
         reader = make_reader()
-        comedy = Tag.objects.create(name="comedy")
+        comedy = make_tag("comedy")
         issue = NewsletterIssue.objects.create(reader=reader)
         for i in range(2):
             disliked = make_opportunity(title=f"Disliked comedy night {i}")
@@ -143,7 +150,7 @@ class TagAndFeedbackTests(TestCase):
 
     def test_more_like_this_feedback_boosts_similar_future_matches(self):
         reader = make_reader()
-        jazz = Tag.objects.create(name="jazz")
+        jazz = make_tag("jazz")
 
         liked = make_opportunity(title="Liked jazz night")
         liked.tags.add(jazz)
@@ -269,10 +276,51 @@ class OptionalProfileFieldsTests(TestCase):
         self.assertEqual(matches[niche], matches[mainstream])
 
 
+class CategoryAffinityTests(TestCase):
+    def test_opportunity_in_a_followed_category_scores_higher(self):
+        reader = make_reader(interest_categories=["music"])
+        music = make_opportunity(title="Gig", category=Opportunity.Category.MUSIC)
+        talk = make_opportunity(title="Lecture", category=Opportunity.Category.TALK)
+
+        scores = {m.opportunity: m.score for m in matching.top_matches_for_reader(reader)}
+
+        self.assertGreater(scores[music], scores[talk])
+
+    def test_category_match_is_explained_to_the_reader(self):
+        reader = make_reader(interest_categories=["food"])
+        make_opportunity(title="Tasting menu", category=Opportunity.Category.FOOD)
+
+        match = matching.top_matches_for_reader(reader)[0]
+
+        self.assertTrue(any("food" in reason.lower() for reason in match.reasons))
+
+    def test_no_categories_picked_means_no_preference(self):
+        reader = make_reader(interest_categories=[])
+        music = make_opportunity(title="Gig", category=Opportunity.Category.MUSIC)
+        talk = make_opportunity(title="Lecture", category=Opportunity.Category.TALK)
+
+        scores = {m.opportunity: m.score for m in matching.top_matches_for_reader(reader)}
+
+        self.assertEqual(scores[music], scores[talk])
+
+    def test_specific_tag_match_outranks_a_mere_category_match(self):
+        jazz = make_tag("jazz", category="music")
+        reader = make_reader(interest_categories=["music", "film"])
+        reader.interest_tags.add(jazz)
+
+        tagged = make_opportunity(title="Jazz night", category=Opportunity.Category.MUSIC)
+        tagged.tags.add(jazz)
+        category_only = make_opportunity(title="Film night", category=Opportunity.Category.FILM)
+
+        scores = {m.opportunity: m.score for m in matching.top_matches_for_reader(reader)}
+
+        self.assertGreater(scores[tagged], scores[category_only])
+
+
 class WildcardTests(TestCase):
     def test_open_to_surprise_swaps_in_an_unrelated_pick(self):
         reader = make_reader(open_to_surprise=True)
-        jazz = Tag.objects.create(name="jazz")
+        jazz = make_tag("jazz")
         reader.interest_tags.add(jazz)
 
         # Four on-taste picks fill every slot ahead of the wildcard...
@@ -292,7 +340,7 @@ class WildcardTests(TestCase):
 
     def test_reader_not_open_to_surprise_gets_no_wildcard(self):
         reader = make_reader(open_to_surprise=False)
-        jazz = Tag.objects.create(name="jazz")
+        jazz = make_tag("jazz")
         reader.interest_tags.add(jazz)
 
         for i in range(4):

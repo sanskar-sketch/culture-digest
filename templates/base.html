@@ -328,6 +328,8 @@
       position: relative;
       display: inline-flex;
     }
+    /* .chip sets display, so it needs to opt back out for [hidden] to work */
+    .chip[hidden] { display: none; }
     .chip input {
       position: absolute;
       opacity: 0;

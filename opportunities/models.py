@@ -3,6 +3,24 @@ from django.db import models
 from django.utils.text import slugify
 
 
+class Category(models.TextChoices):
+    """The broad kinds of cultural opportunity the newsletter covers.
+
+    Defined at module level so both Tag and Opportunity can reference it;
+    `Opportunity.Category` stays available as an alias.
+    """
+
+    THEATRE = "theatre", "Theatre"
+    MUSIC = "music", "Music"
+    FILM = "film", "Film"
+    EXHIBITION = "exhibition", "Exhibition"
+    TALK = "talk", "Talk / lecture"
+    FOOD = "food", "Food & drink"
+    EVENT = "event", "Event"
+    UNUSUAL = "unusual", "Unusual experience"
+    OTHER = "other", "Other"
+
+
 class Tag(models.Model):
     """A free-form taste/interest tag shared between readers and opportunities.
 
@@ -13,9 +31,14 @@ class Tag(models.Model):
 
     name = models.CharField(max_length=60, unique=True)
     slug = models.SlugField(max_length=70, unique=True, blank=True)
+    category = models.CharField(
+        max_length=20, choices=Category.choices, blank=True,
+        help_text="Which broad category this interest sits under. Drives which "
+        "tags a reader is shown during onboarding. Blank = always shown.",
+    )
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["category", "name"]
 
     def __str__(self):
         return self.name
@@ -35,16 +58,7 @@ class Opportunity(models.Model):
     drafting rather than replacing the editorial judgement call.
     """
 
-    class Category(models.TextChoices):
-        THEATRE = "theatre", "Theatre"
-        MUSIC = "music", "Music"
-        FILM = "film", "Film"
-        EXHIBITION = "exhibition", "Exhibition"
-        TALK = "talk", "Talk / lecture"
-        FOOD = "food", "Food & drink"
-        EVENT = "event", "Event"
-        UNUSUAL = "unusual", "Unusual experience"
-        OTHER = "other", "Other"
+    Category = Category
 
     class PriceTier(models.TextChoices):
         FREE = "free", "Free"
