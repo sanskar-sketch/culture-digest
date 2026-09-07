@@ -445,6 +445,14 @@
     /* radio pill rows (single choice, full-width stacked on mobile) */
     .radio-group { display: flex; flex-wrap: wrap; gap: 10px; }
 
+    /* "Other…" write-in revealed by its chip */
+    .other-field {
+      margin-top: 14px;
+      animation: step-in 0.35s var(--ease) both;
+    }
+    .other-field[hidden] { display: none; }
+    @media (prefers-reduced-motion: reduce) { .other-field { animation: none; } }
+
     /* ---------- step wizard ---------- */
     .wizard { scroll-margin-top: 52px; }
 

@@ -75,7 +75,8 @@ class ReaderAdmin(admin.ModelAdmin):
         "location",
     )
     search_fields = ("email", "name", "location", "travel_destinations",
-                     "loved_examples", "disliked_examples", "notes")
+                     "loved_examples", "disliked_examples", "notes",
+                     "other_categories", "other_interests")
     filter_horizontal = ("interest_tags", "ai_inferred_tags", "ai_avoid_tags")
     readonly_fields = ("unsubscribe_token", "created_at", "updated_at",
                        "profile_completeness", "engagement", "feedback_breakdown",
@@ -87,15 +88,17 @@ class ReaderAdmin(admin.ModelAdmin):
     fieldsets = (
         ("Who they are", {"fields": ("email", "name", "age", "is_active")}),
         ("Where they are", {
-            "fields": ("location", "travel_radius", "travel_destinations"),
+            "fields": ("location", "travel_radius", "other_travel",
+                       "travel_destinations"),
         }),
         ("Taste", {
             "fields": ("interest_categories", "interest_tags",
                        "mainstream_preference", "scale_preference",
-                       "open_to_surprise", "loved_examples", "disliked_examples",
-                       "notes"),
+                       "open_to_surprise", "other_categories", "other_interests",
+                       "loved_examples", "disliked_examples", "notes"),
         }),
-        ("Practical", {"fields": ("budget", "availability")}),
+        ("Practical", {"fields": ("budget", "other_budget",
+                                  "availability", "other_availability")}),
         ("What AI read into their free text", {
             "description": "Inferred, not stated by the reader - weighted below their own "
                            "picks when matching. Run the 'Interpret taste' action to refresh.",

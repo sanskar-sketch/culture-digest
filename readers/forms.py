@@ -94,6 +94,11 @@ class ReaderOnboardingForm(forms.ModelForm):
             "mainstream_preference",
             "scale_preference",
             "open_to_surprise",
+            "other_categories",
+            "other_interests",
+            "other_travel",
+            "other_budget",
+            "other_availability",
             "loved_examples",
             "disliked_examples",
             "notes",
@@ -103,6 +108,16 @@ class ReaderOnboardingForm(forms.ModelForm):
             "loved_examples": forms.Textarea(attrs={"rows": 3}),
             "disliked_examples": forms.Textarea(attrs={"rows": 3}),
             "travel_destinations": forms.Textarea(attrs={"rows": 2}),
+            "other_categories": forms.TextInput(attrs={
+                "placeholder": "e.g. sport, literature, workshops"}),
+            "other_interests": forms.TextInput(attrs={
+                "placeholder": "e.g. baroque choral, natural wine, brutalist buildings"}),
+            "other_travel": forms.TextInput(attrs={
+                "placeholder": "e.g. anywhere on the Elizabeth line"}),
+            "other_budget": forms.TextInput(attrs={
+                "placeholder": "e.g. usually under £30, more for something special"}),
+            "other_availability": forms.TextInput(attrs={
+                "placeholder": "e.g. weekday lunchtimes, school holidays only"}),
             "notes": forms.Textarea(attrs={
                 "rows": 4,
                 "placeholder": "Anything at all — a night you're planning, someone "
@@ -111,6 +126,11 @@ class ReaderOnboardingForm(forms.ModelForm):
             }),
         }
         labels = {
+            "other_categories": "Something else",
+            "other_interests": "Something else",
+            "other_travel": "Something else",
+            "other_budget": "Something else",
+            "other_availability": "Something else",
             "email": "Email address",
             "age": "Age",
             "location": "Where do you live?",
@@ -123,6 +143,8 @@ class ReaderOnboardingForm(forms.ModelForm):
     TEXT_INPUT_FIELDS = (
         "email", "name", "age", "location", "travel_destinations",
         "loved_examples", "disliked_examples", "notes",
+        "other_categories", "other_interests", "other_travel",
+        "other_budget", "other_availability",
     )
 
     def __init__(self, *args, **kwargs):

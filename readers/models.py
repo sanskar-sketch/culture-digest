@@ -51,6 +51,20 @@ class Reader(models.Model):
     disliked_examples = models.TextField(
         blank=True, help_text="Free text: things this reader hasn't enjoyed."
     )
+    # Write-ins. Every choice question offers "Other", because a fixed list
+    # can only ever cover what we thought of - and the gaps are exactly where
+    # someone's real taste tends to live.
+    other_categories = models.TextField(
+        blank=True, help_text="Categories the reader typed in themselves.")
+    other_interests = models.TextField(
+        blank=True, help_text="Interests not in the tag taxonomy, in their words.")
+    other_travel = models.TextField(
+        blank=True, help_text="How far they'll travel, in their own words.")
+    other_budget = models.TextField(
+        blank=True, help_text="Their budget in their own words, e.g. ranges or exceptions.")
+    other_availability = models.TextField(
+        blank=True, help_text="When they're free, in their own words.")
+
     notes = models.TextField(
         blank=True,
         help_text="Anything the reader wanted to tell us, in their own words. "

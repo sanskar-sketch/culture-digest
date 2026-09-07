@@ -80,6 +80,13 @@
             <span>{{ choice.choice_label }}</span>
           </label>
           {% endfor %}
+          <label class="chip" data-other-toggle="#other-categories">
+            <input type="checkbox">
+            <span>Something else&hellip;</span>
+          </label>
+        </div>
+        <div class="other-field" id="other-categories" hidden>
+          {{ form.other_categories }}
         </div>
 
         <div class="wizard-nav">
@@ -102,6 +109,10 @@
             <span>{{ choice.choice_label }}</span>
           </label>
           {% endfor %}
+          
+        </div>
+        <div class="other-field" id="other-interests">
+          {{ form.other_interests }}
         </div>
         <p class="field-help" id="tag-empty" hidden>
           Nothing to narrow down here &mdash; go back and pick a category, or just carry on.
@@ -131,6 +142,13 @@
               </label>
               {% endif %}
             {% endfor %}
+            <label class="chip" data-other-toggle="#other-travel">
+              <input type="checkbox">
+              <span>Something else&hellip;</span>
+            </label>
+          </div>
+          <div class="other-field" id="other-travel" hidden>
+            {{ form.other_travel }}
           </div>
         </div>
 
@@ -166,6 +184,13 @@
               </label>
               {% endif %}
             {% endfor %}
+            <label class="chip" data-other-toggle="#other-budget">
+              <input type="checkbox">
+              <span>Something else&hellip;</span>
+            </label>
+          </div>
+          <div class="other-field" id="other-budget" hidden>
+            {{ form.other_budget }}
           </div>
         </div>
 
@@ -178,6 +203,13 @@
               <span>{{ choice.choice_label }}</span>
             </label>
             {% endfor %}
+            <label class="chip" data-other-toggle="#other-availability">
+              <input type="checkbox">
+              <span>Something else&hellip;</span>
+            </label>
+          </div>
+          <div class="other-field" id="other-availability" hidden>
+            {{ form.other_availability }}
           </div>
         </div>
 
@@ -412,6 +444,30 @@
     }
     radiusInputs.forEach(function (i) { i.addEventListener('change', syncTravel); });
     syncTravel();
+
+    // --- "Something else…" chips reveal their write-in field.
+    Array.prototype.slice.call(form.querySelectorAll('[data-other-toggle]'))
+      .forEach(function (chip) {
+        var field = form.querySelector(chip.getAttribute('data-other-toggle'));
+        var box = chip.querySelector('input');
+        if (!field || !box) return;
+
+        // A server-side re-render may already have a value - keep it visible.
+        var input = field.querySelector('input, textarea');
+        if (input && input.value.trim()) {
+          box.checked = true;
+          field.hidden = false;
+        }
+
+        box.addEventListener('change', function () {
+          field.hidden = !box.checked;
+          if (!box.checked && input) {
+            input.value = '';       // don't submit something they can't see
+          } else if (input) {
+            try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+          }
+        });
+      });
 
     var starter = document.querySelector('[data-start-wizard]');
     if (starter) {

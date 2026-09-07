@@ -169,6 +169,8 @@ Rules:
   jazz venue, "jazz" fits. Do not pad the list with loosely related guesses.
 - avoid_tags is for things they clearly signalled they dislike, not merely
   things they didn't mention.
+- Where a reader typed something in rather than picking from a list, that is
+  usually a stronger signal than a checkbox - they bothered to write it.
 - Their open-ended note may contain preferences the rest of the form has no
   field for. Read it for taste signals, and fold anything relevant into
   taste_summary so it reaches whoever writes their recommendations.
@@ -210,6 +212,13 @@ Things they said aren't for them:
 
 Places they like to travel to:
 {reader.travel_destinations or "(nothing written)"}
+
+Things they typed in themselves, where our fixed lists didn't fit:
+- other categories: {reader.other_categories or "(none)"}
+- other interests: {reader.other_interests or "(none)"}
+- on travel: {reader.other_travel or "(none)"}
+- on budget: {reader.other_budget or "(none)"}
+- on availability: {reader.other_availability or "(none)"}
 
 Anything else they wanted us to know (open-ended - they could write anything here):
 {reader.notes or "(nothing written)"}
@@ -366,6 +375,9 @@ The reader:
 
 In their own words, things they've loved: {reader.loved_examples or "(nothing written)"}
 Things not for them: {reader.disliked_examples or "(nothing written)"}
+Interests they typed in themselves: {reader.other_interests or "(none)"}
+Their own words on budget: {reader.other_budget or "(none)"}
+Their own words on when they're free: {reader.other_availability or "(none)"}
 Anything else they told us: {reader.notes or "(nothing written)"}
 </reader_input>"""
 
