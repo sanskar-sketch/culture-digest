@@ -13,7 +13,10 @@ class NewsletterIssue(models.Model):
     reader = models.ForeignKey(Reader, on_delete=models.CASCADE, related_name="issues")
     created_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True)
-    resend_message_id = models.CharField(max_length=120, blank=True)
+    provider_message_id = models.CharField(
+        max_length=120, blank=True,
+        help_text="Message id returned by the email provider, for tracing a send.",
+    )
 
     class Meta:
         ordering = ["-created_at"]

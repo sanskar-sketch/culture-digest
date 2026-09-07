@@ -13,7 +13,7 @@ Only email is required at signup — every other field is optional, and the
 matching engine treats an unanswered question as "no preference" rather
 than excluding the reader from getting recommendations.
 
-Stack: Django 5.1 (Python 3.12), SQLite for local dev, [Resend](https://resend.com)
+Stack: Django 5.1 (Python 3.12), SQLite for local dev, [SendGrid](https://sendgrid.com)
 for email delivery. The reader-facing pages (signup, thank-you, unsubscribe,
 feedback confirmation) use a hand-built Apple.com-style design system —
 big type, scroll-reveal animations, gradient hero orbs, segmented pill
@@ -125,7 +125,7 @@ stay stable while the internals get smarter.
 
 ### Email delivery (`recommendations/emailing.py`)
 
-Thin wrapper around the Resend SDK. If `RESEND_API_KEY` is unset, sending
+Thin wrapper around the SendGrid SDK. If `SENDGRID_API_KEY` is unset, sending
 automatically falls back to a dry run (renders and logs, never calls the
 API) so the app works out of the box without an account.
 
@@ -171,7 +171,7 @@ python manage.py runserver
 # nothing in the database (safe to re-run repeatedly while testing).
 python manage.py send_newsletters --dry-run
 
-# Real send for one reader (useful while testing against a live Resend key)
+# Real send for one reader (useful while testing against a live SendGrid key)
 python manage.py send_newsletters --reader you@example.com
 
 # Real send to everyone active, at most 4 recommendations each
@@ -196,7 +196,7 @@ scoring, the feedback learning loop, and rationale generation.
   "London" == "London"), not geocoding or distance. Fine for a single-city
   pilot; will need real geo matching to expand to multiple cities.
 - **No scheduler** — `send_newsletters` needs to be invoked by a cron job.
-- **No email opens/click tracking beyond the feedback links** — Resend
+- **No email opens/click tracking beyond the feedback links** — SendGrid
   supports this natively if/when it's worth wiring up.
 - **No auth for readers** — feedback/unsubscribe links use unguessable
   UUID tokens instead of accounts, which is intentional for a

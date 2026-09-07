@@ -1,9 +1,10 @@
-"""Rendering and sending the newsletter email via Resend
-(https://resend.com).
+"""Rendering and sending the newsletter email via SendGrid.
 
-Kept as a thin wrapper around the Resend SDK so the rest of the codebase
-doesn't depend on it directly - swapping providers later means changing
-this one module.
+Kept as a thin wrapper around the SendGrid SDK so the rest of the codebase
+doesn't depend on it directly - swapping providers means changing this one
+module. With SENDGRID_API_KEY unset, sending falls back to a dry run
+(rendered and logged, never transmitted) so the app works without an
+account.
 """
 
 from __future__ import annotations
@@ -65,22 +66,33 @@ def send_newsletter(issue, dry_run: bool = False) -> str | None:
     message id, or None if this was a dry run / sending is unconfigured."""
     subject, html_body, text_body = render_newsletter(issue)
 
-    if dry_run or not settings.RESEND_API_KEY:
+    if dry_run or not settings.SENDGRID_API_KEY:
         logger.info(
             "[dry-run] Would send newsletter to %s: %s", issue.reader.email, subject
         )
         return None
 
-    import resend
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import Mail
 
-    resend.api_key = settings.RESEND_API_KEY
-    response = resend.Emails.send(
-        {
-            "from": settings.NEWSLETTER_FROM_EMAIL,
-            "to": [issue.reader.email],
-            "subject": subject,
-            "html": html_body,
-            "text": text_body,
-        }
+    message = Mail(
+        from_email=settings.EMAIL_FROM,
+        to_emails=issue.reader.email,
+        subject=subject,
+        plain_text_content=text_body,
+        html_content=html_body,
     )
-    return response.get("id") if isinstance(response, dict) else getattr(response, "id", None)
+    response = SendGridAPIClient(settings.SENDGRID_API_KEY).send(message)
+
+    # SendGrid signals failure by status code rather than by raising, so a
+    # 4xx would otherwise look like a successful send and the issue would be
+    # marked sent when nothing was delivered.
+    if response.status_code >= 300:
+        raise RuntimeError(
+            f"SendGrid rejected the send with HTTP {response.status_code}: "
+            f"{getattr(response, 'body', b'')!r}"
+        )
+
+    # The provider's id lives in a response header, not the body.
+    headers = response.headers or {}
+    return headers.get("X-Message-Id") or headers.get("x-message-id")

@@ -78,8 +78,8 @@ class Command(BaseCommand):
                     transaction.set_rollback(True)
                 else:
                     issue.sent_at = timezone.now()
-                    issue.resend_message_id = message_id or ""
-                    issue.save(update_fields=["sent_at", "resend_message_id"])
+                    issue.provider_message_id = message_id or ""
+                    issue.save(update_fields=["sent_at", "provider_message_id"])
 
             sent += 1
             verb = "Would send" if options["dry_run"] else "Sent"

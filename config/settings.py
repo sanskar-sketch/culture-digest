@@ -125,14 +125,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # production, e.g. https://digest.example.com
 SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "http://127.0.0.1:8000")
 
-# Resend (https://resend.com) is used to send the newsletter emails.
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+# SendGrid is used to send the newsletter emails. Unset = dry-run mode.
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 
 # The "From" address newsletters are sent from. Must be a verified sender
-# domain in Resend before real sending will work.
-NEWSLETTER_FROM_EMAIL = os.environ.get(
-    "NEWSLETTER_FROM_EMAIL", "Culture Digest <digest@example.com>"
-)
+# (single sender or authenticated domain) in SendGrid before real sending
+# will work - SendGrid rejects unverified senders with a 403.
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "Culture Digest <digest@example.com>")
 
 # AI assistance (research, classification, matching, writing). Everything
 # degrades to the deterministic path when this is unset, so the app runs

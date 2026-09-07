@@ -39,7 +39,7 @@ class NewsletterIssueAdmin(admin.ModelAdmin):
     list_filter = ("sent_at", "created_at")
     search_fields = ("reader__email", "reader__name", "recommendations__opportunity__title")
     inlines = [RecommendationInline]
-    readonly_fields = ("created_at", "resend_message_id")
+    readonly_fields = ("created_at", "provider_message_id")
     date_hierarchy = "created_at"
 
     def get_queryset(self, request):

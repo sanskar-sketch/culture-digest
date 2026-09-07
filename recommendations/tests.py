@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
-from recommendations import ai, matching
+from recommendations import ai, emailing, matching
 from recommendations.models import NewsletterIssue, Recommendation
 
 
@@ -495,6 +495,57 @@ class AICallPathTests(TestCase):
             client.return_value.chat.completions.create.side_effect = RuntimeError("connection reset")
             rationale = matching.build_rationale(match, make_reader())
         self.assertIn("Editorial pitch.", rationale)
+
+
+class EmailSendingTests(TestCase):
+    def _issue(self):
+        reader = make_reader()
+        issue = NewsletterIssue.objects.create(reader=reader)
+        Recommendation.objects.create(
+            issue=issue, opportunity=make_opportunity(), rationale="Because.", score=1.0
+        )
+        return issue
+
+    @override_settings(SENDGRID_API_KEY="")
+    def test_no_api_key_is_a_dry_run_and_never_calls_the_provider(self):
+        with mock.patch("sendgrid.SendGridAPIClient") as client:
+            self.assertIsNone(emailing.send_newsletter(self._issue()))
+        client.assert_not_called()
+
+    @override_settings(SENDGRID_API_KEY="SG.test", EMAIL_FROM="Digest <d@example.com>")
+    def test_dry_run_flag_never_calls_the_provider_even_with_a_key(self):
+        with mock.patch("sendgrid.SendGridAPIClient") as client:
+            self.assertIsNone(emailing.send_newsletter(self._issue(), dry_run=True))
+        client.assert_not_called()
+
+    @override_settings(SENDGRID_API_KEY="SG.test", EMAIL_FROM="Digest <d@example.com>")
+    def test_successful_send_returns_the_provider_message_id(self):
+        response = mock.Mock(status_code=202, headers={"X-Message-Id": "msg-abc123"})
+        with mock.patch("sendgrid.SendGridAPIClient") as client:
+            client.return_value.send.return_value = response
+            message_id = emailing.send_newsletter(self._issue())
+
+        self.assertEqual(message_id, "msg-abc123")
+        sent = client.return_value.send.call_args.args[0]
+        payload = sent.get()
+        self.assertEqual(payload["from"]["email"], "d@example.com")
+        # Both parts must go out - a text/plain alternative matters for
+        # deliverability and for clients that don't render HTML.
+        self.assertEqual(
+            {c["type"] for c in payload["content"]}, {"text/plain", "text/html"}
+        )
+
+    @override_settings(SENDGRID_API_KEY="SG.test", EMAIL_FROM="Digest <d@example.com>")
+    def test_a_rejected_send_raises_rather_than_looking_successful(self):
+        # SendGrid signals failure with a status code, not an exception - if
+        # we ignored it the issue would be marked sent with nothing delivered.
+        response = mock.Mock(status_code=403, headers={}, body=b"unverified sender")
+        with mock.patch("sendgrid.SendGridAPIClient") as client:
+            client.return_value.send.return_value = response
+            with self.assertRaises(RuntimeError) as caught:
+                emailing.send_newsletter(self._issue())
+
+        self.assertIn("403", str(caught.exception))
 
 
 class WildcardTests(TestCase):
