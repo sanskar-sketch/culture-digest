@@ -15,7 +15,7 @@ from .models import Reader
 PROFILE_FIELDS = (
     "name", "age", "location", "travel_destinations", "travel_radius",
     "budget", "availability", "mainstream_preference", "scale_preference",
-    "loved_examples", "disliked_examples",
+    "loved_examples", "disliked_examples", "notes",
 )
 
 
@@ -75,7 +75,7 @@ class ReaderAdmin(admin.ModelAdmin):
         "location",
     )
     search_fields = ("email", "name", "location", "travel_destinations",
-                     "loved_examples", "disliked_examples")
+                     "loved_examples", "disliked_examples", "notes")
     filter_horizontal = ("interest_tags", "ai_inferred_tags", "ai_avoid_tags")
     readonly_fields = ("unsubscribe_token", "created_at", "updated_at",
                        "profile_completeness", "engagement", "feedback_breakdown",
@@ -92,7 +92,8 @@ class ReaderAdmin(admin.ModelAdmin):
         ("Taste", {
             "fields": ("interest_categories", "interest_tags",
                        "mainstream_preference", "scale_preference",
-                       "open_to_surprise", "loved_examples", "disliked_examples"),
+                       "open_to_surprise", "loved_examples", "disliked_examples",
+                       "notes"),
         }),
         ("Practical", {"fields": ("budget", "availability")}),
         ("What AI read into their free text", {

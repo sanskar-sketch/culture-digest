@@ -22,7 +22,7 @@
 
     <div class="wizard-progress">
       <div class="wizard-progress-inner">
-        <span class="wizard-progress-label" id="wizard-label">Step 1 of 7</span>
+        <span class="wizard-progress-label" id="wizard-label">Step 1 of 8</span>
         <div class="wizard-track"><div class="wizard-fill" id="wizard-fill"></div></div>
       </div>
     </div>
@@ -259,6 +259,24 @@
           </label>
           {{ form.disliked_examples }}
         </div>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="wizard-step" hidden>
+      <div class="container-narrow">
+        <span class="eyebrow">Over to you</span>
+        <h2>{{ form.notes.label }}</h2>
+        <p class="lede" style="margin-bottom:28px;">
+          Anything you write here is read when we pick your recommendations
+          &mdash; including things the questions above never asked about.
+        </p>
+        {{ form.notes }}
 
         <div class="wizard-nav">
           <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>

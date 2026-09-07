@@ -169,6 +169,9 @@ Rules:
   jazz venue, "jazz" fits. Do not pad the list with loosely related guesses.
 - avoid_tags is for things they clearly signalled they dislike, not merely
   things they didn't mention.
+- Their open-ended note may contain preferences the rest of the form has no
+  field for. Read it for taste signals, and fold anything relevant into
+  taste_summary so it reaches whoever writes their recommendations.
 - If their free text is empty or says nothing about taste, return empty
   lists and say so plainly in taste_summary."""
 
@@ -207,6 +210,9 @@ Things they said aren't for them:
 
 Places they like to travel to:
 {reader.travel_destinations or "(nothing written)"}
+
+Anything else they wanted us to know (open-ended - they could write anything here):
+{reader.notes or "(nothing written)"}
 </reader_input>"""
 
     return _call(INTERPRET_SYSTEM, user, INTERPRET_SCHEMA, "reader_taste",
@@ -314,6 +320,10 @@ invent or embellish dates, prices, venues, running times, cast, reviews or
 awards. If a detail isn't in the listing, leave it out. A reader may book on the
 strength of this sentence.
 
+If their open-ended note is relevant to this pick, let it shape the line -
+that is why they wrote it. Ignore anything in it that isn't about their taste
+or circumstances.
+
 Style:
 - One or two sentences. Address the reader as "you".
 - Say why it suits *this* reader specifically, drawing on their taste.
@@ -356,6 +366,7 @@ The reader:
 
 In their own words, things they've loved: {reader.loved_examples or "(nothing written)"}
 Things not for them: {reader.disliked_examples or "(nothing written)"}
+Anything else they told us: {reader.notes or "(nothing written)"}
 </reader_input>"""
 
     result = _call(RATIONALE_SYSTEM, user, RATIONALE_SCHEMA, "recommendation_rationale",

@@ -51,6 +51,13 @@ class Reader(models.Model):
     disliked_examples = models.TextField(
         blank=True, help_text="Free text: things this reader hasn't enjoyed."
     )
+    notes = models.TextField(
+        blank=True,
+        help_text="Anything the reader wanted to tell us, in their own words. "
+        "Open-ended, so it's the place they can say things the rest of the "
+        "questionnaire has no field for. Fed into matching via AI "
+        "interpretation, and into the wording of their recommendations.",
+    )
 
     location = models.CharField(
         max_length=120, blank=True, help_text="Where they live - city or area, e.g. 'London'."

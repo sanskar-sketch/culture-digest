@@ -96,12 +96,19 @@ class ReaderOnboardingForm(forms.ModelForm):
             "open_to_surprise",
             "loved_examples",
             "disliked_examples",
+            "notes",
         ]
         widgets = {
             "age": forms.NumberInput(attrs={"min": 1, "max": 120, "inputmode": "numeric"}),
             "loved_examples": forms.Textarea(attrs={"rows": 3}),
             "disliked_examples": forms.Textarea(attrs={"rows": 3}),
             "travel_destinations": forms.Textarea(attrs={"rows": 2}),
+            "notes": forms.Textarea(attrs={
+                "rows": 4,
+                "placeholder": "Anything at all — a night you're planning, someone "
+                               "you'd be going with, something you're curious about, "
+                               "a place you'll be that week, things to avoid.",
+            }),
         }
         labels = {
             "email": "Email address",
@@ -110,11 +117,12 @@ class ReaderOnboardingForm(forms.ModelForm):
             "travel_destinations": "Where do you love to travel to?",
             "loved_examples": "Tell us about a few things you've loved recently",
             "disliked_examples": "Anything that's really not for you?",
+            "notes": "Anything else we should know?",
         }
 
     TEXT_INPUT_FIELDS = (
         "email", "name", "age", "location", "travel_destinations",
-        "loved_examples", "disliked_examples",
+        "loved_examples", "disliked_examples", "notes",
     )
 
     def __init__(self, *args, **kwargs):
