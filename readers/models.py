@@ -122,6 +122,8 @@ class Reader(models.Model):
 
     is_active = models.BooleanField(default=True, help_text="Unchecked = unsubscribed.")
     unsubscribe_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    # Separate from the unsubscribe token so either can be revoked alone.
+    edit_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

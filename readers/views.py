@@ -4,27 +4,78 @@ from django.views.decorators.http import require_http_methods
 from .forms import ReaderOnboardingForm
 from .models import Reader
 
+EMPTY = (None, "", [], {})
+
 
 @require_http_methods(["GET", "POST"])
 def onboarding_view(request):
-    """The signup / onboarding questionnaire.
+    """The signup questionnaire.
 
-    Resubmitting with an email that's already registered updates that
-    reader's profile in place, rather than erroring on the unique
-    constraint — handy for readers who want to revise their taste profile.
+    Signing up again with an address we already know *merges* rather than
+    replaces: this form arrives blank, so a returning reader who fills in
+    only their email would otherwise silently wipe everything they told us
+    last time. Answers can only be removed from the preferences page, where
+    they can see what they're removing.
     """
-    instance = None
-    if request.method == "POST":
-        email = request.POST.get("email", "").strip().lower()
-        instance = Reader.objects.filter(email=email).first()
+    email = (request.POST.get("email") or "").strip().lower() if request.method == "POST" else ""
+    existing = Reader.objects.filter(email=email).first() if email else None
 
-    form = ReaderOnboardingForm(request.POST or None, instance=instance)
+    form = ReaderOnboardingForm(request.POST or None, instance=existing)
+
+    if request.method == "POST" and form.is_valid():
+        if existing is None:
+            reader = form.save()
+        else:
+            reader = _merge_into(form, existing)
+        return render(
+            request, "onboarding/thank_you.html",
+            {"reader": reader, "returning": existing is not None},
+        )
+
+    return render(request, "onboarding/questionnaire.html", {"form": form})
+
+
+def _merge_into(form, reader):
+    """Apply only the answers this submission actually filled in.
+
+    The form was bound to this instance so the unique-email check would
+    pass, and validation has already written the blanks onto it in memory -
+    so re-read the stored values before deciding what to keep.
+    """
+    reader = Reader.objects.get(pk=reader.pk)
+    m2m = {"interest_tags"}
+    for field, value in form.cleaned_data.items():
+        if field in m2m or value in EMPTY or value is False:
+            continue
+        setattr(reader, field, value)
+    reader.save()
+
+    picked = form.cleaned_data.get("interest_tags")
+    if picked:
+        reader.interest_tags.add(*picked)
+    return reader
+
+
+@require_http_methods(["GET", "POST"])
+def preferences_view(request, token):
+    """A reader editing their own profile, reached by a link in their email.
+
+    Unlike signup this is a true edit - the form arrives filled in, so
+    clearing a field here is deliberate and is honoured.
+    """
+    reader = get_object_or_404(Reader, edit_token=token)
+    form = ReaderOnboardingForm(request.POST or None, instance=reader)
+    saved = False
 
     if request.method == "POST" and form.is_valid():
         reader = form.save()
-        return render(request, "onboarding/thank_you.html", {"reader": reader})
+        form = ReaderOnboardingForm(instance=reader)
+        saved = True
 
-    return render(request, "onboarding/questionnaire.html", {"form": form})
+    return render(
+        request, "onboarding/questionnaire.html",
+        {"form": form, "reader": reader, "editing": True, "saved": saved},
+    )
 
 
 def unsubscribe_view(request, token):

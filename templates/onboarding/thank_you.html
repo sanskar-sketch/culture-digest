@@ -9,12 +9,18 @@
       <p class="hero-brand" style="font-size:clamp(34px,6vw,64px);margin-bottom:10px;">{{ site_config.site_name }}<span class="brand-dot"></span></p>
       <h1>Welcome{% if reader.name %}, {{ reader.name }}{% endif %}.</h1>
       <p class="lede" style="margin-left:auto;margin-right:auto;">
-        We'll send your first newsletter to <strong>{{ reader.email }}</strong> soon.
+        {% if returning %}Your answers are saved against{% else %}We'll send your first newsletter to{% endif %}
+        <strong>{{ reader.email }}</strong>{% if not returning %} soon{% endif %}.
         Every recommendation comes with a quick <em>More like this</em> /
         <em>Not for me</em> link &mdash; the more you use them, the sharper
         future picks get.
       </p>
-      <a href="/" class="btn btn-ghost">Back home</a>
+      <a href="{% url 'readers:preferences' reader.edit_token %}" class="btn btn-primary">
+        Review or change your answers
+      </a>
+      <p class="wizard-note" style="text-align:center;">
+        That link is yours to keep &mdash; it's in every email we send, too.
+      </p>
     </div>
   </section>
 {% endblock %}

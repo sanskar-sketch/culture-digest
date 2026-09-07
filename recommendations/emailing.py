@@ -28,6 +28,11 @@ def build_unsubscribe_url(reader) -> str:
     return settings.SITE_BASE_URL.rstrip("/") + path
 
 
+def build_preferences_url(reader) -> str:
+    path = reverse("readers:preferences", kwargs={"token": reader.edit_token})
+    return settings.SITE_BASE_URL.rstrip("/") + path
+
+
 def render_newsletter(issue) -> tuple[str, str, str]:
     """Return (subject, html_body, text_body) for a NewsletterIssue."""
     from siteconfig.models import SiteConfig
@@ -55,6 +60,7 @@ def render_newsletter(issue) -> tuple[str, str, str]:
         "site_config": config,
         "recommendations": rec_contexts,
         "unsubscribe_url": build_unsubscribe_url(reader),
+        "preferences_url": build_preferences_url(reader),
     }
 
     first_name = reader.name.split(" ")[0] if reader.name else ""
