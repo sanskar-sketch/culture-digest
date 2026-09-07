@@ -39,7 +39,9 @@
       color: var(--text);
       background: var(--bg);
       -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
+      /* clip, not hidden: `hidden` makes body a scroll container, which
+         breaks position:sticky descendants (the wizard progress bar). */
+      overflow-x: clip;
     }
 
     img, svg { max-width: 100%; }
@@ -440,6 +442,96 @@
 
     /* radio pill rows (single choice, full-width stacked on mobile) */
     .radio-group { display: flex; flex-wrap: wrap; gap: 10px; }
+
+    /* ---------- step wizard ---------- */
+    .wizard { scroll-margin-top: 52px; }
+
+    .wizard-progress {
+      position: sticky;
+      top: 52px;
+      z-index: 500;
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--hairline-dark);
+      padding: 14px 24px 13px;
+    }
+    .wizard-progress-inner { max-width: 640px; margin: 0 auto; }
+    .wizard-progress-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-secondary-dark);
+      margin-bottom: 9px;
+    }
+    .wizard-track {
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      overflow: hidden;
+    }
+    .wizard-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+      transition: width 0.55s var(--ease);
+    }
+
+    .wizard-step { padding: 60px 0 44px; }
+    .wizard-step[hidden] { display: none; }
+    .step-enter { animation: step-in 0.5s var(--ease) both; }
+    @keyframes step-in {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .step-enter { animation: none; }
+    }
+
+    .wizard-nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 44px;
+    }
+    .wizard-nav .spacer { flex: 1; }
+    .wizard-note {
+      font-size: 13px;
+      color: var(--text-secondary-dark);
+      margin: 18px 0 0;
+    }
+
+    /* text inputs sitting on a dark surface */
+    .bg-dark .text-input {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--hairline-dark);
+      color: var(--text-dark);
+    }
+    .bg-dark .text-input::placeholder { color: #6e6e73; }
+    .bg-dark .text-input:focus {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: var(--accent-1);
+      box-shadow: 0 0 0 4px rgba(94, 92, 230, 0.22);
+    }
+
+    /* ---------- mobile tightening ---------- */
+    @media (max-width: 640px) {
+      section.block { padding: 64px 0; }
+      .wizard-step { padding: 36px 0 28px; }
+      .hero { padding: 116px 20px 76px; }
+      .container, .container-narrow { padding: 0 20px; }
+      .wizard-progress { padding: 12px 20px 11px; }
+      .lede { font-size: 17px; }
+      .chip span { padding: 11px 17px; font-size: 15px; }
+      .wizard-nav { margin-top: 32px; }
+      .wizard-nav .btn { flex: 1; justify-content: center; padding: 15px 20px; }
+      .wizard-nav .spacer { display: none; }
+      .toggle-row { padding: 16px; }
+      .field-grid { gap: 16px; }
+    }
 
     /* ---------- footer ---------- */
     .site-footer {

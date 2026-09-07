@@ -12,32 +12,34 @@
         A handful of things to see, hear, eat and do &mdash; matched to your
         taste, your budget, and your week. Not everyone's.
       </p>
-      <a href="#questionnaire" class="btn btn-primary" data-scroll-to="#questionnaire">Get started</a>
+      <a href="#questionnaire" class="btn btn-primary" data-start-wizard>Get started</a>
+      <p class="wizard-note" style="text-align:center;">Takes about a minute &middot; only your email is required</p>
     </div>
     <div class="scroll-cue"></div>
   </section>
 
-  <form method="post" novalidate id="questionnaire">
+  <form method="post" novalidate id="questionnaire" class="wizard bg-dark">
     {% csrf_token %}
 
-    {% if form.non_field_errors %}
-    <section class="block tight">
-      <div class="container-narrow">
-        <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    <div class="wizard-progress">
+      <div class="wizard-progress-inner">
+        <span class="wizard-progress-label" id="wizard-label">Step 1 of 6</span>
+        <div class="wizard-track"><div class="wizard-fill" id="wizard-fill"></div></div>
       </div>
-    </section>
+    </div>
+
+    {% if form.non_field_errors %}
+    <div class="container-narrow" style="padding-top:24px;">
+      <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
     {% endif %}
 
-    <section class="block reveal">
+    <section class="wizard-step">
       <div class="container-narrow">
         <span class="eyebrow">The basics</span>
         <h2>Who are we writing to?</h2>
-        <p class="lede" style="margin-bottom:48px;">
-          Only your email is required. Everything else helps us do better by
-          you &mdash; skip anything you'd rather not answer.
-        </p>
 
-        <div class="field-grid">
+        <div class="field-grid" style="margin-top:36px;">
           <div>
             <label class="field-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
             {{ form.email }}
@@ -58,15 +60,21 @@
             {{ form.location }}
           </div>
         </div>
+
+        <div class="wizard-nav">
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
+        </div>
+        <p class="wizard-note">Everything except your email is optional &mdash; skip whatever you like.</p>
       </div>
     </section>
 
-    <section class="block bg-alt reveal">
+    <section class="wizard-step" hidden>
       <div class="container-narrow">
         <span class="eyebrow">Getting around</span>
         <h2>Where would you go, for something worth it?</h2>
 
-        <div style="margin:40px 0;">
+        <div style="margin:36px 0 32px;">
           <label class="field-label" for="{{ form.travel_destinations.id_for_label }}">
             {{ form.travel_destinations.label }}
           </label>
@@ -87,31 +95,45 @@
             {% endfor %}
           </div>
         </div>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
+        </div>
       </div>
     </section>
 
-    <section class="block reveal">
+    <section class="wizard-step" hidden>
       <div class="container-narrow">
         <span class="eyebrow">Taste</span>
         <h2>What moves you?</h2>
-        <p class="lede" style="margin-bottom:32px;">{{ form.interest_tags.help_text }}</p>
+        <p class="lede" style="margin-bottom:28px;">{{ form.interest_tags.help_text }}</p>
         <div class="chip-group">
           {% for choice in form.interest_tags %}
           <label class="chip" for="{{ choice.id_for_label }}">
             {{ choice.tag }}
             <span>{{ choice.choice_label }}</span>
           </label>
+          {% empty %}
+          <p class="field-help">No interest tags have been set up yet.</p>
           {% endfor %}
+        </div>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
         </div>
       </div>
     </section>
 
-    <section class="block bg-dark reveal">
+    <section class="wizard-step" hidden>
       <div class="container-narrow">
         <span class="eyebrow">Practicalities</span>
         <h2>Budget &amp; timing.</h2>
 
-        <div style="margin:40px 0;">
+        <div style="margin:36px 0 32px;">
           <span class="field-label">{{ form.budget.label }}</span>
           <div class="chip-group">
             {% for choice in form.budget %}
@@ -136,15 +158,21 @@
             {% endfor %}
           </div>
         </div>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
+        </div>
       </div>
     </section>
 
-    <section class="block reveal">
+    <section class="wizard-step" hidden>
       <div class="container-narrow">
         <span class="eyebrow">Your taste, precisely</span>
         <h2>Dial it in.</h2>
 
-        <div style="margin:48px 0 40px;">
+        <div style="margin:36px 0 32px;">
           <span class="field-label">{{ form.mainstream_preference.label }}</span>
           <div class="scale-pills">
             {% for choice in form.mainstream_preference %}
@@ -159,7 +187,7 @@
           <div class="scale-caption"><span>Mainstream</span><span>Unusual</span></div>
         </div>
 
-        <div style="margin:40px 0 48px;">
+        <div style="margin:0 0 32px;">
           <span class="field-label">{{ form.scale_preference.label }}</span>
           <div class="scale-pills">
             {% for choice in form.scale_preference %}
@@ -184,37 +212,132 @@
             <span class="track"></span>
           </label>
         </div>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
+        </div>
       </div>
     </section>
 
-    <section class="block bg-alt reveal">
+    <section class="wizard-step" hidden>
       <div class="container-narrow">
         <span class="eyebrow">In your own words</span>
-        <h2>Tell us more.</h2>
-        <div style="margin-top:40px;">
+        <h2>Anything we should know?</h2>
+        <div style="margin-top:36px;">
           <label class="field-label" for="{{ form.loved_examples.id_for_label }}">
             {{ form.loved_examples.label }}
           </label>
           {{ form.loved_examples }}
         </div>
-        <div style="margin-top:24px;">
+        <div style="margin-top:20px;">
           <label class="field-label" for="{{ form.disliked_examples.id_for_label }}">
             {{ form.disliked_examples.label }}
           </label>
           {{ form.disliked_examples }}
         </div>
-      </div>
-    </section>
 
-    <section class="block bg-dark reveal" style="text-align:center;">
-      <div class="container-narrow">
-        <h2 style="margin-bottom:16px;">Ready when you are.</h2>
-        <p class="lede" style="margin:0 auto 36px;">
-          Unsubscribe anytime, one click. No noise &mdash; just the things worth knowing about.
-        </p>
-        <button type="submit" class="btn btn-primary">Sign me up</button>
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="submit" class="btn btn-primary">Sign me up</button>
+        </div>
+        <p class="wizard-note">Unsubscribe anytime, one click. No noise.</p>
       </div>
     </section>
   </form>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    var form = document.getElementById('questionnaire');
+    if (!form) return;
+
+    var steps = Array.prototype.slice.call(form.querySelectorAll('.wizard-step'));
+    var total = steps.length;
+    var fill = document.getElementById('wizard-fill');
+    var label = document.getElementById('wizard-label');
+    var emailInput = form.querySelector('input[type="email"]');
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var current = 0;
+
+    function show(index, opts) {
+      opts = opts || {};
+      current = Math.max(0, Math.min(total - 1, index));
+
+      steps.forEach(function (step, i) {
+        var active = i === current;
+        step.hidden = !active;
+        if (active && !reduceMotion) {
+          step.classList.remove('step-enter');
+          void step.offsetWidth;
+          step.classList.add('step-enter');
+        }
+      });
+
+      fill.style.width = ((current + 1) / total * 100) + '%';
+      label.textContent = 'Step ' + (current + 1) + ' of ' + total;
+
+      if (opts.scroll !== false) {
+        form.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      }
+      // Autofocus speeds up desktop entry, but on touch it yanks up the
+      // keyboard mid-scroll - so only on pointer devices, and only once
+      // the scroll has settled (focusing mid-scroll cancels it).
+      if (opts.focus && window.matchMedia('(hover: hover) and (min-width: 641px)').matches) {
+        var field = steps[current].querySelector('input[type="text"], input[type="email"], input[type="number"], textarea');
+        if (field) {
+          setTimeout(function () {
+            try { field.focus({ preventScroll: true }); } catch (e) { field.focus(); }
+          }, reduceMotion ? 0 : 450);
+        }
+      }
+    }
+
+    // Email is the one required field - don't let people sail past a bad one.
+    function canAdvance() {
+      if (current === 0 && emailInput && !emailInput.checkValidity()) {
+        emailInput.reportValidity();
+        return false;
+      }
+      return true;
+    }
+
+    form.addEventListener('click', function (e) {
+      if (e.target.closest('[data-wizard-next]')) {
+        e.preventDefault();
+        if (canAdvance()) show(current + 1, { focus: true });
+      } else if (e.target.closest('[data-wizard-prev]')) {
+        e.preventDefault();
+        show(current - 1, { focus: false });
+      }
+    });
+
+    form.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.target.tagName === 'TEXTAREA') return;
+      if (e.target.tagName === 'INPUT' && current < total - 1) {
+        e.preventDefault();
+        if (canAdvance()) show(current + 1, { focus: true });
+      }
+    });
+
+    var starter = document.querySelector('[data-start-wizard]');
+    if (starter) {
+      starter.addEventListener('click', function (e) {
+        e.preventDefault();
+        show(current, { scroll: true, focus: true });
+      });
+    }
+
+    // If the server bounced the form back with an error, open that step.
+    var errored = -1;
+    steps.forEach(function (step, i) {
+      if (errored === -1 && step.querySelector('.errorlist')) errored = i;
+    });
+    show(errored > -1 ? errored : 0, { scroll: errored > -1, focus: false });
+  })();
+</script>
 {% endblock %}
