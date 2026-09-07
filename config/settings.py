@@ -137,8 +137,8 @@ NEWSLETTER_FROM_EMAIL = os.environ.get(
 # AI assistance (research, classification, matching, writing). Everything
 # degrades to the deterministic path when this is unset, so the app runs
 # fine without it - see recommendations/ai.py.
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 
 # Max number of recommendations included in a single newsletter send.
 RECOMMENDATIONS_PER_SEND = int(os.environ.get("RECOMMENDATIONS_PER_SEND", "4"))

@@ -109,7 +109,7 @@ Three jobs, matching what the brief asks AI to help with:
 3. **Writing** — the per-recommendation "why this suits you" line.
 
 Two rules hold throughout. **Nothing is load-bearing**: every path falls
-back to the deterministic template if `ANTHROPIC_API_KEY` is unset or a
+back to the deterministic template if `OPENAI_API_KEY` is unset or a
 call fails, so a newsletter never fails to send because of an AI call.
 And **the model may not invent facts** — rationale writing is given the
 stored record and told to work only from it, because a hallucinated date

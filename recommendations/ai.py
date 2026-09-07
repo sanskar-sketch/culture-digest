@@ -12,6 +12,10 @@ Three jobs, matching what the brief asks AI to help with:
 3. `write_rationale` - write the short "why this suits you" line for each
    recommendation in the newsletter.
 
+Runs on OpenAI (`OPENAI_API_KEY`, model via `OPENAI_MODEL`). Everything
+goes through `_call`, so swapping provider means changing that one
+function rather than touching the prompts or the callers.
+
 Two rules run through all of it:
 
 * **Nothing here is load-bearing.** Every function degrades to the
@@ -43,32 +47,43 @@ UNTRUSTED_NOTE = (
 
 
 def is_enabled() -> bool:
-    return bool(getattr(settings, "ANTHROPIC_API_KEY", ""))
+    return bool(getattr(settings, "OPENAI_API_KEY", ""))
 
 
 def _client():
-    import anthropic
+    import openai
 
-    return anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    return openai.OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-def _call(system: str, user: str, schema: dict, max_tokens: int = 4000) -> dict | None:
+def _call(
+    system: str, user: str, schema: dict, schema_name: str, max_tokens: int = 4000
+) -> dict | None:
     """One structured call. Returns parsed JSON, or None if AI is off or fails."""
     if not is_enabled():
         return None
     try:
-        response = _client().messages.create(
-            model=settings.ANTHROPIC_MODEL,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-            output_config={"format": {"type": "json_schema", "schema": schema}},
+        completion = _client().chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            max_completion_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": schema_name, "strict": True, "schema": schema},
+            },
         )
-        if response.stop_reason == "refusal":
-            logger.warning("AI declined the request: %s", response.stop_details)
+        message = completion.choices[0].message
+        if message.refusal:
+            logger.warning("AI declined the request: %s", message.refusal)
             return None
-        text = "".join(b.text for b in response.content if b.type == "text")
-        return json.loads(text)
+        if not message.content:
+            logger.warning("AI returned empty content (finish_reason=%s)",
+                           completion.choices[0].finish_reason)
+            return None
+        return json.loads(message.content)
     except Exception:
         # Never let an AI failure break a send, a save, or a page render.
         logger.exception("AI call failed; falling back to the deterministic path")
@@ -157,7 +172,7 @@ Places they like to travel to:
 {reader.travel_destinations or "(nothing written)"}
 </reader_input>"""
 
-    return _call(INTERPRET_SYSTEM, user, INTERPRET_SCHEMA, max_tokens=2000)
+    return _call(INTERPRET_SYSTEM, user, INTERPRET_SCHEMA, "reader_taste", max_tokens=2000)
 
 
 def apply_interpretation(reader) -> bool:
@@ -197,7 +212,8 @@ CLASSIFY_SCHEMA = {
         "intimate_to_large_scale": {"type": "integer", "minimum": 1, "maximum": 5},
         "reasoning": {"type": "string", "description": "One sentence for the editor."},
     },
-    "required": ["category", "tags", "mainstream_to_unusual",
+    # OpenAI strict mode requires every property to be listed in `required`.
+    "required": ["category", "tags", "price_tier", "mainstream_to_unusual",
                  "intimate_to_large_scale", "reasoning"],
     "additionalProperties": False,
 }
@@ -230,7 +246,7 @@ Editorial note: {opportunity.editorial_note or "(none)"}
 Venue: {opportunity.location_name or "(none)"}, {opportunity.location_area or "(none)"}
 Price shown to readers: {opportunity.price_display or "(none)"}"""
 
-    return _call(CLASSIFY_SYSTEM, user, CLASSIFY_SCHEMA, max_tokens=1500)
+    return _call(CLASSIFY_SYSTEM, user, CLASSIFY_SCHEMA, "opportunity_classification", max_tokens=1500)
 
 
 # --------------------------------------------------------------------------
@@ -295,7 +311,7 @@ In their own words, things they've loved: {reader.loved_examples or "(nothing wr
 Things not for them: {reader.disliked_examples or "(nothing written)"}
 </reader_input>"""
 
-    result = _call(RATIONALE_SYSTEM, user, RATIONALE_SCHEMA, max_tokens=1000)
+    result = _call(RATIONALE_SYSTEM, user, RATIONALE_SCHEMA, "recommendation_rationale", max_tokens=1000)
     if not result:
         return None
     return (result.get("rationale") or "").strip() or None

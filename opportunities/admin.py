@@ -179,7 +179,7 @@ class OpportunityAdmin(admin.ModelAdmin):
         if not ai.is_enabled():
             self.message_user(
                 request,
-                "AI is not configured - set ANTHROPIC_API_KEY to enable this.",
+                "AI is not configured - set OPENAI_API_KEY to enable this.",
                 messages.WARNING,
             )
             return
