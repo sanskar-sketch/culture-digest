@@ -133,7 +133,12 @@ h1, h2, h3, h4 { color: var(--e-ink); letter-spacing: -0.015em; }
 code, pre { font-family: var(--e-mono); font-size: 12.5px; }
 
 /* ---------- layout: sidebar + content --------------------------------- */
-#container { min-height: 100vh; display: flex; flex-direction: column; }
+/* Django gives #container width:100%; with the sidebar's padding-left that
+   overflowed the viewport by the sidebar's width on every page. */
+#container {
+  min-height: 100vh; display: flex; flex-direction: column;
+  box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0;
+}
 #header { display: none; }                    /* replaced by the sidebar */
 #main { display: flex; flex: 1 0 auto; align-items: stretch; }
 #content-start { flex: 1 1 auto; min-width: 0; }
@@ -636,4 +641,31 @@ body.login .breadcrumbs, body.login #nav-sidebar { display: none; }
   .form-row { flex-direction: column; gap: 6px; }
   .form-row label, .aligned label { width: auto; flex: none; padding-top: 0; }
   #content > h1 { font-size: 24px; }
+}
+
+/* ---------- object-tools buttons (POST actions on a change page) --------- */
+.object-tools form { display: inline; margin: 0; }
+.object-tools button {
+  font: inherit; display: inline-block; padding: 8px 16px; border-radius: 999px;
+  background: var(--e-surface-2); color: var(--e-ink); font-size: 13px; font-weight: 600;
+  border: 1px solid var(--e-line); cursor: pointer; line-height: normal;
+}
+.object-tools button:hover { border-color: var(--e-accent); color: var(--e-accent); }
+.object-tools button.primary { background: var(--e-accent); color: #fff; border-color: transparent; }
+.object-tools button.primary:hover { background: #4a48c4; color: #fff; }
+.object-tools button.danger { border-color: #ff375f; color: #ff375f; }
+.object-tools button.danger:hover { background: #ff375f; color: #fff; }
+
+/* ---------- preview pages: two panels that must not overflow ------------- */
+.cd-split > * { min-width: 0; }
+.cd-panel pre { overflow-x: auto; }
+.cd-panel iframe { display: block; width: 100%; max-width: 100%; }
+
+/* Django styles object-tools links via :link/:visited, which outranks a plain
+   .object-tools a - match its specificity so ours wins by order. */
+.object-tools a:link, .object-tools a:visited {
+  color: var(--e-ink); background: var(--e-surface-2);
+}
+.object-tools a.addlink:link, .object-tools a.addlink:visited {
+  color: #fff; background: var(--e-accent);
 }

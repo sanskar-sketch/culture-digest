@@ -1,0 +1,10 @@
+{% autoescape off %}{% if first_name %}{{ first_name }},
+
+{% endif %}{{ body_text }}
+{% if campaign.link_url %}
+{{ campaign.link_label|default:"Book / learn more" }}: {{ campaign.link_url }}
+{% endif %}
+----
+{{ site_config.site_name }} — {{ site_config.tagline }}
+Unsubscribe: {{ unsubscribe_url }}
+{% endautoescape %}

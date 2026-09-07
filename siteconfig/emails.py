@@ -27,11 +27,13 @@ class EmailTemplate(models.Model):
     class Kind(models.TextChoices):
         WELCOME = "welcome", "Welcome email"
         NEWSLETTER = "newsletter", "Newsletter"
+        CAMPAIGN = "campaign", "Campaign"
 
     # Where the built-in versions live, for "start from the current one".
     FILE_TEMPLATES = {
         Kind.WELCOME: ("emails/welcome.html", "emails/welcome.txt"),
         Kind.NEWSLETTER: ("emails/newsletter.html", "emails/newsletter.txt"),
+        Kind.CAMPAIGN: ("emails/campaign.html", "emails/campaign.txt"),
     }
 
     PLACEHOLDERS = {
@@ -46,6 +48,11 @@ class EmailTemplate(models.Model):
             "{{ rec.opportunity.title }}", "{{ rec.rationale }}", "{{ rec.booking_url }}",
             "{{ rec.more_like_this_url }}", "{{ rec.not_for_me_url }}",
             "{{ rec.save_url }}", "{{ rec.booked_url }}",
+        ],
+        Kind.CAMPAIGN: [
+            "{{ first_name }}", "{{ reader.name }}", "{{ body_html }}", "{{ body_text }}",
+            "{{ campaign.subject }}", "{{ campaign.link_url }}", "{{ campaign.link_label }}",
+            "{{ site_config.site_name }}", "{{ site_config.tagline }}", "{{ unsubscribe_url }}",
         ],
     }
 
@@ -126,10 +133,11 @@ def render_email(kind, context: dict, fallback_templates: tuple[str, str]) -> tu
 
     logger = logging.getLogger(__name__)
     config = SiteConfig.load()
-    chosen = (
-        config.welcome_template if kind == EmailTemplate.Kind.WELCOME
-        else config.newsletter_template
-    )
+    chosen = {
+        EmailTemplate.Kind.WELCOME: config.welcome_template,
+        EmailTemplate.Kind.NEWSLETTER: config.newsletter_template,
+        EmailTemplate.Kind.CAMPAIGN: config.campaign_template,
+    }.get(kind)
 
     if chosen is not None:
         try:

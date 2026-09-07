@@ -60,7 +60,8 @@ class EmailTemplateAdmin(admin.ModelAdmin):
     @admin.display(description="In use", boolean=True)
     def in_use(self, obj):
         config = SiteConfig.load()
-        return obj.pk in {config.welcome_template_id, config.newsletter_template_id}
+        return obj.pk in {config.welcome_template_id, config.newsletter_template_id,
+                          config.campaign_template_id}
 
     @admin.display(description="Placeholders you can use")
     def placeholders(self, obj):
@@ -130,6 +131,17 @@ def _preview_context(kind):
     if kind == EmailTemplate.Kind.WELCOME:
         return {**base, "summary": [("Following", "music, food"), ("Based in", "London")]}
 
+    if kind == EmailTemplate.Kind.CAMPAIGN:
+        from recommendations.emailing import _paragraphs
+
+        body = ("Frieze is on this weekend, and the Sculpture Park is free.\n\n"
+                "You said you'd travel for the right thing. This is the right thing.")
+        return {**base, "first_name": "Ada", "body_text": body,
+                "body_html": _paragraphs(body),
+                "campaign": SimpleNamespace(subject="This weekend at Frieze",
+                                            link_url="https://example.com/frieze",
+                                            link_label="Plan the day")}
+
     rec = SimpleNamespace(
         opportunity=SimpleNamespace(
             title="Trio residency in a basement jazz room",
@@ -168,18 +180,17 @@ class SiteConfigAdmin(admin.ModelAdmin):
                        "send_welcome_email", "welcome_subject"),
         }),
         ("Schedule", {
-            "description": "When the newsletter goes out. Anything other than manual "
-                           "needs something to run "
-                           "<code>send_newsletters --scheduled</code> once a day — the "
-                           "command checks this schedule and does nothing on other days.",
+            "description": "When the newsletter goes out. A scheduler runs every 15 "
+                           "minutes; on a send day it sends on its first pass after the "
+                           "send hour, once. One-off emails are scheduled from Campaigns.",
             "fields": ("send_frequency", "send_weekday", "send_day_of_month",
-                       "last_sent_on"),
+                       "send_hour", "last_sent_on"),
         }),
         ("Email templates", {
             "description": "Leave these empty to use the built-in emails. To write your "
                            "own, go to Email templates, start from the built-in version, "
                            "then select it here.",
-            "fields": ("welcome_template", "newsletter_template"),
+            "fields": ("welcome_template", "newsletter_template", "campaign_template"),
         }),
         ("Matching — what raises a score", {
             "description": "Higher numbers mean a stronger pull. These decide which "
@@ -202,9 +213,9 @@ class SiteConfigAdmin(admin.ModelAdmin):
             "description": "Every feature falls back to a deterministic template when "
                            "switched off or unavailable. API keys stay in the "
                            "environment, not here.",
-            "fields": ("ai_enabled", "ai_write_rationales", "ai_interpret_readers",
-                       "ai_classify_opportunities", "ai_model", "ai_timeout_seconds",
-                       "ai_send_budget_seconds"),
+            "fields": ("ai_enabled", "ai_write_rationales", "ai_write_campaigns",
+                       "ai_interpret_readers", "ai_classify_opportunities", "ai_model",
+                       "ai_timeout_seconds", "ai_send_budget_seconds"),
         }),
         ("Shipped wording", {
             "description": "Text that ships with a default. Defaults only apply when "

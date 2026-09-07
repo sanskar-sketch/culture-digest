@@ -38,6 +38,8 @@ SECTIONS = [
         "title": "What goes out",
         "blurb": "The newsletters themselves, and how they read.",
         "models": [
+            ("campaigns.campaign", "One-off emails on any subject - to everyone or a "
+                                   "slice of readers, now or at a set time."),
             ("recommendations.newsletterissue", "Every send, and what was in it."),
             ("recommendations.recommendation", "Individual picks and the feedback "
                                                "readers gave on them."),

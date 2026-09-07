@@ -1,0 +1,41 @@
+{% extends "admin/siteconfig/tabbed_change_form.html" %}
+{% load i18n %}
+
+{% comment %}
+The campaign's verbs live with the object, not on the list page: preview
+it, send yourself a test, then schedule or send. State changes are POSTs.
+{% endcomment %}
+
+{% block object-tools-items %}
+{% if original %}
+  <li><a href="{% url 'admin:campaigns_campaign_preview' original.pk %}">Preview</a></li>
+  <li>
+    <form method="post" action="{% url 'admin:campaigns_campaign_test_send' original.pk %}">
+      {% csrf_token %}<button type="submit">Send a test to me</button>
+    </form>
+  </li>
+  {% if original.status == 'draft' or original.status == 'cancelled' %}
+  <li>
+    <form method="post" action="{% url 'admin:campaigns_campaign_schedule' original.pk %}">
+      {% csrf_token %}<button type="submit" class="primary">Schedule</button>
+    </form>
+  </li>
+  {% endif %}
+  {% if original.status != 'sent' %}
+  <li>
+    <form method="post" action="{% url 'admin:campaigns_campaign_send_now' original.pk %}"
+          onsubmit="return confirm('Email the audience now?');">
+      {% csrf_token %}<button type="submit" class="danger">Send now</button>
+    </form>
+  </li>
+  {% endif %}
+  {% if original.status == 'scheduled' or original.status == 'sending' %}
+  <li>
+    <form method="post" action="{% url 'admin:campaigns_campaign_cancel' original.pk %}">
+      {% csrf_token %}<button type="submit">Cancel</button>
+    </form>
+  </li>
+  {% endif %}
+{% endif %}
+{{ block.super }}
+{% endblock %}

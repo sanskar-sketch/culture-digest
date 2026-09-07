@@ -92,6 +92,11 @@ class SiteConfig(models.Model):
         related_name="+", limit_choices_to={"kind": "newsletter"},
         help_text="Leave empty to use the built-in newsletter.",
     )
+    campaign_template = models.ForeignKey(
+        "siteconfig.EmailTemplate", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+", limit_choices_to={"kind": "campaign"},
+        help_text="Leave empty to use the built-in campaign email.",
+    )
 
     # --- When the newsletter goes out ----------------------------------
     class Frequency(models.TextChoices):
@@ -111,14 +116,19 @@ class SiteConfig(models.Model):
 
     send_frequency = models.CharField(
         max_length=20, choices=Frequency.choices, default=Frequency.MANUAL,
-        help_text="How often the newsletter goes out. Anything other than manual "
-                  "needs something to call send_newsletters daily - see the note below.",
+        help_text="How often the newsletter goes out. The scheduler checks every "
+                  "15 minutes and sends on the day and hour set here.",
     )
     send_weekday = models.IntegerField(
         choices=Weekday.choices, default=Weekday.THURSDAY,
         help_text="Which day it goes out on, for weekly and fortnightly.")
     send_day_of_month = models.PositiveSmallIntegerField(
         default=1, help_text="Which date it goes out on, for monthly (1-28).")
+    send_hour = models.PositiveSmallIntegerField(
+        default=8,
+        help_text="Hour of the day it goes out from, 0-23, in the site's time zone "
+                  "(UTC unless changed in settings). The scheduler sends on its first "
+                  "pass after this hour on a send day.")
     last_sent_on = models.DateField(
         null=True, blank=True,
         help_text="Set automatically after a scheduled run, so a cadence isn't "
@@ -180,6 +190,9 @@ class SiteConfig(models.Model):
         default=True, help_text="Read reader free text into taste signals.")
     ai_classify_opportunities = models.BooleanField(
         default=True, help_text="Suggest tags and attributes for new listings.")
+    ai_write_campaigns = models.BooleanField(
+        default=True,
+        help_text="Write each reader's version of a campaign email from your brief.")
     ai_model = models.CharField(
         max_length=80, blank=True,
         help_text="Blank uses the OPENAI_MODEL environment variable.")
@@ -313,6 +326,23 @@ class SiteConfig(models.Model):
 
         return False, "Unrecognised frequency."
 
+    def should_send_now(self, now=None) -> tuple[bool, str]:
+        """Is this the moment for a scheduled newsletter run?
+
+        The day check lives in `is_send_day`; this adds the hour, so a
+        scheduler that fires every few minutes sends once, after the hour
+        the editor chose, rather than at midnight.
+        """
+        from django.utils import timezone
+
+        now = timezone.localtime(now or timezone.now())
+        ok, why = self.is_send_day(now.date())
+        if not ok:
+            return False, why
+        if now.hour < self.send_hour:
+            return False, f"Send day, but not until {self.send_hour:02d}:00."
+        return True, why
+
     @property
     def resolved_email_from(self) -> str:
         return self.email_from or settings.EMAIL_FROM
@@ -325,7 +355,7 @@ class SiteConfig(models.Model):
         """Is a given AI feature switched on *and* usable?
 
         `feature` is one of write_rationales / interpret_readers /
-        classify_opportunities.
+        classify_opportunities / write_campaigns.
         """
         if not (self.ai_enabled and settings.OPENAI_API_KEY):
             return False

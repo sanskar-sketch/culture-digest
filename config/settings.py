@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "readers",
     "opportunities",
     "recommendations",
+    "campaigns",
 ]
 
 MIDDLEWARE = [

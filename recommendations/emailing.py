@@ -150,6 +150,40 @@ def send_welcome(reader) -> str | None:
         return None
 
 
+def deliver(to_email: str, subject: str, text_body: str, html_body: str) -> str | None:
+    """Send one email. Returns the provider's message id.
+
+    Returns None without sending when no provider key is configured - the
+    caller decides what that means for its records. Raises RuntimeError if
+    the provider rejects the message, because SendGrid signals failure by
+    status code rather than by raising.
+    """
+    from siteconfig.models import SiteConfig
+
+    if not settings.SENDGRID_API_KEY:
+        logger.info("[dry-run] Would send to %s: %s", to_email, subject)
+        return None
+
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import Mail
+
+    message = Mail(
+        from_email=SiteConfig.load().resolved_email_from,
+        to_emails=to_email,
+        subject=subject,
+        plain_text_content=text_body,
+        html_content=html_body,
+    )
+    response = SendGridAPIClient(settings.SENDGRID_API_KEY).send(message)
+    if response.status_code >= 300:
+        raise RuntimeError(
+            f"SendGrid rejected the send with HTTP {response.status_code}: "
+            f"{getattr(response, 'body', b'')!r}"
+        )
+    headers = response.headers or {}
+    return headers.get("X-Message-Id") or headers.get("x-message-id")
+
+
 def render_newsletter(issue) -> tuple[str, str, str]:
     """Return (subject, html_body, text_body) for a NewsletterIssue."""
     from siteconfig.models import SiteConfig
