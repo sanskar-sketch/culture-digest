@@ -1,4 +1,4 @@
-# Culture Digest
+# The Ether
 
 A personalised culture and things-to-do newsletter. Readers fill in a short
 onboarding questionnaire (age, where they live, where they love to travel

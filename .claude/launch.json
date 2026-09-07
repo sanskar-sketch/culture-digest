@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "culture-digest",
+      "name": "the-ether",
       "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["manage.py", "runserver", "8000"],
       "port": 8000

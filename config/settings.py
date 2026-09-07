@@ -1,5 +1,5 @@
 """
-Django settings for the Culture Digest project.
+Django settings for the The Ether project.
 """
 
 import os
@@ -118,7 +118,7 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-# --- Culture Digest specific settings -------------------------------------
+# --- The Ether specific settings -------------------------------------
 
 # Base URL used to build absolute links (feedback links, booking links,
 # unsubscribe links) inside outgoing emails. Set to the real domain in
@@ -131,7 +131,7 @@ SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 # The "From" address newsletters are sent from. Must be a verified sender
 # (single sender or authenticated domain) in SendGrid before real sending
 # will work - SendGrid rejects unverified senders with a 403.
-EMAIL_FROM = os.environ.get("EMAIL_FROM", "Culture Digest <digest@example.com>")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "The Ether <digest@example.com>")
 
 # AI assistance (research, classification, matching, writing). Everything
 # degrades to the deterministic path when this is unset, so the app runs

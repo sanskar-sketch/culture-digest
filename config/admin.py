@@ -1,4 +1,4 @@
-"""Custom admin site: Culture Digest branding plus an editorial dashboard.
+"""Custom admin site: The Ether branding plus an editorial dashboard.
 
 The admin is the editorial team's main work surface for the MVP (curation
 and tagging are deliberately manual), so the index does more than list
@@ -13,8 +13,8 @@ from django.utils import timezone
 
 
 class DigestAdminSite(AdminSite):
-    site_header = "Culture Digest"
-    site_title = "Culture Digest"
+    site_header = "The Ether"
+    site_title = "The Ether"
     index_title = "Editorial desk"
     # Named distinctly so it can extend Django's own admin/index.html
     # without the template loader resolving back to itself.
