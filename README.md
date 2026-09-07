@@ -92,8 +92,33 @@ budget means no price penalty, no stated location means nothing is filtered
 out on distance, and so on. A reader who filled in nothing but their email
 still gets matched against the full published catalogue.
 
+### AI assistance (`recommendations/ai.py`)
+
+Three jobs, matching what the brief asks AI to help with:
+
+1. **Understanding the reader** — reads the free-text answers ("things
+   I've loved", "not for me", where they like to travel) into structured
+   taste signals. Without this those fields are collected and never used.
+   Inferred interests are stored separately from what the reader picked
+   and weighted below them in matching; an inferred dislike down-ranks
+   rather than excludes.
+2. **Classification** — suggests category, tags, price tier and the taste
+   dials for a listing. Surfaced as an admin action that *shows*
+   suggestions rather than writing them: curation stays editorial, and a
+   suggestion the editor never saw isn't a decision they made.
+3. **Writing** — the per-recommendation "why this suits you" line.
+
+Two rules hold throughout. **Nothing is load-bearing**: every path falls
+back to the deterministic template if `ANTHROPIC_API_KEY` is unset or a
+call fails, so a newsletter never fails to send because of an AI call.
+And **the model may not invent facts** — rationale writing is given the
+stored record and told to work only from it, because a hallucinated date
+or price would send a real person to the wrong place. Reader free text is
+fenced as untrusted data, since it's typed by the public.
+
 `build_rationale()` turns a match into the reader-facing "why this suits
-you" copy, currently templated off the editorial note plus the top scoring
+you" copy — AI-written when a reader is passed and a key is configured,
+otherwise templated off the editorial note plus the top scoring
 reasons. **This and the scoring function are the natural places to plug in
 an AI-assisted matcher/writer later** — the calling contract is designed to
 stay stable while the internals get smarter.

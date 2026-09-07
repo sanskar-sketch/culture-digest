@@ -81,6 +81,24 @@ class Reader(models.Model):
         help_text="Happy to occasionally get a wildcard pick outside their usual taste.",
     )
 
+    # Derived by AI from the free-text answers (see recommendations.ai).
+    # Kept separate from what the reader explicitly picked, so the two are
+    # never confused and inferred signals can be weighted lower.
+    ai_taste_summary = models.TextField(
+        blank=True,
+        help_text="AI reading of this reader's free text, for editors and for "
+        "writing their recommendations.",
+    )
+    ai_inferred_tags = models.ManyToManyField(
+        Tag, blank=True, related_name="ai_inferred_readers",
+        help_text="Interests inferred from free text, not explicitly picked.",
+    )
+    ai_avoid_tags = models.ManyToManyField(
+        Tag, blank=True, related_name="ai_avoiding_readers",
+        help_text="Things they signalled they don't want, inferred from free text.",
+    )
+    ai_profile_updated_at = models.DateTimeField(null=True, blank=True)
+
     is_active = models.BooleanField(default=True, help_text="Unchecked = unsubscribed.")
     unsubscribe_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 

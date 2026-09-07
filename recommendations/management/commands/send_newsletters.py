@@ -68,7 +68,7 @@ class Command(BaseCommand):
                     Recommendation.objects.create(
                         issue=issue,
                         opportunity=match.opportunity,
-                        rationale=matching.build_rationale(match),
+                        rationale=matching.build_rationale(match, reader),
                         score=match.score,
                     )
 

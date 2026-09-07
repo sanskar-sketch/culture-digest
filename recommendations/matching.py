@@ -139,6 +139,23 @@ def score_opportunity(
         if not overlap:
             reasons.append(f"{opportunity.get_category_display().lower()} is one of their things")
 
+    # Interests inferred by AI from their free text (recommendations.ai).
+    # Deliberately weighted below an explicitly picked tag: they told us the
+    # one, we guessed the other. A dislike we inferred is a penalty, not an
+    # exclusion - only their own repeated feedback drops a cluster outright.
+    inferred_ids = set(reader.ai_inferred_tags.values_list("id", flat=True))
+    inferred_overlap = [t for t in opp_tags if t.id in inferred_ids and t.id not in reader_tag_ids]
+    if inferred_overlap:
+        score += 0.9 * len(inferred_overlap)
+        if not overlap:
+            reasons.append(
+                "sounds like the things they described loving"
+            )
+
+    avoid_ids = set(reader.ai_avoid_tags.values_list("id", flat=True))
+    if any(t.id in avoid_ids for t in opp_tags):
+        score -= 2.0
+
     learned = sum(feedback_weights.get(t.id, 0) for t in opp_tags)
     if learned:
         if learned < -1:
@@ -230,13 +247,21 @@ def _pick_wildcard(reader: Reader, remaining: list[Match]) -> Match | None:
     return None
 
 
-def build_rationale(match: Match) -> str:
+def build_rationale(match: Match, reader: Reader | None = None) -> str:
     """Turn a Match into a short reader-facing 'why this suits you' blurb.
 
-    MVP version is template-based off the editorial note / description plus
-    the top scoring reasons. This is a natural spot to swap in an
-    AI-assisted writer later without changing anything downstream.
+    Written by AI when a reader is given and AI is configured, so the line
+    speaks to that person's actual taste. Falls back to the template below
+    whenever AI is off or the call fails - a newsletter is never blocked on
+    it, and the fallback is what shipped before.
     """
+    if reader is not None:
+        from . import ai
+
+        written = ai.write_rationale(reader, match.opportunity, match.reasons)
+        if written:
+            return written
+
     opportunity = match.opportunity
     base = (opportunity.editorial_note or opportunity.description).strip().split("\n")[0]
     reasons = match.reasons[:3]

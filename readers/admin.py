@@ -1,9 +1,10 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
+from recommendations import ai
 from recommendations.models import NewsletterIssue, Recommendation
 
 from .models import Reader
@@ -74,11 +75,13 @@ class ReaderAdmin(admin.ModelAdmin):
     )
     search_fields = ("email", "name", "location", "travel_destinations",
                      "loved_examples", "disliked_examples")
-    filter_horizontal = ("interest_tags",)
+    filter_horizontal = ("interest_tags", "ai_inferred_tags", "ai_avoid_tags")
     readonly_fields = ("unsubscribe_token", "created_at", "updated_at",
-                       "profile_completeness", "engagement", "feedback_breakdown")
+                       "profile_completeness", "engagement", "feedback_breakdown",
+                       "ai_profile_updated_at")
     inlines = [NewsletterIssueInline]
     list_per_page = 50
+    actions = ("interpret_taste",)
 
     fieldsets = (
         ("Who they are", {"fields": ("email", "name", "age", "is_active")}),
@@ -91,6 +94,12 @@ class ReaderAdmin(admin.ModelAdmin):
                        "open_to_surprise", "loved_examples", "disliked_examples"),
         }),
         ("Practical", {"fields": ("budget", "availability")}),
+        ("What AI read into their free text", {
+            "description": "Inferred, not stated by the reader - weighted below their own "
+                           "picks when matching. Run the 'Interpret taste' action to refresh.",
+            "fields": ("ai_taste_summary", "ai_inferred_tags", "ai_avoid_tags",
+                       "ai_profile_updated_at"),
+        }),
         ("Engagement", {"fields": ("profile_completeness", "engagement", "feedback_breakdown")}),
         ("Metadata", {
             "classes": ("collapse",),
@@ -107,6 +116,24 @@ class ReaderAdmin(admin.ModelAdmin):
                 distinct=True,
             ),
         ).prefetch_related("interest_tags")
+
+    @admin.action(description="Interpret taste from free text with AI")
+    def interpret_taste(self, request, queryset):
+        if not ai.is_enabled():
+            self.message_user(
+                request,
+                "AI is not configured - set ANTHROPIC_API_KEY to enable this.",
+                messages.WARNING,
+            )
+            return
+        done = sum(1 for reader in queryset if ai.apply_interpretation(reader))
+        failed = queryset.count() - done
+        self.message_user(
+            request,
+            f"Interpreted {done} reader profile{'' if done == 1 else 's'}."
+            + (f" {failed} could not be interpreted - see the logs." if failed else ""),
+            messages.SUCCESS if done else messages.WARNING,
+        )
 
     @admin.display(description="Follows")
     def categories_summary(self, obj):

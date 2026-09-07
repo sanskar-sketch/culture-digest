@@ -67,7 +67,7 @@ class OpportunityAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at", "performance")
     date_hierarchy = "start_date"
     list_per_page = 50
-    actions = ("publish", "archive", "back_to_draft")
+    actions = ("suggest_classification", "publish", "archive", "back_to_draft")
     save_on_top = True
 
     fieldsets = (
@@ -166,6 +166,47 @@ class OpportunityAdmin(admin.ModelAdmin):
             stats["sent"], "" if stats["sent"] == 1 else "s",
             stats["booked"], stats["saved"], stats["more"], stats["nope"],
         )
+
+    @admin.action(description="Suggest tags & attributes with AI")
+    def suggest_classification(self, request, queryset):
+        """Shows suggestions as messages for the editor to apply by hand.
+
+        Deliberately does not write to the record: curation is editorial,
+        and a suggestion the editor never saw is not a decision they made.
+        """
+        from recommendations import ai
+
+        if not ai.is_enabled():
+            self.message_user(
+                request,
+                "AI is not configured - set ANTHROPIC_API_KEY to enable this.",
+                messages.WARNING,
+            )
+            return
+
+        for opportunity in queryset[:10]:
+            suggestion = ai.classify_opportunity(opportunity)
+            if not suggestion:
+                self.message_user(
+                    request, f"Could not classify “{opportunity.title}”.", messages.WARNING
+                )
+                continue
+            self.message_user(
+                request,
+                format_html(
+                    "<strong>{}</strong> — category: <code>{}</code>; tags: <code>{}</code>; "
+                    "price: <code>{}</code>; mainstream→unusual: <code>{}</code>; "
+                    "intimate→large-scale: <code>{}</code>. {}",
+                    opportunity.title,
+                    suggestion.get("category", "—"),
+                    ", ".join(suggestion.get("tags") or []) or "—",
+                    suggestion.get("price_tier", "—"),
+                    suggestion.get("mainstream_to_unusual", "—"),
+                    suggestion.get("intimate_to_large_scale", "—"),
+                    suggestion.get("reasoning", ""),
+                ),
+                messages.INFO,
+            )
 
     def _set_status(self, request, queryset, status, label):
         updated = queryset.update(status=status)

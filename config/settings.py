@@ -134,6 +134,12 @@ NEWSLETTER_FROM_EMAIL = os.environ.get(
     "NEWSLETTER_FROM_EMAIL", "Culture Digest <digest@example.com>"
 )
 
+# AI assistance (research, classification, matching, writing). Everything
+# degrades to the deterministic path when this is unset, so the app runs
+# fine without it - see recommendations/ai.py.
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+
 # Max number of recommendations included in a single newsletter send.
 RECOMMENDATIONS_PER_SEND = int(os.environ.get("RECOMMENDATIONS_PER_SEND", "4"))
 
