@@ -8,10 +8,9 @@ chosen for what you told us, with a line on why each one suits you.
 WHAT WE'VE GOT SO FAR
 {% for label, value in summary %}{{ label }}: {{ value }}
 {% endfor %}{% endif %}
-Got that wrong, or want to add something? Change any of it here:
-{{ preferences_url }}
+Every recommendation comes with "More like this" and "Not for me" links.
+Use them - they are how your picks get sharper.
 
 ----
-Update your preferences: {{ preferences_url }}
 Unsubscribe: {{ unsubscribe_url }}
 {% endautoescape %}

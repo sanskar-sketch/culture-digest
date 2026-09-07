@@ -28,10 +28,6 @@ def build_unsubscribe_url(reader) -> str:
     return settings.SITE_BASE_URL.rstrip("/") + path
 
 
-def build_preferences_url(reader) -> str:
-    path = reverse("readers:preferences", kwargs={"token": reader.edit_token})
-    return settings.SITE_BASE_URL.rstrip("/") + path
-
 
 def profile_summary(reader) -> list[tuple[str, str]]:
     """The answers we actually have, for showing back to a new reader.
@@ -75,7 +71,6 @@ def send_welcome(reader) -> str | None:
         "reader": reader,
         "site_config": config,
         "summary": profile_summary(reader),
-        "preferences_url": build_preferences_url(reader),
         "unsubscribe_url": build_unsubscribe_url(reader),
     }
     subject = config.welcome_subject.replace("{site}", config.site_name)
@@ -136,7 +131,6 @@ def render_newsletter(issue) -> tuple[str, str, str]:
         "site_config": config,
         "recommendations": rec_contexts,
         "unsubscribe_url": build_unsubscribe_url(reader),
-        "preferences_url": build_preferences_url(reader),
     }
 
     first_name = reader.name.split(" ")[0] if reader.name else ""

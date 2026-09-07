@@ -13,6 +13,5 @@ Save:            {{ rec.save_url }}
 I booked this:   {{ rec.booked_url }}
 {% endfor %}
 ----
-Update your preferences: {{ preferences_url }}
 Unsubscribe: {{ unsubscribe_url }}
 {% endautoescape %}

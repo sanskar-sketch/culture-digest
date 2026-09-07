@@ -54,54 +54,6 @@ class SignupSavesTests(TestCase):
         self.assertEqual(Reader.objects.filter(email="reader@example.com").count(), 1)
 
 
-class PreferencesPageTests(TestCase):
-    def setUp(self):
-        self.client.post(reverse("readers:onboarding"), FULL_PROFILE)
-        self.reader = Reader.objects.get(email="reader@example.com")
-        self.url = reverse("readers:preferences", args=[self.reader.edit_token])
-
-    def test_the_page_arrives_filled_in_with_their_answers(self):
-        html = self.client.get(self.url).content.decode()
-        self.assertIn('value="reader@example.com"', html)
-        self.assertIn('value="Ada"', html)
-        self.assertIn("Late-night jazz", html)
-        self.assertIn("Taking my mum", html)
-
-    def test_editing_saves_and_confirms(self):
-        data = {**FULL_PROFILE, "location": "Bristol", "interest_categories": ["film"]}
-        html = self.client.post(self.url, data).content.decode()
-
-        self.reader.refresh_from_db()
-        self.assertEqual(self.reader.location, "Bristol")
-        self.assertEqual(self.reader.interest_categories, ["film"])
-        self.assertIn("Saved", html)
-
-    def test_clearing_a_field_here_is_honoured(self):
-        # The opposite of signup: they can see the value, so removing it is
-        # deliberate and must stick.
-        data = {**FULL_PROFILE, "notes": "", "loved_examples": ""}
-        self.client.post(self.url, data)
-
-        self.reader.refresh_from_db()
-        self.assertEqual(self.reader.notes, "")
-        self.assertEqual(self.reader.loved_examples, "")
-
-    def test_an_unknown_token_is_a_404(self):
-        import uuid
-        self.assertEqual(
-            self.client.get(
-                reverse("readers:preferences", args=[uuid.uuid4()])).status_code, 404)
-
-    def test_each_reader_gets_their_own_token(self):
-        other = Reader.objects.create(email="other@example.com")
-        self.assertNotEqual(other.edit_token, self.reader.edit_token)
-
-    def test_the_thank_you_page_links_to_their_preferences(self):
-        html = self.client.post(reverse("readers:onboarding"), FULL_PROFILE).content.decode()
-        self.reader.refresh_from_db()
-        self.assertIn(str(self.reader.edit_token), html)
-
-
 class WelcomeEmailTests(TestCase):
     def test_a_new_signup_gets_a_welcome_email(self):
         from unittest import mock
@@ -130,6 +82,14 @@ class WelcomeEmailTests(TestCase):
                     {**FULL_PROFILE, "email": "resilient@example.com"})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Reader.objects.filter(email="resilient@example.com").exists())
+
+    def test_readers_are_not_offered_a_way_to_edit(self):
+        # Deliberate: adding an answer means signing up again, and removing
+        # one is an editorial action. Nothing should promise otherwise.
+        self.client.post(reverse("readers:onboarding"), FULL_PROFILE)
+        html = self.client.post(reverse("readers:onboarding"), FULL_PROFILE).content.decode()
+        self.assertNotIn("preferences", html.lower())
+        self.assertNotIn("change your answers", html.lower())
 
     def test_the_welcome_shows_back_what_they_told_us(self):
         from recommendations.emailing import profile_summary

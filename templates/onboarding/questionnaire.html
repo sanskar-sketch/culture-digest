@@ -12,31 +12,14 @@
       <p class="lede" style="margin-left:auto;margin-right:auto;">
         {{ site_config.hero_subhead }}
       </p>
-      <a href="#questionnaire" class="btn btn-primary" data-start-wizard>
-        {% if editing %}Edit your answers{% else %}Get started{% endif %}
-      </a>
-      <p class="wizard-note" style="text-align:center;">
-        {% if editing %}
-          Everything below is filled in with what you told us. Change anything, then save.
-        {% else %}
-          Takes about a minute &middot; only your email is required
-        {% endif %}
-      </p>
+      <a href="#questionnaire" class="btn btn-primary" data-start-wizard>Get started</a>
+      <p class="wizard-note" style="text-align:center;">Takes about a minute &middot; only your email is required</p>
     </div>
     <div class="scroll-cue"></div>
   </section>
 
   <form method="post" novalidate id="questionnaire" class="wizard bg-dark">
     {% csrf_token %}
-
-    {% if saved %}
-    <div class="container-narrow" style="padding-top:22px;">
-      <p style="background:rgba(52,199,89,.14);border:1px solid rgba(52,199,89,.4);
-                color:#6ee08a;border-radius:12px;padding:13px 16px;margin:0;font-size:15px;">
-        Saved. Your next newsletter will use these answers.
-      </p>
-    </div>
-    {% endif %}
 
     <div class="wizard-progress">
       <div class="wizard-progress-inner">
@@ -331,15 +314,9 @@
         <div class="wizard-nav">
           <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
           <span class="spacer"></span>
-          <button type="submit" class="btn btn-primary">{% if editing %}Save changes{% else %}Sign me up{% endif %}</button>
+          <button type="submit" class="btn btn-primary">Sign me up</button>
         </div>
-        <p class="wizard-note">
-          {% if editing %}
-            You can come back to this page any time &mdash; the link is in every email.
-          {% else %}
-            Unsubscribe anytime, one click. No noise.
-          {% endif %}
-        </p>
+        <p class="wizard-note">Unsubscribe anytime, one click. No noise.</p>
       </div>
     </section>
   </form>

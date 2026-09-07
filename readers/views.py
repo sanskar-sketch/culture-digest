@@ -16,8 +16,8 @@ def onboarding_view(request):
     Signing up again with an address we already know *merges* rather than
     replaces: this form arrives blank, so a returning reader who fills in
     only their email would otherwise silently wipe everything they told us
-    last time. Answers can only be removed from the preferences page, where
-    they can see what they're removing.
+    last time. Merging can add or change an answer but never clear one -
+    removing an interest is an editorial action in the admin.
     """
     email = (request.POST.get("email") or "").strip().lower() if request.method == "POST" else ""
     existing = Reader.objects.filter(email=email).first() if email else None
@@ -57,28 +57,6 @@ def _merge_into(form, reader):
     if picked:
         reader.interest_tags.add(*picked)
     return reader
-
-
-@require_http_methods(["GET", "POST"])
-def preferences_view(request, token):
-    """A reader editing their own profile, reached by a link in their email.
-
-    Unlike signup this is a true edit - the form arrives filled in, so
-    clearing a field here is deliberate and is honoured.
-    """
-    reader = get_object_or_404(Reader, edit_token=token)
-    form = ReaderOnboardingForm(request.POST or None, instance=reader)
-    saved = False
-
-    if request.method == "POST" and form.is_valid():
-        reader = form.save()
-        form = ReaderOnboardingForm(instance=reader)
-        saved = True
-
-    return render(
-        request, "onboarding/questionnaire.html",
-        {"form": form, "reader": reader, "editing": True, "saved": saved},
-    )
 
 
 def unsubscribe_view(request, token):
