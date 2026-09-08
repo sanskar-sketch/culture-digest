@@ -404,3 +404,38 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
   .d-topbar, .d-content { padding-left: 18px; padding-right: 18px; }
   .d-split { grid-template-columns: 1fr; }
 }
+
+/* ---------- searchable dropdown ------------------------------------------ */
+/* Built to look identical to a native select, so a page with both doesn't
+   look like it was assembled from two kits. */
+.d-combo { position: relative; }
+.d-combo-native { display: none; }
+.d-combo-button {
+  font: inherit; font-size: 14px; width: 100%; text-align: left;
+  padding: 10px 34px 10px 12px; border-radius: var(--d-radius-sm);
+  border: 1px solid var(--d-line); background: var(--d-surface); color: var(--d-ink);
+  cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background-repeat: no-repeat; background-position: right 12px center;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%238e8e93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+}
+.d-combo-button:hover { border-color: var(--d-accent); }
+.d-combo-button[aria-expanded="true"] { border-color: var(--d-accent); box-shadow: 0 0 0 3px var(--d-accent-soft); }
+.d-combo-button.is-placeholder { color: var(--d-muted); }
+
+.d-combo-panel {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--d-surface); border: 1px solid var(--d-line);
+  border-radius: var(--d-radius-sm); box-shadow: var(--d-shadow); overflow: hidden;
+}
+.d-combo-search {
+  width: 100%; border: 0; border-bottom: 1px solid var(--d-line); border-radius: 0;
+  font-size: 13.5px; padding: 9px 12px;
+}
+.d-combo-search:focus { outline: none; box-shadow: none; border-color: var(--d-line); }
+.d-combo-list { list-style: none; margin: 0; padding: 4px; max-height: 260px; overflow-y: auto; }
+.d-combo-option {
+  padding: 8px 10px; border-radius: 7px; font-size: 13.5px; cursor: pointer;
+  color: var(--d-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.d-combo-option:hover, .d-combo-option.is-active { background: var(--d-surface-2); color: var(--d-ink); }
+.d-combo-option[aria-selected="true"] { background: var(--d-accent-soft); color: var(--d-accent-ink); font-weight: 600; }

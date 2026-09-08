@@ -9,14 +9,52 @@ from siteconfig.emails import EmailTemplate
 from siteconfig.models import SiteConfig
 
 
-def _style(fields):
-    """Apply the desk's placeholder-free, class-free styling contract:
-    inputs are styled globally by element/type, so this only needs to fix
-    the handful of widgets that need a specific size or behaviour."""
-    return fields
+class FriendlyChoices:
+    """Say what the blank option in a dropdown actually means.
+
+    Django labels it "---------" everywhere, which tells the editor
+    nothing. The option itself has to stay: on a required field it is the
+    placeholder, and removing it would silently pre-select the first real
+    choice - someone who never touches the taste dial would submit "1"
+    without having chosen it. On an optional field it *is* the "none"
+    value, and removing it would make the field impossible to clear.
+
+    So the option stays and only its wording changes. Subclasses give
+    per-field text in EMPTY_LABELS; anything else falls back to a prompt
+    for required fields and "Not set" for optional ones.
+    """
+
+    EMPTY_LABELS: dict[str, str] = {}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if isinstance(field.widget, (forms.CheckboxSelectMultiple, forms.SelectMultiple)):
+                continue
+            if not isinstance(field.widget, forms.Select):
+                continue
+
+            label = self.EMPTY_LABELS.get(
+                name, "Choose one…" if field.required else "Not set")
+
+            # A model choice field owns its blank option through empty_label.
+            if isinstance(field, forms.ModelChoiceField):
+                field.empty_label = label
+                continue
+
+            choices = list(field.choices)
+            if choices and str(choices[0][0]) == "":
+                field.choices = [("", label)] + choices[1:]
 
 
-class OpportunityForm(forms.ModelForm):
+class OpportunityForm(FriendlyChoices, forms.ModelForm):
+    EMPTY_LABELS = {
+        "category": "Choose a category",
+        "price_tier": "Choose a price tier",
+        "mainstream_to_unusual": "Choose 1 (mainstream) to 5 (unusual)",
+        "intimate_to_large_scale": "Choose 1 (intimate) to 5 (large-scale)",
+    }
+
     class Meta:
         model = Opportunity
         fields = (
@@ -44,7 +82,10 @@ class OpportunityForm(forms.ModelForm):
             self.fields["status"].initial = Opportunity.Status.DRAFT
 
 
-class TagForm(forms.ModelForm):
+class TagForm(FriendlyChoices, forms.ModelForm):
+    # Blank is meaningful here: the interest is offered to everyone.
+    EMPTY_LABELS = {"category": "No category — offer it to everyone"}
+
     class Meta:
         model = Tag
         fields = ("name", "slug", "category")
@@ -60,7 +101,14 @@ READER_PROFILE_FIELDS = (
 )
 
 
-class ReaderForm(forms.ModelForm):
+class ReaderForm(FriendlyChoices, forms.ModelForm):
+    EMPTY_LABELS = {
+        "travel_radius": "Not set",
+        "budget": "Not set",
+        "mainstream_preference": "Not set",
+        "scale_preference": "Not set",
+    }
+
     class Meta:
         model = Reader
         fields = (
@@ -89,7 +137,7 @@ class ReaderForm(forms.ModelForm):
         self.fields["interest_tags"].queryset = Tag.objects.all()
 
 
-class CampaignForm(forms.ModelForm):
+class CampaignForm(FriendlyChoices, forms.ModelForm):
     audience_categories = forms.MultipleChoiceField(
         choices=Category.choices, required=False, widget=forms.CheckboxSelectMultiple,
         label="Categories they follow",
@@ -117,7 +165,9 @@ class CampaignForm(forms.ModelForm):
             self.fields["audience_categories"].initial = self.instance.audience_categories
 
 
-class EmailTemplateForm(forms.ModelForm):
+class EmailTemplateForm(FriendlyChoices, forms.ModelForm):
+    EMPTY_LABELS = {"kind": "Choose which email this is"}
+
     class Meta:
         model = EmailTemplate
         fields = ("name", "kind", "subject", "html_body", "text_body", "notes")
@@ -140,7 +190,14 @@ class EmailTemplateForm(forms.ModelForm):
         return cleaned
 
 
-class SiteConfigForm(forms.ModelForm):
+class SiteConfigForm(FriendlyChoices, forms.ModelForm):
+    # Empty means "no override", which is the built-in email.
+    EMPTY_LABELS = {
+        "welcome_template": "Use the built-in welcome email",
+        "newsletter_template": "Use the built-in newsletter",
+        "campaign_template": "Use the built-in campaign email",
+    }
+
     class Meta:
         model = SiteConfig
         exclude = ("updated_at",)

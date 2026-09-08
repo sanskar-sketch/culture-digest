@@ -168,6 +168,171 @@
     });
   }
 
+
+  // ---- Searchable dropdowns -----------------------------------------------
+  // Every dropdown becomes the same component, so a form never mixes two
+  // kinds of control. The filter box inside it only appears once a list is
+  // long enough to be worth searching - a search field over three options
+  // is just friction.
+  var FILTER_FROM = 8;
+
+  function initSelects() {
+    document.querySelectorAll("select:not([multiple])").forEach(function (select) {
+      // Even a one-option select is converted: it looks inert either way,
+      // and leaving it native is what makes a form look half-finished.
+      if (!select.options.length) return;
+      if ("noSearch" in select.dataset) return;
+      makeSearchable(select);
+    });
+  }
+
+  function makeSearchable(select) {
+    var wrap = document.createElement("div");
+    wrap.className = "d-combo";
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+    // The select stays in the DOM and keeps holding the value, so the form
+    // submits exactly as it would without any of this.
+    select.classList.add("d-combo-native");
+    select.tabIndex = -1;
+    select.setAttribute("aria-hidden", "true");
+
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "d-combo-button";
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+    if (select.id) button.setAttribute("aria-labelledby", "");
+
+    var panel = document.createElement("div");
+    panel.className = "d-combo-panel";
+    panel.hidden = true;
+
+    var search = document.createElement("input");
+    search.type = "search";
+    search.className = "d-combo-search";
+    search.placeholder = "Type to narrow…";
+    search.setAttribute("aria-label", "Filter options");
+
+    var list = document.createElement("ul");
+    list.className = "d-combo-list";
+    list.setAttribute("role", "listbox");
+
+    if (select.options.length >= FILTER_FROM) panel.appendChild(search);
+    panel.appendChild(list);
+    wrap.appendChild(button);
+    wrap.appendChild(panel);
+
+    var items = [];
+    Array.prototype.forEach.call(select.options, function (option, i) {
+      var li = document.createElement("li");
+      li.className = "d-combo-option";
+      li.setAttribute("role", "option");
+      li.id = (select.id || "combo") + "-opt-" + i;
+      li.textContent = option.text;
+      li.dataset.value = option.value;
+      li.addEventListener("click", function () { choose(option.value); });
+      list.appendChild(li);
+      items.push(li);
+    });
+
+    var active = -1;
+
+    function label() {
+      var picked = select.options[select.selectedIndex];
+      return picked ? picked.text : "";
+    }
+
+    function paint() {
+      button.textContent = label();
+      button.classList.toggle("is-placeholder", select.value === "");
+      items.forEach(function (li) {
+        li.setAttribute("aria-selected", li.dataset.value === select.value ? "true" : "false");
+      });
+    }
+
+    function visible() {
+      return items.filter(function (li) { return !li.hidden; });
+    }
+
+    function highlight(index) {
+      var shown = visible();
+      items.forEach(function (li) { li.classList.remove("is-active"); });
+      if (!shown.length) { active = -1; button.removeAttribute("aria-activedescendant"); return; }
+      active = Math.max(0, Math.min(index, shown.length - 1));
+      shown[active].classList.add("is-active");
+      shown[active].scrollIntoView({ block: "nearest" });
+      button.setAttribute("aria-activedescendant", shown[active].id);
+    }
+
+    function open() {
+      panel.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+      search.value = "";
+      items.forEach(function (li) { li.hidden = false; });
+      var current = items.findIndex(function (li) { return li.dataset.value === select.value; });
+      highlight(current > -1 ? current : 0);
+      if (search.isConnected) search.focus();
+    }
+
+    function close() {
+      panel.hidden = true;
+      button.setAttribute("aria-expanded", "false");
+    }
+
+    function choose(value) {
+      select.value = value;
+      // Anything already listening to the select - a filter form that
+      // submits on change, say - must still hear about it.
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      paint();
+      close();
+      button.focus();
+    }
+
+    button.addEventListener("click", function () {
+      if (panel.hidden) open(); else close();
+    });
+
+    search.addEventListener("input", function () {
+      var q = search.value.trim().toLowerCase();
+      items.forEach(function (li) {
+        li.hidden = !!q && li.textContent.toLowerCase().indexOf(q) === -1;
+      });
+      highlight(0);
+    });
+
+    search.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") { e.preventDefault(); highlight(active + 1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); highlight(active - 1); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        var shown = visible();
+        if (shown[active]) choose(shown[active].dataset.value);
+      } else if (e.key === "Escape") { e.preventDefault(); close(); button.focus(); }
+    });
+
+    button.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (panel.hidden) open();
+        else if (visible()[active]) choose(visible()[active].dataset.value);
+        return;
+      }
+      if (panel.hidden) return;
+      if (e.key === "ArrowUp") { e.preventDefault(); highlight(active - 1); }
+      else if (e.key === "Escape") { e.preventDefault(); close(); }
+    });
+
+    document.addEventListener("click", function (e) {
+      if (!wrap.contains(e.target)) close();
+    });
+
+    // Something else may set the value programmatically.
+    select.addEventListener("change", paint);
+    paint();
+  }
+
   function initConfirm() {
     // On a form: confirm before it submits. On a button inside a form with
     // several actions: confirm only for that button, since the others are
@@ -188,5 +353,6 @@
   initSidebar();
   initTabs();
   initBulkSelect();
+  initSelects();
   initConfirm();
 })();

@@ -406,3 +406,71 @@ class QueryCountTests(LoggedInTestCase):
         for i in range(3, 18):
             opportunity(title=f"o{i}")
         self.assertEqual(few, self.counts_for(url))
+
+
+class DropdownWordingTests(LoggedInTestCase):
+    """Django labels a dropdown's blank option "---------", which says
+    nothing. It can't simply be deleted - on a required field it's the
+    placeholder, and on an optional one it's the "none" value - so it's
+    reworded instead, and these check it stays that way."""
+
+    def test_no_page_renders_the_bare_dashes(self):
+        opp = opportunity()
+        tag = Tag.objects.create(name="Jazz nights", category="music")
+        reader = Reader.objects.create(email="ada@example.com")
+        campaign = Campaign.objects.create(name="c", subject="s", body="b")
+        template = EmailTemplate.objects.create(
+            name="t", kind=EmailTemplate.Kind.NEWSLETTER, html_body="<p>x</p>")
+
+        for url in [
+            reverse("desk:listings_add"), reverse("desk:listings_change", args=[opp.pk]),
+            reverse("desk:interests_add"), reverse("desk:interests_change", args=[tag.pk]),
+            reverse("desk:readers_change", args=[reader.pk]),
+            reverse("desk:campaigns_add"), reverse("desk:campaigns_change", args=[campaign.pk]),
+            reverse("desk:templates_add"), reverse("desk:templates_change", args=[template.pk]),
+            reverse("desk:siteconfig"), reverse("desk:listings_list"),
+        ]:
+            response = self.client.get(url)
+            self.assertNotContains(response, "---------", msg_prefix=url)
+
+    def test_the_blank_option_is_still_there_and_says_what_it_means(self):
+        from desk.forms import OpportunityForm, ReaderForm, SiteConfigForm
+
+        # Required: a placeholder, so nothing is silently pre-selected.
+        category = dict(OpportunityForm().fields["category"].choices)
+        self.assertEqual(category[""], "Choose a category")
+
+        # Optional: the blank is the "none" value and must remain selectable.
+        budget = dict(ReaderForm().fields["budget"].choices)
+        self.assertEqual(budget[""], "Not set")
+
+        # Optional foreign key: blank means fall back to the built-in email.
+        self.assertEqual(
+            SiteConfigForm().fields["newsletter_template"].empty_label,
+            "Use the built-in newsletter")
+
+    def test_a_required_dropdown_still_rejects_an_empty_choice(self):
+        """The wording change must not make the placeholder submittable."""
+        response = self.client.post(reverse("desk:listings_add"), {
+            "title": "No category", "category": "", "status": "draft",
+            "description": "d", "price_tier": "budget", "location_area": "London",
+            "booking_url": "https://example.com",
+            "mainstream_to_unusual": 3, "intimate_to_large_scale": 2,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Opportunity.objects.filter(title="No category").exists())
+
+    def test_an_optional_dropdown_can_still_be_cleared(self):
+        reader = Reader.objects.create(email="ada@example.com", budget="moderate")
+        data = {f: "" for f in (
+            "name", "age", "location", "travel_radius", "other_travel",
+            "travel_destinations", "mainstream_preference", "scale_preference",
+            "other_categories", "other_interests", "loved_examples",
+            "disliked_examples", "notes", "budget", "other_budget",
+            "other_availability")}
+        data["email"] = reader.email
+        data["is_active"] = "on"
+        response = self.client.post(reverse("desk:readers_change", args=[reader.pk]), data)
+        self.assertEqual(response.status_code, 302)
+        reader.refresh_from_db()
+        self.assertEqual(reader.budget, "")
