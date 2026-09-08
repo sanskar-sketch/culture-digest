@@ -105,36 +105,4 @@
 {% endwith %}
 {% endif %}
 
-{% if digest_sections %}
-<div class="cd-sections">
-  {% for section in digest_sections %}
-  <section class="cd-section{% if section.collapsed %} cd-section-quiet{% endif %}">
-    <div class="cd-section-head">
-      <h2>{{ section.title }}</h2>
-      <p>{{ section.blurb }}</p>
-    </div>
-    <div class="cd-section-rows">
-      {% for row in section.rows %}
-      <div class="cd-model">
-        <div class="cd-model-main">
-          {% if row.admin_url %}
-            <a href="{{ row.admin_url }}" class="cd-model-name">{{ row.name }}</a>
-          {% else %}
-            <span class="cd-model-name">{{ row.name }}</span>
-          {% endif %}
-          {% if row.blurb %}<p class="cd-model-blurb">{{ row.blurb }}</p>{% endif %}
-        </div>
-        <div class="cd-model-actions">
-          {% if row.add_url %}<a href="{{ row.add_url }}" class="cd-act cd-act-add">Add</a>{% endif %}
-          {% if row.admin_url %}<a href="{{ row.admin_url }}" class="cd-act">Open</a>{% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </section>
-  {% endfor %}
-</div>
-{% else %}
-{{ block.super }}
-{% endif %}
 {% endblock %}

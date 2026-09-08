@@ -20,18 +20,21 @@ SECTIONS = [
         "title": "The catalogue",
         "blurb": "Everything the newsletter can draw on. This is where the work is.",
         "models": [
-            ("opportunities.opportunity", "Shows, exhibitions, meals, talks. Draft "
-                                          "until you publish them."),
-            ("opportunities.tag", "The interest vocabulary — what readers pick from, "
-                                  "and what listings get tagged with."),
+            ("opportunities.opportunity", "Shows, exhibitions, meals, talks, walks - "
+                                          "everything the newsletter can recommend. A "
+                                          "listing stays a draft, invisible to readers, "
+                                          "until you publish it."),
+            ("opportunities.tag", "The interests readers pick from when they sign up, "
+                                  "and that you tag listings with. Where the two "
+                                  "overlap is how a listing finds its reader."),
         ],
     },
     {
         "title": "Readers",
         "blurb": "Who is subscribed, and what they told us about their taste.",
         "models": [
-            ("readers.reader", "Profiles, what each person was sent, and how they "
-                               "responded."),
+            ("readers.reader", "Everyone subscribed: what they told us about their "
+                               "taste, what they have been sent, and how they responded."),
         ],
     },
     {
@@ -40,11 +43,14 @@ SECTIONS = [
         "models": [
             ("campaigns.campaign", "One-off emails on any subject - to everyone or a "
                                    "slice of readers, now or at a set time."),
-            ("recommendations.newsletterissue", "Every send, and what was in it."),
-            ("recommendations.recommendation", "Individual picks and the feedback "
-                                               "readers gave on them."),
-            ("siteconfig.emailtemplate", "Write and preview the emails. Leave empty "
-                                         "to use the built-in ones."),
+            ("recommendations.newsletterissue", "One row per newsletter sent to one "
+                                                "reader, with the picks it contained."),
+            ("recommendations.recommendation", "Every individual pick ever made, with "
+                                               "the reader's verdict on it. Where you see "
+                                               "what lands and what doesn't."),
+            ("siteconfig.emailtemplate", "The welcome, newsletter and campaign emails as "
+                                         "editable templates, with preview. Nothing here "
+                                         "means the built-in versions are used."),
         ],
     },
     {

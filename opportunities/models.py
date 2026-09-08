@@ -39,6 +39,8 @@ class Tag(models.Model):
 
     class Meta:
         ordering = ["category", "name"]
+        verbose_name = "interest"
+        verbose_name_plural = "interests"
 
     def __str__(self):
         return self.name
@@ -136,7 +138,8 @@ class Opportunity(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        verbose_name_plural = "opportunities"
+        verbose_name = "listing"
+        verbose_name_plural = "listings"
 
     def __str__(self):
         return self.title

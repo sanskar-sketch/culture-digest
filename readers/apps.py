@@ -30,5 +30,6 @@ class ReadersConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'readers'
 
+    verbose_name = "Readers"
     def ready(self):
         post_migrate.connect(_bootstrap_superuser, sender=self)

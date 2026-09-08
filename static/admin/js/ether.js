@@ -44,4 +44,15 @@
     var header = document.getElementById("changelist-filter-header");
     if (header) header.textContent = "Filters";
   }
+
+  // ---- Small screens: the sidebar folds behind a Menu button --------------
+  var sidebar = document.getElementById("nav-sidebar");
+  var toggle = sidebar && sidebar.querySelector(".e-menu-toggle");
+  if (toggle) {
+    toggle.addEventListener("click", function () {
+      var open = sidebar.classList.toggle("is-open");
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      toggle.textContent = open ? "Close" : "Menu";
+    });
+  }
 })();

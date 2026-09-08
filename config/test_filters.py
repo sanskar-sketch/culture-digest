@@ -91,3 +91,33 @@ class FilterTests(TestCase):
         # the script can tell a real selection from the default.
         self.assertContains(response, '<li class="selected">')
         self.assertContains(response, 'data-all="1"')
+
+
+@plain_static
+class ListPageFramingTests(TestCase):
+    """Every list page says what it is; an empty one says what to do."""
+
+    def setUp(self):
+        cache.clear()
+        self.client.force_login(
+            get_user_model().objects.create_superuser("g", "g@example.com", "pw"))
+
+    def test_the_title_is_the_plain_name_and_the_page_explains_itself(self):
+        response = self.client.get(reverse("admin:opportunities_opportunity_changelist"))
+        self.assertContains(response, "<h1>Listings</h1>", html=True)
+        self.assertContains(response, "everything the newsletter can recommend")
+        response = self.client.get(reverse("admin:opportunities_tag_changelist"))
+        self.assertContains(response, "<h1>Interests</h1>", html=True)
+
+    def test_an_empty_list_offers_the_first_add(self):
+        from campaigns.models import Campaign
+
+        Campaign.objects.all().delete()
+        response = self.client.get(reverse("admin:campaigns_campaign_changelist"))
+        self.assertContains(response, "No campaigns yet.")
+        self.assertContains(response, reverse("admin:campaigns_campaign_add"))
+
+    def test_the_dashboard_no_longer_repeats_the_sidebar(self):
+        response = self.client.get(reverse("admin:index"))
+        self.assertNotContains(response, 'class="cd-sections"')
+        self.assertContains(response, "Live catalogue")

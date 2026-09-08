@@ -651,9 +651,9 @@ body.login .breadcrumbs, body.login #nav-sidebar { display: none; }
 .cd-model-name { font-size: 15px; font-weight: 600; color: var(--e-accent); letter-spacing: -0.01em; }
 .cd-model-blurb { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: var(--e-muted); }
 .cd-model-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.cd-act { font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--e-line); color: var(--e-ink); white-space: nowrap; }
+.cd-act, .cd-act:link, .cd-act:visited { font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--e-line); color: var(--e-ink); white-space: nowrap; }
 .cd-act:hover { border-color: var(--e-accent); color: var(--e-accent); }
-.cd-act-add { background: var(--e-accent); border-color: transparent; color: #fff; }
+.cd-act-add, .cd-act-add:link, .cd-act-add:visited { background: var(--e-accent); border-color: transparent; color: #fff; }
 .cd-act-add:hover { background: #4a48c4; color: #fff; }
 
 /* tabs (settings & templates) */
@@ -711,4 +711,98 @@ body.login .breadcrumbs, body.login #nav-sidebar { display: none; }
 }
 .object-tools a.addlink:link, .object-tools a.addlink:visited {
   color: #fff; background: var(--e-accent);
+}
+
+
+/* =====================================================================
+   Controls: one look for every button, select and small icon button.
+   Django's stylesheets reach these with id-qualified selectors, so the
+   overrides below are deliberately specific.
+   ===================================================================== */
+
+/* A padding box that never overflows its parent. */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+/* selects: no native stepper, a quiet chevron, same height as inputs */
+select:not([multiple]):not(.selector select) {
+  -webkit-appearance: none; appearance: none;
+  padding-right: 36px; min-height: 40px; cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%238e8e93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat; background-position: right 14px center;
+}
+.actions select { min-height: 36px; }
+
+/* the small edit / add / clear / view buttons beside a related-field select */
+.related-widget-wrapper { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.related-widget-wrapper > select { flex: 0 1 auto; }
+.related-widget-wrapper-link, .related-widget-wrapper-link:link, .related-widget-wrapper-link:visited {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%; margin: 0;
+  border: 1px solid var(--e-line); background: var(--e-surface-2);
+}
+.related-widget-wrapper-link:hover { border-color: var(--e-accent); background: var(--e-surface); }
+.related-widget-wrapper-link img { width: 13px; height: 13px; filter: grayscale(1) brightness(.5); }
+.related-widget-wrapper-link:hover img { filter: none; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .related-widget-wrapper-link img { filter: grayscale(1) brightness(1.6); }
+}
+html[data-theme="dark"] .related-widget-wrapper-link img { filter: grayscale(1) brightness(1.6); }
+
+/* search and action bars: the same secondary button as everywhere else */
+#toolbar form input[type=submit], .actions .button, .actions input[type=submit] {
+  font: inherit; font-size: 13px; font-weight: 600; padding: 8px 16px; margin: 0;
+  border-radius: 999px; border: 1px solid var(--e-line);
+  background: var(--e-surface-2); color: var(--e-ink); cursor: pointer;
+}
+#toolbar form input[type=submit]:hover, .actions .button:hover, .actions input[type=submit]:hover {
+  border-color: var(--e-accent); color: var(--e-accent);
+}
+#toolbar #searchbar { min-width: 0; width: auto; }
+.changelist-form-container > * { max-width: 100%; }
+
+/* filter groups: Django draws its own arrow before each summary and forces
+   every child inline - both fight the chip layout */
+/* changelists.css loads after this file, so ties go to Django - outrank it. */
+#changelist-filter details.e-filter > summary::before,
+#changelist-filter details.e-filter[open] > summary::before { content: none; }
+#changelist-filter details summary > * { display: inline-flex; }
+#changelist-filter details summary > [hidden] { display: none !important; }
+
+/* list pages: what this page is, under the title */
+.e-page-blurb { margin: -10px 0 18px; max-width: 70ch; font-size: 14px; line-height: 1.5; color: var(--e-muted); }
+.e-empty {
+  background: var(--e-surface); border: 1px dashed var(--e-line); border-radius: var(--e-radius);
+  padding: 36px 24px; text-align: center; color: var(--e-muted);
+}
+.e-empty p { margin: 0 0 12px; }
+.e-empty p:last-child { margin: 0; }
+
+
+/* ---------- small screens: sidebar becomes a bar with a Menu button --------- */
+.e-menu-toggle {
+  display: none; font: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px;
+  border-radius: 999px; border: 1px solid var(--e-side-line); background: transparent;
+  color: var(--e-side-ink); cursor: pointer;
+}
+@media (max-width: 900px) {
+  #nav-sidebar, .main > #nav-sidebar { position: relative !important; padding: 0 !important; }
+  #nav-sidebar .e-brand { padding: 14px 16px; margin: 0; }
+  #nav-sidebar .e-brand span { font-size: 20px; }
+  #nav-sidebar .e-menu-toggle { display: inline-flex; position: absolute; top: 14px; right: 16px; }
+  #nav-sidebar .e-nav, #nav-sidebar .e-side-foot { display: none; }
+  #nav-sidebar.is-open .e-nav { display: block; padding: 4px 8px 8px; }
+  #nav-sidebar.is-open .e-side-foot {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px;
+    border-top: 1px solid var(--e-side-line);
+  }
+  #nav-sidebar .e-nav-section { display: block; margin: 0 0 6px; }
+  #nav-sidebar .e-nav a { display: flex; padding: 9px 12px; }
+  #nav-sidebar .e-nav-title { display: block; padding: 10px 12px 4px; }
+}
+
+/* small screens: the search box takes the full row, the button sits under it */
+@media (max-width: 900px) {
+  #toolbar form > div { flex-wrap: wrap; }
+  #toolbar #searchbar { flex: 1 1 100%; }
 }
