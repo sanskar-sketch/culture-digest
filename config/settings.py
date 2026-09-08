@@ -42,7 +42,12 @@ SECURE_REDIRECT_EXEMPT = [r"^healthz/?$"]
 
 
 INSTALLED_APPS = [
-    "config.apps.DigestAdminConfig",  # branded admin site, replaces django.contrib.admin
+    # django.contrib.admin is deliberately absent. The desk (/desk/) is the
+    # admin now - its own views, forms, templates and stylesheet - so the
+    # only thing contrib.admin still did was serve pages nobody could
+    # reach. Its django_admin_log table is left in the database rather
+    # than dropped; it holds a handful of historic rows and removing it
+    # would be a destructive migration for no gain.
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

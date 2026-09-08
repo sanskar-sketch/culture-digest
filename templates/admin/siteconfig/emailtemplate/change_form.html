@@ -1,8 +1,0 @@
-{% extends "admin/siteconfig/tabbed_change_form.html" %}
-{% load i18n %}
-{% block object-tools-items %}
-  {% if original %}
-  <li><a href="{% url 'admin:siteconfig_emailtemplate_preview' original.pk %}">{% translate 'Preview' %}</a></li>
-  {% endif %}
-  {{ block.super }}
-{% endblock %}
