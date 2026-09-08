@@ -170,6 +170,7 @@ def campaign_list(request):
         "filter_groups": filter_groups,
         "has_active_filters": any(request.GET.get(g["param"]) for g in filter_groups),
         "bulk_actions": BULK_ACTIONS,
+        "delete_kind": "campaigns",
         "add_url": reverse("desk:campaigns_add"),
     }
     return render(request, "desk/campaign_list.html", context)

@@ -11,7 +11,7 @@
     <table class="d-table">
       <thead><tr>
         <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
-        <th>Email</th><th>Name</th><th>Age</th><th>Location</th><th>Follows</th><th>Budget</th><th>Travel</th><th>Sent / replied</th><th>Profile</th><th>Active</th>
+        <th>Email</th><th>Name</th><th>Age</th><th>Location</th><th>Follows</th><th>Budget</th><th>Travel</th><th>Sent / replied</th><th>Profile</th><th>Active</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th>
       </tr></thead>
       <tbody>
         {% for reader in page_obj %}
@@ -27,9 +27,10 @@
           <td>{% if reader.recs_count %}{{ reader.recs_count }} sent · <strong>{{ reader.replied_count }}</strong> replied{% else %}—{% endif %}</td>
           <td style="font-variant-numeric:tabular-nums">{{ reader.completeness }}%</td>
           <td>{% if reader.is_active %}<span class="d-pill good">Active</span>{% else %}<span class="d-pill neutral">Inactive</span>{% endif %}</td>
+          <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'readers' reader.pk %}" aria-label="Delete {{ reader.email }}">Delete</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="10" class="d-empty">No readers match. <a href="{{ request.path }}">Clear filters</a>.</td></tr>
+        <tr><td colspan="12" class="d-empty">No readers match. <a href="{{ request.path }}">Clear filters</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

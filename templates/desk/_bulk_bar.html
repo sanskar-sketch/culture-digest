@@ -15,5 +15,16 @@ so without it the server's own "Nothing selected" warning still applies.
           {% if action.confirm %}data-confirm="{{ action.confirm }}"{% endif %}
           {% if action.title %}title="{{ action.title }}"{% endif %}>{{ action.label }}</button>
   {% endfor %}
+  {% if delete_kind %}
+  {% comment %}
+  Delete posts to the deletion view rather than to this section's own,
+  so the confirmation - what else goes with it - is the same page whether
+  you came from one row or a tickbox.
+  {% endcomment %}
+  <button type="submit" name="bulk_delete" value="1" class="d-btn small danger"
+          formaction="{% url 'desk:delete_selected' delete_kind %}" formnovalidate
+          data-bulk-action title="Shows what else goes with them before anything is deleted"
+          >Delete&hellip;</button>
+  {% endif %}
 </div>
 {% endif %}

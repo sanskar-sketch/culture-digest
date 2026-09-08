@@ -132,6 +132,7 @@ def reader_list(request):
         "filter_groups": filter_groups,
         "has_active_filters": has_active_filters,
         "bulk_actions": BULK_ACTIONS,
+        "delete_kind": "readers",
     }
     return render(request, "desk/reader_list.html", context)
 

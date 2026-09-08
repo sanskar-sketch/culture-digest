@@ -55,8 +55,9 @@ urlpatterns = [
     path("groups/<int:pk>/", access.group_form, name="groups_change"),
 
     # One delete for every section - see desk.views.deletion for why it
-    # always shows what else goes first.
+    # always shows what else goes first. The bulk form posts to the second.
     path("<str:kind>/<int:pk>/delete/", deletion.delete, name="delete"),
+    path("<str:kind>/delete/", deletion.delete_selected, name="delete_selected"),
 
     path("settings/", settings_views.siteconfig_form, name="siteconfig"),
     path("settings/reset-wording/", settings_views.reset_wording, name="siteconfig_reset_wording"),

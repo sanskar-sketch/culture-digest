@@ -20,7 +20,7 @@
     <table class="d-table">
       <thead><tr>
         <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
-        <th>Title</th><th>Category</th><th>Status</th><th>Price</th><th>Area</th><th>Taste</th><th>Interests</th><th>Recommended</th><th>End date</th>
+        <th>Title</th><th>Category</th><th>Status</th><th>Price</th><th>Area</th><th>Taste</th><th>Interests</th><th>Recommended</th><th>End date</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th>
       </tr></thead>
       <tbody>
         {% for opp in page_obj %}
@@ -45,9 +45,10 @@
           </td>
           <td>{{ opp.recs_count|default:"—" }}</td>
           <td>{{ opp.end_date|default:"—" }}</td>
+          <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'listings' opp.pk %}" aria-label="Delete {{ opp.title }}">Delete</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="9" class="d-empty">No listings match. <a href="{{ request.path }}">Clear filters</a> or <a href="{{ add_url }}">add one</a>.</td></tr>
+        <tr><td colspan="11" class="d-empty">No listings match. <a href="{{ request.path }}">Clear filters</a> or <a href="{{ add_url }}">add one</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

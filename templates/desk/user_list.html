@@ -11,7 +11,7 @@
 <div class="d-table-wrap">
   <div class="d-table-scroll">
   <table class="d-table">
-    <thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Access</th><th>Groups</th><th>Last signed in</th></tr></thead>
+    <thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Access</th><th>Groups</th><th>Last signed in</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th></tr></thead>
     <tbody>
       {% for user in page_obj %}
       <tr>
@@ -29,9 +29,10 @@
         </td>
         <td class="wrap">{% for g in user.groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
         <td>{{ user.last_login|date:"j M Y, H:i"|default:"never" }}</td>
+        <td class="d-col-act">{% if user.pk != current_user_id %}<a class="d-del" href="{% url 'desk:delete' 'users' user.pk %}" aria-label="Delete {{ user.username }}">Delete</a>{% endif %}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="6" class="d-empty">No users match. <a href="{{ add_url }}">Add one</a>.</td></tr>
+      <tr><td colspan="7" class="d-empty">No users match. <a href="{{ add_url }}">Add one</a>.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -338,16 +338,41 @@
   // Purely cosmetic: the header is sticky in CSS regardless, this only adds
   // the border and shadow once it is actually holding position, so the edge
   // doesn't show while the page is scrolled to the top.
-  function initStickyHeader() {
-    var top = document.querySelector(".d-page-top");
-    if (!top || !("IntersectionObserver" in window)) return;
+  function offsetOf(name) {
+    return parseInt(getComputedStyle(document.documentElement)
+      .getPropertyValue(name), 10) || 0;
+  }
+
+  // Shade an element only once it is actually holding position, using a
+  // zero-height marker just above it: when the marker leaves the top of the
+  // viewport - minus whatever is already pinned there - the element is stuck.
+  function shadeWhenStuck(el, offset) {
+    if (!("IntersectionObserver" in window)) return;
     var sentinel = document.createElement("div");
     sentinel.setAttribute("aria-hidden", "true");
-    top.parentNode.insertBefore(sentinel, top);
+    el.parentNode.insertBefore(sentinel, el);
     new IntersectionObserver(function (entries) {
-      top.classList.toggle("is-stuck", !entries[0].isIntersecting);
-    }, { rootMargin: "-" + (parseInt(getComputedStyle(document.documentElement)
-        .getPropertyValue("--d-topbar-h"), 10) + 1) + "px 0px 0px 0px" }).observe(sentinel);
+      el.classList.toggle("is-stuck", !entries[0].isIntersecting);
+    }, { rootMargin: "-" + (offset + 1) + "px 0px 0px 0px" }).observe(sentinel);
+  }
+
+  function initStickyHeader() {
+    var top = document.querySelector(".d-page-top");
+    var bar = document.querySelector(".d-bulkbar");
+    if (!top) return;
+
+    // The bulk bar pins under the title, so it needs the title's real
+    // height - which changes when a long title or its buttons wrap.
+    function measure() {
+      document.documentElement.style.setProperty(
+        "--d-pagetop-h", Math.round(top.offsetHeight) + "px");
+    }
+    measure();
+    if ("ResizeObserver" in window) new ResizeObserver(measure).observe(top);
+    else window.addEventListener("resize", measure);
+
+    shadeWhenStuck(top, offsetOf("--d-topbar-h"));
+    if (bar) shadeWhenStuck(bar, offsetOf("--d-topbar-h") + top.offsetHeight);
   }
 
   function initConfirm() {

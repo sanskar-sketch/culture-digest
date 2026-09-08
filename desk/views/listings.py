@@ -115,6 +115,7 @@ def listing_list(request):
         "filter_groups": filter_groups,
         "has_active_filters": has_active_filters,
         "bulk_actions": BULK_ACTIONS,
+        "delete_kind": "listings",
         "add_url": reverse("desk:listings_add"),
     }
     return render(request, "desk/listing_list.html", context)

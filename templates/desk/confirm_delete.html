@@ -6,9 +6,13 @@
 
 <div class="d-form">
   <div class="d-card">
-    <p style="font-size:15px;margin:0 0 4px;">You're about to delete the {{ label }}
-      <strong>{{ object_name }}</strong>.</p>
+    <p style="font-size:15px;margin:0 0 4px;">{% if count > 1 %}You're about to delete <strong>{{ object_name }}</strong>.{% else %}You're about to delete the {{ label }} <strong>{{ object_name }}</strong>.{% endif %}</p>
     <p style="margin:0;color:var(--d-muted);font-size:14px;">This can't be undone.</p>
+    {% if object_names %}
+    <ul class="d-plain-list" style="margin-top:12px;">
+      {% for name in object_names %}<li>{{ name }}</li>{% endfor %}
+    </ul>
+    {% endif %}
   </div>
 
   {% if collateral %}
@@ -24,7 +28,7 @@
   </div>
   {% else %}
   <div class="d-card">
-    <p style="margin:0;font-size:14px;color:var(--d-muted);">Nothing else depends on it.</p>
+    <p style="margin:0;font-size:14px;color:var(--d-muted);">{% if count > 1 %}Nothing else depends on them.{% else %}Nothing else depends on it.{% endif %}</p>
   </div>
   {% endif %}
 
@@ -37,7 +41,14 @@
 
   <form method="post" class="d-form-actions">
     {% csrf_token %}
-    <button type="submit" class="d-btn danger">Yes, delete this {{ label }}</button>
+    {% comment %}
+    Carried through so the confirmation posts back to the same URL: the
+    selection lives in the form, not in a session, which keeps this page
+    safe to reload and impossible to confuse with someone else's tab.
+    {% endcomment %}
+    {% for pk in selected_ids %}<input type="hidden" name="selected" value="{{ pk }}">{% endfor %}
+    <input type="hidden" name="confirm" value="1">
+    <button type="submit" class="d-btn danger">{% if count > 1 %}Yes, delete these {{ count }} {{ label_plural }}{% else %}Yes, delete this {{ label }}{% endif %}</button>
     <a class="d-btn" href="{{ back_url }}">Cancel</a>
   </form>
 </div>

@@ -7,9 +7,11 @@ preview a newsletter, campaign scheduling, template start-from-builtin)
 does what it says.
 """
 
+import pathlib
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase, override_settings
@@ -606,7 +608,7 @@ class DeleteTests(LoggedInTestCase):
         self.assertContains(response, "This also deletes")
         self.assertContains(response, "1 recommendation")
         # and offers the alternative that keeps the history
-        self.assertContains(response, "Archiving it")
+        self.assertContains(response, "Archiving keeps")
 
     def test_nothing_is_deleted_by_merely_looking(self):
         opp = opportunity()
@@ -643,6 +645,74 @@ class DeleteTests(LoggedInTestCase):
     def test_an_unknown_kind_is_not_a_way_to_delete_anything(self):
         self.assertEqual(
             self.client.get(reverse("desk:delete", args=["siteconfig", 1])).status_code, 404)
+        self.assertEqual(
+            self.client.post(reverse("desk:delete_selected", args=["siteconfig"])).status_code, 404)
+
+    def test_every_list_offers_delete_on_the_row_itself(self):
+        """The thing you want to gone is the row you are looking at, so the
+        link is there - not two pages deep behind the edit form."""
+        tag = Tag.objects.create(name="Jazz nights", category="music")
+        reader = Reader.objects.create(email="ada@example.com")
+        campaign = Campaign.objects.create(name="c", subject="s", body="b")
+        template = EmailTemplate.objects.create(
+            name="t", kind=EmailTemplate.Kind.NEWSLETTER, html_body="<p>x</p>")
+        opp = opportunity()
+        for list_url, kind, pk in [
+            (reverse("desk:listings_list"), "listings", opp.pk),
+            (reverse("desk:interests_list"), "interests", tag.pk),
+            (reverse("desk:readers_list"), "readers", reader.pk),
+            (reverse("desk:campaigns_list"), "campaigns", campaign.pk),
+            (reverse("desk:templates_list"), "templates", template.pk),
+        ]:
+            with self.subTest(kind=kind):
+                self.assertContains(self.client.get(list_url),
+                                    reverse("desk:delete", args=[kind, pk]))
+
+
+class BulkDeleteTests(LoggedInTestCase):
+    """Ticking rows and pressing Delete lands on the same confirmation as
+    deleting one, because the question - what else goes? - is the same."""
+
+    def test_the_bulk_bar_carries_a_delete_that_posts_to_the_delete_view(self):
+        opportunity()
+        html = self.client.get(reverse("desk:listings_list")).content.decode()
+        bar = html.split('class="d-bulkbar"', 1)[1].split("</div>", 1)[0]
+        self.assertIn(reverse("desk:delete_selected", args=["listings"]), bar)
+
+    def test_it_confirms_before_deleting_anything(self):
+        a, b = opportunity(title="One"), opportunity(title="Two")
+        response = self.client.post(reverse("desk:delete_selected", args=["listings"]),
+                                    {"selected": [a.pk, b.pk]})
+        self.assertContains(response, "2 listings")
+        self.assertContains(response, "One")
+        self.assertContains(response, "Two")
+        self.assertEqual(Opportunity.objects.count(), 2)
+
+    def test_confirming_deletes_them_all(self):
+        a, b = opportunity(title="One"), opportunity(title="Two")
+        response = self.client.post(reverse("desk:delete_selected", args=["listings"]),
+                                    {"selected": [a.pk, b.pk], "confirm": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Opportunity.objects.count(), 0)
+
+    def test_shared_collateral_is_counted_once_not_twice(self):
+        """Two listings recommended in one issue destroy that issue's rows
+        between them - saying "2 issues" would be a lie."""
+        a, b = opportunity(title="One"), opportunity(title="Two")
+        reader = Reader.objects.create(email="ada@example.com")
+        issue = NewsletterIssue.objects.create(reader=reader)
+        Recommendation.objects.create(issue=issue, opportunity=a, rationale="x")
+        Recommendation.objects.create(issue=issue, opportunity=b, rationale="y")
+        response = self.client.post(reverse("desk:delete_selected", args=["listings"]),
+                                    {"selected": [a.pk, b.pk]})
+        self.assertContains(response, "2 recommendations")
+
+    def test_an_empty_selection_deletes_nothing(self):
+        opportunity()
+        response = self.client.post(reverse("desk:delete_selected", args=["listings"]),
+                                    {"confirm": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Opportunity.objects.count(), 1)
 
 
 @plain_static
@@ -673,6 +743,20 @@ class StickyHeaderTests(LoggedInTestCase):
         self.assertIn("<h1>", top)
         self.assertIn("d-page-actions", top)
         self.assertIn("Add listing", top)
+
+    def test_the_bulk_actions_pin_under_the_title(self):
+        """Tick a row at the bottom of a long list and the button you need
+        must still be on screen."""
+        opportunity()
+        html = self.client.get(reverse("desk:listings_list")).content.decode()
+        self.assertIn('class="d-bulkbar"', html)
+        css = (pathlib.Path(settings.BASE_DIR) / "static/desk/css/desk.css").read_text()
+        bar = css.split(".d-bulkbar {", 1)[1].split("}", 1)[0]
+        self.assertIn("position: sticky", bar)
+        self.assertIn("--d-pagetop-h", bar)
+        # and the offset it pins to is measured, not guessed
+        js = (pathlib.Path(settings.BASE_DIR) / "static/desk/js/desk.js").read_text()
+        self.assertIn("--d-pagetop-h", js)
 
     def test_the_blurb_stays_out_of_the_pinned_bar(self):
         """Pinning three lines of explanation would eat the screen it is

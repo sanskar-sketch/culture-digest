@@ -23,7 +23,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from campaigns.models import Campaign
-from desk.permissions import staff_required, superuser_required
+from desk.permissions import staff_required
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
 from siteconfig.emails import EmailTemplate
@@ -33,8 +33,8 @@ DELETABLE = {
     "listings": {
         "model": Opportunity, "label": "listing", "list_url": "desk:listings_list",
         "name": lambda o: o.title,
-        "instead": "Archiving it keeps the listing and everything it was part of, "
-                   "but takes it out of matching so it is never recommended again.",
+        "instead": "Archiving keeps everything a listing was part of, but takes it "
+                   "out of matching so it is never recommended again.",
     },
     "interests": {
         "model": Tag, "label": "interest", "list_url": "desk:interests_list",
@@ -51,7 +51,7 @@ DELETABLE = {
     "campaigns": {
         "model": Campaign, "label": "campaign", "list_url": "desk:campaigns_list",
         "name": lambda o: o.name,
-        "instead": "Cancelling it stops anything not yet sent while keeping the "
+        "instead": "Cancelling stops anything not yet sent while keeping the "
                    "record of what was.",
     },
     "templates": {
@@ -88,21 +88,27 @@ MODEL_WORDING = {
 }
 
 
-def _collateral(obj):
-    """Everything that would go with it, counted per model.
+def _collateral(objects):
+    """Everything that would go with them, counted per model.
 
-    Excludes the object itself and the pure link rows of a many-to-many,
-    which are an implementation detail - unlinking an interest from a
-    listing is not something to warn anyone about.
+    Takes the whole selection at once rather than one at a time, so two
+    listings that share a recommendation report it once, not twice.
+
+    Excludes the objects themselves and the pure link rows of a
+    many-to-many, which are an implementation detail - unlinking an
+    interest from a listing is not something to warn anyone about.
     """
-    collector = Collector(using=obj._state.db)
-    collector.collect([obj])
+    objects = list(objects)
+    if not objects:
+        return []
+    collector = Collector(using=objects[0]._state.db)
+    collector.collect(objects)
 
     counts = {}
     for model, instances in collector.data.items():
         n = len(instances)
-        if model is type(obj):
-            n -= 1  # the object itself
+        if model is type(objects[0]):
+            n -= len(objects)  # the objects themselves
         if n > 0 and not model._meta.auto_created:
             counts[model] = counts.get(model, 0) + n
     for queryset in collector.fast_deletes:
@@ -122,38 +128,92 @@ def _collateral(obj):
     return lines
 
 
-def _view(request, kind, pk):
+def _spec_or_404(kind):
     spec = DELETABLE.get(kind)
     if spec is None:
         raise Http404(f"Nothing called {kind!r} can be deleted here.")
+    return spec
+
+
+def _plural(spec, n):
+    return spec["label"] if n == 1 else spec["label"] + "s"
+
+
+def _confirm_page(request, kind, spec, objects, selected_ids=None):
+    """The page that stands between a Delete button and the deletion."""
+    names = [str(spec["name"](obj)) for obj in objects]
+    n = len(objects)
+    return render(request, "desk/confirm_delete.html", {
+        "page_title": f"Delete {_plural(spec, n)}?",
+        "breadcrumbs": [(spec["label"].title() + "s", reverse(spec["list_url"])),
+                        ("Delete", None)],
+        "object_name": names[0] if n == 1 else f"{n} {_plural(spec, n)}",
+        "object_names": names if n > 1 else [],
+        "count": n,
+        "label": spec["label"],
+        "label_plural": _plural(spec, n),
+        "collateral": _collateral(objects),
+        "instead": spec.get("instead"),
+        "selected_ids": selected_ids or [],
+        "back_url": request.META.get("HTTP_REFERER") or reverse(spec["list_url"]),
+    })
+
+
+def _delete_all(request, spec, objects):
+    """Delete one by one so each model's own delete() still runs."""
+    for obj in objects:
+        obj.delete()
+    n = len(objects)
+    messages.success(request, f"Deleted {n} {_plural(spec, n)}.")
+    return redirect(spec["list_url"])
+
+
+@staff_required
+def delete(request, kind, pk):
+    """Delete one row, named, with its consequences shown first."""
+    spec = _spec_or_404(kind)
+    if spec.get("superuser_only") and not request.user.is_superuser:
+        return render(request, "desk/forbidden.html", status=403)
     obj = get_object_or_404(spec["model"], pk=pk)
 
     if spec["model"] is User and obj.pk == request.user.pk:
         messages.error(request, "You can't delete the account you're signed in with.")
         return redirect("desk:users_change", pk=obj.pk)
 
-    name = spec["name"](obj)
     if request.method == "POST":
+        name = spec["name"](obj)
         obj.delete()
         messages.success(request, f"Deleted {spec['label']} “{name}”.")
         return redirect(spec["list_url"])
-
-    context = {
-        "page_title": f"Delete {spec['label']}?",
-        "breadcrumbs": [(spec["label"].title() + "s", reverse(spec["list_url"])),
-                        (str(name), None), ("Delete", None)],
-        "object_name": name,
-        "label": spec["label"],
-        "collateral": _collateral(obj),
-        "instead": spec.get("instead"),
-        "back_url": request.META.get("HTTP_REFERER") or reverse(spec["list_url"]),
-    }
-    return render(request, "desk/confirm_delete.html", context)
+    return _confirm_page(request, kind, spec, [obj])
 
 
 @staff_required
-def delete(request, kind, pk):
-    spec = DELETABLE.get(kind)
-    if spec and spec.get("superuser_only") and not request.user.is_superuser:
+def delete_selected(request, kind):
+    """Delete the ticked rows - same confirmation, several objects.
+
+    The bulk bar's Delete button posts the list form straight here with
+    formaction, so the section's own view never has to know about it.
+    """
+    spec = _spec_or_404(kind)
+    if spec.get("superuser_only") and not request.user.is_superuser:
         return render(request, "desk/forbidden.html", status=403)
-    return _view(request, kind, pk)
+    list_url = reverse(spec["list_url"])
+    if request.method != "POST":
+        return redirect(list_url)
+
+    ids = request.POST.getlist("selected")
+    objects = list(spec["model"].objects.filter(pk__in=ids))
+    if spec["model"] is User:
+        kept = [o for o in objects if o.pk != request.user.pk]
+        if len(kept) != len(objects):
+            messages.warning(request, "Left out the account you're signed in with.")
+        objects = kept
+    if not objects:
+        messages.warning(request, "Nothing selected.")
+        return redirect(list_url)
+
+    if request.POST.get("confirm"):
+        return _delete_all(request, spec, objects)
+    return _confirm_page(request, kind, spec, objects,
+                         selected_ids=[obj.pk for obj in objects])
