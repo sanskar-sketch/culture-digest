@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
+from opportunities.models import Category
 from recommendations import ai
 from recommendations.models import NewsletterIssue, Recommendation
 from recommendations.sending import send_issue_for_reader
@@ -17,6 +18,54 @@ PROFILE_FIELDS = (
     "budget", "availability", "mainstream_preference", "scale_preference",
     "loved_examples", "disliked_examples", "notes",
 )
+
+
+class FollowsFilter(admin.SimpleListFilter):
+    """Readers by the categories they picked at signup."""
+
+    title = "follows"
+    parameter_name = "follows"
+
+    def lookups(self, request, model_admin):
+        return list(Category.choices) + [("none", "Nothing picked")]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        if value == "none":
+            return queryset.filter(interest_categories=[])
+        # JSON containment differs between SQLite and Postgres; the reader
+        # list is small enough to check in Python.
+        ids = [r.pk for r in queryset.only("pk", "interest_categories")
+               if value in (r.interest_categories or [])]
+        return queryset.filter(pk__in=ids)
+
+
+class SentFilter(admin.SimpleListFilter):
+    """Who has actually received something, and who has answered."""
+
+    title = "newsletter"
+    parameter_name = "sent"
+
+    def lookups(self, request, model_admin):
+        return (("never", "Never sent anything"),
+                ("sent", "Sent at least once"),
+                ("replied", "Has given feedback"))
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == "never":
+            return queryset.filter(issues__isnull=True)
+        if value == "sent":
+            return queryset.filter(issues__sent_at__isnull=False).distinct()
+        if value == "replied":
+            return queryset.filter(
+                issues__recommendations__feedback__in=[
+                    Recommendation.Feedback.MORE_LIKE_THIS, Recommendation.Feedback.NOT_FOR_ME,
+                    Recommendation.Feedback.SAVE, Recommendation.Feedback.BOOKED,
+                ]).distinct()
+        return queryset
 
 
 class NewsletterIssueInline(admin.TabularInline):
@@ -64,15 +113,18 @@ class ReaderAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_display_links = ("email",)
+    # Location is a free-text field, so filtering on it listed every
+    # distinct spelling; search covers it better.
     list_filter = (
         "is_active",
-        "open_to_surprise",
+        FollowsFilter,
+        SentFilter,
         "budget",
         "travel_radius",
+        "open_to_surprise",
         "mainstream_preference",
         "scale_preference",
         "created_at",
-        "location",
     )
     search_fields = ("email", "name", "location", "travel_destinations",
                      "loved_examples", "disliked_examples", "notes",

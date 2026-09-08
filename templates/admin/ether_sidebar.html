@@ -8,6 +8,8 @@ index has to opt back in explicitly.
 {% endcomment %}
 {% if has_permission and not is_popup %}
 <nav id="nav-sidebar" aria-label="{% translate 'Sections' %}">
+  {# Django's nav_sidebar.js expects its quick-filter input and throws without it. #}
+  <input type="search" id="nav-filter" hidden aria-hidden="true" tabindex="-1">
   <a href="{% url 'admin:index' %}" class="e-brand">
     <span class="dot"></span>
     <span>{{ site_config.site_name }}<small>Editorial desk</small></span>

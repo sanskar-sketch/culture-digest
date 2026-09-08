@@ -1,0 +1,26 @@
+{% load i18n %}
+{% comment %}
+One filter group. Chips instead of a vertical list, a type-to-narrow box
+for long groups, and a badge showing what's picked when the group is
+folded. ether.js folds groups with nothing selected; without JavaScript
+every group stays open, so nothing is lost.
+{% endcomment %}
+<details class="e-filter" data-filter-title="{{ title }}" open>
+  <summary>
+    <span class="e-filter-title">{{ title|capfirst }}</span>
+    <span class="e-filter-picked" hidden></span>
+    <span class="e-filter-chevron" aria-hidden="true"></span>
+  </summary>
+  {% if choices|length > 9 %}
+  <label class="e-filter-narrow">
+    <input type="search" placeholder="{% translate 'Type to narrow' %}…"
+           aria-label="{% translate 'Narrow' %} {{ title }}" autocomplete="off">
+  </label>
+  {% endif %}
+  <ul class="e-chips">
+  {% for choice in choices %}
+    <li{% if choice.selected %} class="selected"{% endif %}{% if forloop.first %} data-all="1"{% endif %}>
+      <a href="{{ choice.query_string|iriencode }}">{{ choice.display }}</a></li>
+  {% endfor %}
+  </ul>
+</details>

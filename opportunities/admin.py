@@ -37,6 +37,27 @@ class TagAdmin(admin.ModelAdmin):
         return obj._readers or "—"
 
 
+class LiveFilter(admin.SimpleListFilter):
+    """Whether a listing can still be recommended, by its dates."""
+
+    title = "dates"
+    parameter_name = "live"
+
+    def lookups(self, request, model_admin):
+        return (("live", "Still on"), ("ended", "Ended"), ("undated", "No dates"))
+
+    def queryset(self, request, queryset):
+        today = timezone.localdate()
+        value = self.value()
+        if value == "live":
+            return queryset.filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+        if value == "ended":
+            return queryset.filter(end_date__lt=today)
+        if value == "undated":
+            return queryset.filter(start_date__isnull=True, end_date__isnull=True)
+        return queryset
+
+
 @admin.register(Opportunity)
 class OpportunityAdmin(admin.ModelAdmin):
     list_display = (
@@ -54,12 +75,13 @@ class OpportunityAdmin(admin.ModelAdmin):
     list_display_links = ("title",)
     list_filter = (
         "status",
+        LiveFilter,
         "category",
         "price_tier",
         "is_online",
         "mainstream_to_unusual",
         "intimate_to_large_scale",
-        "tags",
+        ("tags", admin.RelatedOnlyFieldListFilter),
         "location_area",
         "start_date",
     )

@@ -31,12 +31,27 @@ class RecommendationInline(admin.TabularInline):
     autocomplete_fields = ("opportunity",)
 
 
+class DeliveryFilter(admin.SimpleListFilter):
+    title = "delivery"
+    parameter_name = "delivery"
+
+    def lookups(self, request, model_admin):
+        return (("sent", "Sent"), ("unsent", "Not sent"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "sent":
+            return queryset.filter(sent_at__isnull=False)
+        if self.value() == "unsent":
+            return queryset.filter(sent_at__isnull=True)
+        return queryset
+
+
 @admin.register(NewsletterIssue)
 class NewsletterIssueAdmin(admin.ModelAdmin):
     list_display = ("__str__", "reader_link", "recommendation_count", "replies",
                     "status", "created_at", "sent_at")
     list_display_links = ("__str__",)
-    list_filter = ("sent_at", "created_at")
+    list_filter = (DeliveryFilter, "created_at")
     search_fields = ("reader__email", "reader__name", "recommendations__opportunity__title")
     inlines = [RecommendationInline]
     readonly_fields = ("created_at", "provider_message_id")

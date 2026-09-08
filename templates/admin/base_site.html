@@ -7,6 +7,10 @@
 <link rel="stylesheet" href="{% static 'admin/css/ether.css' %}">
 {% endblock %}
 
+{% block extrahead %}{{ block.super }}
+<script src="{% static 'admin/js/ether.js' %}" defer></script>
+{% endblock %}
+
 {% comment %}
 The header is replaced by the sidebar: brand at the top, navigation in the
 middle, the signed-in user and their actions at the bottom. It is on every
