@@ -31,9 +31,47 @@ BULK_ACTIONS = (
 
 def _progress(campaign):
     counts = dict(campaign.deliveries.values_list("status").annotate(n=Count("id")))
+    return _report(counts)
+
+
+def _report(counts):
     report = {value: counts.get(value, 0) for value in CampaignDelivery.Status.values}
     report["total"] = sum(counts.values())
     return report
+
+
+def _progress_map(campaigns):
+    """Delivery counts for a whole page of campaigns in one query.
+
+    Called per row this was the list's worst cost: with the database a
+    continent away, every extra query is a further ~230ms on the page.
+    """
+    rows = (CampaignDelivery.objects
+            .filter(campaign__in=campaigns)
+            .values("campaign_id", "status")
+            .annotate(n=Count("id")))
+    per_campaign = {}
+    for row in rows:
+        per_campaign.setdefault(row["campaign_id"], {})[row["status"]] = row["n"]
+    return {c.pk: _report(per_campaign.get(c.pk, {})) for c in campaigns}
+
+
+def _audience_sizes(campaigns):
+    """How many readers each campaign reaches, without a query per row.
+
+    A campaign with no restrictions reaches every active reader, which is
+    one count shared by all of them. Only a campaign that actually narrows
+    its audience has to be counted on its own.
+    """
+    unrestricted = Reader.objects.filter(is_active=True).count()
+    sizes = {}
+    for campaign in campaigns:
+        # .all() reads the prefetch cache; .exists() would query again.
+        narrowed = (campaign.audience_location
+                    or campaign.audience_categories
+                    or list(campaign.audience_tags.all()))
+        sizes[campaign.pk] = campaign.audience().count() if narrowed else unrestricted
+    return sizes
 
 
 def _do_schedule(request, campaign) -> bool:
@@ -109,10 +147,13 @@ def campaign_list(request):
                                  + (" The scheduler picks them up shortly." if n else ""))
         return redirect(f"{request.path}?{request.GET.urlencode()}")
 
-    page_obj = paginate(request, qs.order_by("-created_at"))
-    for c in page_obj:
-        c.audience_size = c.audience().count()
-        c.progress_report = _progress(c)
+    page_obj = paginate(request, qs.order_by("-created_at").prefetch_related("audience_tags"))
+    rows = list(page_obj)
+    progress = _progress_map(rows)
+    sizes = _audience_sizes(rows)
+    for c in rows:
+        c.audience_size = sizes[c.pk]
+        c.progress_report = progress[c.pk]
 
     filter_groups = [
         {"title": "Status", "param": "status", "options": filter_options(request, "status", Campaign.Status.choices)},

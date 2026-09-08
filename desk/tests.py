@@ -351,3 +351,58 @@ class RetiredAdminRedirectTests(TestCase):
         for url in ("/admin/auth/user/", "/admin/auth/group/"):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200, url)
+
+
+class QueryCountTests(LoggedInTestCase):
+    """The database is a continent away from the app, so every query is
+    ~230ms on the page. A list making one query per row is the difference
+    between a fast page and an eight-second one - these assert the count
+    doesn't grow with the number of rows."""
+
+    def counts_for(self, url):
+        """Queries for a page with few rows vs many, so growth shows up."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        measured = []
+        for _ in range(2):
+            cache.clear()
+            with CaptureQueriesContext(connection) as ctx:
+                self.assertEqual(self.client.get(url).status_code, 200)
+            measured.append(len(ctx.captured_queries))
+        return measured[-1]
+
+    def test_the_campaigns_list_does_not_query_per_row(self):
+        url = reverse("desk:campaigns_list")
+        Reader.objects.create(email="a@example.com")
+        for i in range(3):
+            Campaign.objects.create(name=f"c{i}", subject="s", body="b")
+        few = self.counts_for(url)
+
+        for i in range(3, 18):
+            Campaign.objects.create(name=f"c{i}", subject="s", body="b")
+        many = self.counts_for(url)
+
+        self.assertEqual(few, many,
+                         f"{many - few} extra queries for 15 more campaigns - "
+                         "something is querying per row again")
+
+    def test_the_readers_list_does_not_query_per_row(self):
+        url = reverse("desk:readers_list")
+        for i in range(3):
+            Reader.objects.create(email=f"r{i}@example.com")
+        few = self.counts_for(url)
+
+        for i in range(3, 18):
+            Reader.objects.create(email=f"r{i}@example.com")
+        self.assertEqual(few, self.counts_for(url))
+
+    def test_the_listings_list_does_not_query_per_row(self):
+        url = reverse("desk:listings_list")
+        for i in range(3):
+            opportunity(title=f"o{i}")
+        few = self.counts_for(url)
+
+        for i in range(3, 18):
+            opportunity(title=f"o{i}")
+        self.assertEqual(few, self.counts_for(url))
