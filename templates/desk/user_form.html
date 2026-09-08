@@ -1,13 +1,15 @@
 {% extends "desk/base.html" %}
 {% block content %}
-<div class="d-page-head"><h1>{{ page_title }}</h1></div>
-
-{% if instance %}
-<div class="d-btn-row">
-  <a class="d-btn" href="{% url 'desk:users_password' instance.pk %}">Set password</a>
-  <a class="d-btn" href="{% url 'desk:users_add' %}">Add another</a>
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    {% if instance %}
+    <a class="d-btn" href="{% url 'desk:users_password' instance.pk %}">Set password</a>
+    <a class="d-btn" href="{% url 'desk:users_add' %}">Add another</a>
+    {% if not is_self %}<a class="d-btn danger" href="{% url 'desk:delete' 'users' instance.pk %}">Delete</a>{% endif %}
+    {% endif %}
+  </div>
 </div>
-{% endif %}
 
 {% if is_self %}
 <div class="d-messages"><div class="d-msg warning">This is your own account. Removing your

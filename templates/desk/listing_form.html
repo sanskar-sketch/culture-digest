@@ -1,12 +1,14 @@
 {% extends "desk/base.html" %}
 {% block content %}
-<div class="d-page-head"><h1>{{ page_title }}</h1></div>
-
-{% if instance %}
-<div class="d-btn-row">
-  <a class="d-btn" href="{% url 'desk:listings_add' %}">Add another</a>
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    {% if instance %}
+    <a class="d-btn" href="{% url 'desk:listings_add' %}">Add another</a>
+    {% if instance %}<a class="d-btn danger" href="{% url 'desk:delete' 'listings' instance.pk %}">Delete</a>{% endif %}
+    {% endif %}
+  </div>
 </div>
-{% endif %}
 
 <form method="post" class="d-form">
   {% csrf_token %}

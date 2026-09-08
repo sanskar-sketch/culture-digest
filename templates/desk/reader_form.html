@@ -1,11 +1,13 @@
 {% extends "desk/base.html" %}
 {% block content %}
-<div class="d-page-head"><h1>{{ page_title }}</h1></div>
-
-<div class="d-btn-row">
-  <form method="post" class="d-inline"><input type="hidden" name="action" value="preview">{% csrf_token %}<button type="submit" class="d-btn">Preview newsletter</button></form>
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    <form method="post" class="d-inline"><input type="hidden" name="action" value="preview">{% csrf_token %}<button type="submit" class="d-btn">Preview newsletter</button></form>
   <form method="post" class="d-inline" data-confirm="Really email {{ instance.email }} now?"><input type="hidden" name="action" value="send">{% csrf_token %}<button type="submit" class="d-btn danger">Send newsletter now</button></form>
   <form method="post" class="d-inline"><input type="hidden" name="action" value="interpret">{% csrf_token %}<button type="submit" class="d-btn">Interpret taste with AI</button></form>
+    <a class="d-btn danger" href="{% url 'desk:delete' 'readers' instance.pk %}">Delete</a>
+  </div>
 </div>
 
 <form method="post" class="d-form">

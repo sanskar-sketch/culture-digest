@@ -1,6 +1,7 @@
 {% extends "desk/base.html" %}
 {% block content %}
-<div class="d-page-head"><h1>{{ page_title }}</h1><p>{{ page_blurb }}</p></div>
+<div class="d-page-top"><h1>{{ page_title }}</h1></div>
+<p class="d-page-blurb">{{ page_blurb }}</p>
 {% include "desk/_toolbar.html" %}
 <form method="post" data-bulk-form>
   {% csrf_token %}

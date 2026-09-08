@@ -1,0 +1,44 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+</div>
+
+<div class="d-form">
+  <div class="d-card">
+    <p style="font-size:15px;margin:0 0 4px;">You're about to delete the {{ label }}
+      <strong>{{ object_name }}</strong>.</p>
+    <p style="margin:0;color:var(--d-muted);font-size:14px;">This can't be undone.</p>
+  </div>
+
+  {% if collateral %}
+  <div class="d-card" style="border-color:var(--d-bad);">
+    <h2 style="color:var(--d-bad);">This also deletes</h2>
+    <ul class="d-plain-list">
+      {% for line in collateral %}<li>{{ line }}</li>{% endfor %}
+    </ul>
+    <p style="margin:12px 0 0;font-size:13px;color:var(--d-muted);">
+      Anything listed here goes for good, including reader feedback, which the
+      matching learns from.
+    </p>
+  </div>
+  {% else %}
+  <div class="d-card">
+    <p style="margin:0;font-size:14px;color:var(--d-muted);">Nothing else depends on it.</p>
+  </div>
+  {% endif %}
+
+  {% if instead %}
+  <div class="d-card" style="border-color:var(--d-accent);">
+    <h2>There's a softer option</h2>
+    <p style="margin:0;font-size:14px;">{{ instead }}</p>
+  </div>
+  {% endif %}
+
+  <form method="post" class="d-form-actions">
+    {% csrf_token %}
+    <button type="submit" class="d-btn danger">Yes, delete this {{ label }}</button>
+    <a class="d-btn" href="{{ back_url }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

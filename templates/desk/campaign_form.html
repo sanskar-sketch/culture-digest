@@ -1,9 +1,9 @@
 {% extends "desk/base.html" %}
 {% block content %}
-<div class="d-page-head"><h1>{{ page_title }}</h1></div>
-
-{% if instance %}
-<div class="d-btn-row">
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+  {% if instance %}
   <a class="d-btn" href="{% url 'desk:campaigns_preview' instance.pk %}">Preview</a>
   <form method="post" action="{% url 'desk:campaigns_test_send' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Send a test to me</button></form>
   {% if instance.status == "draft" or instance.status == "cancelled" %}
@@ -15,8 +15,10 @@
   {% if instance.status == "scheduled" or instance.status == "sending" %}
   <form method="post" action="{% url 'desk:campaigns_cancel' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Cancel</button></form>
   {% endif %}
+  <a class="d-btn danger" href="{% url 'desk:delete' 'campaigns' instance.pk %}">Delete</a>
+  {% endif %}
+  </div>
 </div>
-{% endif %}
 
 <form method="post" class="d-form" data-tabs="campaign">
   {% csrf_token %}

@@ -1,12 +1,14 @@
 {% extends "desk/base.html" %}
 {% load desk_extras %}
 {% block content %}
-<div class="d-page-head"><h1>{{ page_title }}</h1><p>{{ page_blurb }}</p></div>
-
-<div class="d-btn-row">
-  <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="load_sample_catalogue" value="1" class="d-btn">Load sample catalogue</button></form>
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="load_sample_catalogue" value="1" class="d-btn">Load sample catalogue</button></form>
   <a href="{{ add_url }}" class="d-btn primary">Add listing</a>
+  </div>
 </div>
+<p class="d-page-blurb">{{ page_blurb }}</p>
 
 {% include "desk/_toolbar.html" %}
 

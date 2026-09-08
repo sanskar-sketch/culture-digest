@@ -586,3 +586,98 @@ class SidebarAddLinkTests(LoggedInTestCase):
         self.assertIn('data-tip="Add listing"', html)
         self.assertIn('data-tip="Add interest"', html)
         self.assertNotIn('data-tip="Add listings"', html)
+
+
+class DeleteTests(LoggedInTestCase):
+    """Deleting shows what else it destroys first.
+
+    Recommendation.opportunity is CASCADE, so removing a listing also
+    erases every record of it having been recommended, and the reader
+    feedback the matching learns from. The confirmation has to say so.
+    """
+
+    def test_the_confirmation_spells_out_the_collateral_damage(self):
+        opp = opportunity()
+        reader = Reader.objects.create(email="ada@example.com")
+        issue = NewsletterIssue.objects.create(reader=reader)
+        Recommendation.objects.create(issue=issue, opportunity=opp, rationale="x")
+
+        response = self.client.get(reverse("desk:delete", args=["listings", opp.pk]))
+        self.assertContains(response, "This also deletes")
+        self.assertContains(response, "1 recommendation")
+        # and offers the alternative that keeps the history
+        self.assertContains(response, "Archiving it")
+
+    def test_nothing_is_deleted_by_merely_looking(self):
+        opp = opportunity()
+        self.client.get(reverse("desk:delete", args=["listings", opp.pk]))
+        self.assertTrue(Opportunity.objects.filter(pk=opp.pk).exists())
+
+    def test_posting_deletes_it(self):
+        opp = opportunity()
+        response = self.client.post(reverse("desk:delete", args=["listings", opp.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Opportunity.objects.filter(pk=opp.pk).exists())
+
+    def test_a_listing_nothing_depends_on_says_so(self):
+        opp = opportunity()
+        response = self.client.get(reverse("desk:delete", args=["listings", opp.pk]))
+        self.assertContains(response, "Nothing else depends on it")
+
+    def test_every_section_offers_delete_from_its_form(self):
+        tag = Tag.objects.create(name="Jazz nights", category="music")
+        reader = Reader.objects.create(email="ada@example.com")
+        campaign = Campaign.objects.create(name="c", subject="s", body="b")
+        template = EmailTemplate.objects.create(
+            name="t", kind=EmailTemplate.Kind.NEWSLETTER, html_body="<p>x</p>")
+        opp = opportunity()
+        for url, kind, pk in [
+            (reverse("desk:listings_change", args=[opp.pk]), "listings", opp.pk),
+            (reverse("desk:interests_change", args=[tag.pk]), "interests", tag.pk),
+            (reverse("desk:readers_change", args=[reader.pk]), "readers", reader.pk),
+            (reverse("desk:campaigns_change", args=[campaign.pk]), "campaigns", campaign.pk),
+            (reverse("desk:templates_change", args=[template.pk]), "templates", template.pk),
+        ]:
+            self.assertContains(self.client.get(url), reverse("desk:delete", args=[kind, pk]))
+
+    def test_an_unknown_kind_is_not_a_way_to_delete_anything(self):
+        self.assertEqual(
+            self.client.get(reverse("desk:delete", args=["siteconfig", 1])).status_code, 404)
+
+
+@plain_static
+class DeleteGuardTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.boss = User.objects.create_superuser("boss", "boss@example.com", "pw")
+        self.editor = User.objects.create_user("ed", "ed@example.com", "pw", is_staff=True)
+
+    def test_an_editor_cannot_delete_accounts(self):
+        self.client.login(username="ed", password="pw")
+        self.assertEqual(
+            self.client.get(reverse("desk:delete", args=["users", self.boss.pk])).status_code, 403)
+        self.assertTrue(get_user_model().objects.filter(pk=self.boss.pk).exists())
+
+    def test_you_cannot_delete_the_account_you_are_signed_in_with(self):
+        self.client.login(username="boss", password="pw")
+        response = self.client.post(reverse("desk:delete", args=["users", self.boss.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(get_user_model().objects.filter(pk=self.boss.pk).exists())
+
+
+class StickyHeaderTests(LoggedInTestCase):
+    def test_the_title_and_its_actions_share_one_pinned_bar(self):
+        html = self.client.get(reverse("desk:listings_list")).content.decode()
+        top = html.split('class="d-page-top"', 1)[1].split("</div>\n<p", 1)[0]
+        self.assertIn("<h1>", top)
+        self.assertIn("d-page-actions", top)
+        self.assertIn("Add listing", top)
+
+    def test_the_blurb_stays_out_of_the_pinned_bar(self):
+        """Pinning three lines of explanation would eat the screen it is
+        meant to help you use."""
+        html = self.client.get(reverse("desk:listings_list")).content.decode()
+        top = html.split('class="d-page-top"', 1)[1].split("</div>\n<p", 1)[0]
+        self.assertNotIn("d-page-blurb", top)
+        self.assertIn('class="d-page-blurb"', html)

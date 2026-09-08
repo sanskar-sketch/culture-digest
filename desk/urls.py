@@ -1,6 +1,7 @@
 from django.urls import path
 
-from .views import access, auth, campaigns, dashboard, interests, listings, newsletters, readers
+from .views import access, auth, campaigns, dashboard, deletion, interests, listings
+from .views import newsletters, readers
 from .views import settings as settings_views
 from .views import templates as template_views
 
@@ -52,6 +53,10 @@ urlpatterns = [
     path("groups/", access.group_list, name="groups_list"),
     path("groups/add/", access.group_form, name="groups_add"),
     path("groups/<int:pk>/", access.group_form, name="groups_change"),
+
+    # One delete for every section - see desk.views.deletion for why it
+    # always shows what else goes first.
+    path("<str:kind>/<int:pk>/delete/", deletion.delete, name="delete"),
 
     path("settings/", settings_views.siteconfig_form, name="siteconfig"),
     path("settings/reset-wording/", settings_views.reset_wording, name="siteconfig_reset_wording"),

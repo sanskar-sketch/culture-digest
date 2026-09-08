@@ -333,6 +333,23 @@
     paint();
   }
 
+
+  // ---- Sticky page header --------------------------------------------------
+  // Purely cosmetic: the header is sticky in CSS regardless, this only adds
+  // the border and shadow once it is actually holding position, so the edge
+  // doesn't show while the page is scrolled to the top.
+  function initStickyHeader() {
+    var top = document.querySelector(".d-page-top");
+    if (!top || !("IntersectionObserver" in window)) return;
+    var sentinel = document.createElement("div");
+    sentinel.setAttribute("aria-hidden", "true");
+    top.parentNode.insertBefore(sentinel, top);
+    new IntersectionObserver(function (entries) {
+      top.classList.toggle("is-stuck", !entries[0].isIntersecting);
+    }, { rootMargin: "-" + (parseInt(getComputedStyle(document.documentElement)
+        .getPropertyValue("--d-topbar-h"), 10) + 1) + "px 0px 0px 0px" }).observe(sentinel);
+  }
+
   function initConfirm() {
     // On a form: confirm before it submits. On a button inside a form with
     // several actions: confirm only for that button, since the others are
@@ -354,5 +371,6 @@
   initTabs();
   initBulkSelect();
   initSelects();
+  initStickyHeader();
   initConfirm();
 })();

@@ -1,13 +1,15 @@
 {% extends "desk/base.html" %}
 {% block content %}
-<div class="d-page-head"><h1>{{ page_title }}</h1><p>{{ page_blurb }}</p></div>
-
-<div class="d-btn-row">
-  {% for kind, label in kinds %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    {% for kind, label in kinds %}
   <form method="post" action="{% url 'desk:templates_from_builtin' kind %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Start from built-in {{ label|lower }}</button></form>
   {% endfor %}
   <a href="{{ add_url }}" class="d-btn primary">Add template</a>
+  </div>
 </div>
+<p class="d-page-blurb">{{ page_blurb }}</p>
 
 {% include "desk/_toolbar.html" %}
 <div class="d-table-wrap">

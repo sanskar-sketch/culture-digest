@@ -1,7 +1,14 @@
 {% extends "desk/base.html" %}
 {% block content %}
-<div class="d-page-head"><h1>{{ page_title }}</h1></div>
-{% if instance %}<div class="d-btn-row"><a class="d-btn" href="{% url 'desk:templates_preview' instance.pk %}">Preview</a></div>{% endif %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    {% if instance %}
+    <a class="d-btn" href="{% url 'desk:templates_preview' instance.pk %}">Preview</a>
+    {% if instance %}<a class="d-btn danger" href="{% url 'desk:delete' 'templates' instance.pk %}">Delete</a>{% endif %}
+    {% endif %}
+  </div>
+</div>
 <form method="post" class="d-form" style="max-width:900px;">
   {% csrf_token %}
   {% if form.non_field_errors %}

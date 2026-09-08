@@ -64,5 +64,6 @@ def interest_form(request, pk=None):
         "breadcrumbs": [("Interests", reverse("desk:interests_list")),
                         ("Add" if not instance else instance.name, None)],
         "form": form,
+        "instance": instance,
     }
     return render(request, "desk/interest_form.html", context)

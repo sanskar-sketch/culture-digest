@@ -4,6 +4,8 @@
    for what it styles. */
 
 :root {
+  /* Height of the sticky breadcrumb bar; .d-page-top pins just below it. */
+  --d-topbar-h: 48px;
   --d-bg: #f4f4f8;
   --d-surface: #ffffff;
   --d-surface-2: #eeeef4;
@@ -162,9 +164,26 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; 
 .d-crumbs .sep { margin: 0 6px; }
 .d-content { padding: 26px 32px 64px; max-width: 1180px; }
 
-.d-page-head { margin-bottom: 20px; }
-.d-page-head h1 { font-size: 26px; }
-.d-page-head p { margin: 6px 0 0; color: var(--d-muted); font-size: 14.5px; max-width: 70ch; }
+/* The title and its actions stay put while the page scrolls, so on a long
+   table you can still see where you are and still reach Add / Save /
+   Delete. It sits directly under the breadcrumb bar, which is itself
+   sticky at 0 - hence the offset. The blurb is deliberately left outside:
+   it is worth reading once, and pinning three lines of it would eat the
+   screen it is meant to help you use. */
+.d-page-top {
+  position: sticky; top: var(--d-topbar-h); z-index: 9;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px 16px;
+  margin: 0 -32px 16px; padding: 14px 32px;
+  background: var(--d-bg);
+  border-bottom: 1px solid transparent;
+}
+/* Only show its edge once it is actually holding position. */
+.d-page-top.is-stuck { border-bottom-color: var(--d-line); box-shadow: 0 6px 16px -12px rgba(0,0,0,.4); }
+.d-page-top h1 { font-size: 26px; min-width: 0; }
+.d-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.d-page-actions form.d-inline { display: inline-flex; }
+.d-page-blurb { margin: 0 0 20px; color: var(--d-muted); font-size: 14.5px; max-width: 70ch; }
 
 /* ---------- messages -------------------------------------------------- */
 .d-messages { display: grid; gap: 8px; margin: 0 0 18px; }
@@ -473,3 +492,5 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
 }
 .d-combo-option:hover, .d-combo-option.is-active { background: var(--d-surface-2); color: var(--d-ink); }
 .d-combo-option[aria-selected="true"] { background: var(--d-accent-soft); color: var(--d-accent-ink); font-weight: 600; }
+
+.d-plain-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; }
