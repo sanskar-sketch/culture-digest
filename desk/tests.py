@@ -267,3 +267,87 @@ class SiteConfigTests(LoggedInTestCase):
         config.save()
         self.client.post(reverse("desk:siteconfig_reset_wording"))
         self.assertEqual(SiteConfig.load().site_name, "The Ether")
+
+
+class PreviewEscapingTests(LoggedInTestCase):
+    """Ported from the old admin when its campaign preview was retired.
+
+    The rendered email is a SafeString. Dropped into an attribute
+    unescaped, its first double quote ends the srcdoc early and the
+    iframe shows nothing.
+    """
+
+    def test_the_email_survives_the_srcdoc_attribute(self):
+        Reader.objects.create(email="ada@example.com", name="Ada")
+        campaign = Campaign.objects.create(name="c", subject="s", body="Hello.")
+        response = self.client.get(reverse("desk:campaigns_preview", args=[campaign.pk]))
+        self.assertContains(response, 'srcdoc="&lt;!doctype html&gt;')
+        self.assertNotContains(response, 'srcdoc="<!doctype')
+
+
+class TemplatePreviewTests(LoggedInTestCase):
+    """Ported from the old admin: a preview renders from stand-in data, so
+    it never depends on a real reader existing."""
+
+    def test_preview_renders_without_touching_a_reader(self):
+        self.assertFalse(Reader.objects.exists())
+        template = EmailTemplate.objects.create(
+            name="P", kind=EmailTemplate.Kind.NEWSLETTER,
+            html_body="{% for rec in recommendations %}<b>{{ rec.opportunity.title }}</b>{% endfor %}")
+        response = self.client.get(reverse("desk:templates_preview", args=[template.pk]))
+        self.assertContains(response, "basement jazz room")
+        self.assertFalse(Reader.objects.exists())
+
+
+class WordingDriftTests(LoggedInTestCase):
+    """Ported from the old admin: drift has to be visible on the page, not
+    just computed - the reset button is useless if you can't see what it
+    would change."""
+
+    def test_drift_is_shown_on_the_settings_page(self):
+        config = SiteConfig.load()
+        config.tagline = "stale wording"
+        config.save()
+        cache.clear()
+        response = self.client.get(reverse("desk:siteconfig"))
+        self.assertContains(response, "stale wording")
+        self.assertContains(response, "Take the shipped wording")
+
+
+@plain_static
+class RetiredAdminRedirectTests(TestCase):
+    """The old admin's replaced screens send you to the desk, so a stale
+    bookmark can't land on an unmaintained copy. Users and Groups stay
+    where they are - the desk doesn't rebuild those."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = get_user_model().objects.create_superuser("su", "su@example.com", "pw")
+        self.client.login(username="su", password="pw")
+
+    def test_replaced_screens_redirect_to_the_desk(self):
+        for old, expected in [
+            ("/admin/", reverse("desk:dashboard")),
+            ("/admin/readers/reader/", reverse("desk:readers_list")),
+            ("/admin/opportunities/opportunity/", reverse("desk:listings_list")),
+            ("/admin/opportunities/tag/", reverse("desk:interests_list")),
+            ("/admin/campaigns/campaign/", reverse("desk:campaigns_list")),
+            ("/admin/recommendations/newsletterissue/", reverse("desk:issues_list")),
+            ("/admin/recommendations/recommendation/", reverse("desk:recommendations_list")),
+            ("/admin/siteconfig/siteconfig/", reverse("desk:siteconfig")),
+            ("/admin/siteconfig/emailtemplate/", reverse("desk:templates_list")),
+        ]:
+            response = self.client.get(old)
+            self.assertEqual(response.status_code, 302, old)
+            self.assertEqual(response.url, expected, old)
+
+    def test_a_deep_link_redirects_too(self):
+        """Not just the list page - an old link to one record as well."""
+        response = self.client.get("/admin/readers/reader/1/change/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("desk:readers_list"))
+
+    def test_users_and_groups_still_work(self):
+        for url in ("/admin/auth/user/", "/admin/auth/group/"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200, url)

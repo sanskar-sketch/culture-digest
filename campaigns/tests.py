@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from io import StringIO
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
@@ -256,91 +255,6 @@ class SendHourTests(TestCase):
 
 
 @plain_static
-class CampaignAdminTests(TestCase):
-    def setUp(self):
-        cache.clear()
-        User = get_user_model()
-        self.editor = User.objects.create_superuser(
-            "editor", "editor@example.com", "pw")
-        self.client.force_login(self.editor)
-        self.ada = Reader.objects.create(email="ada@example.com", name="Ada Lovelace")
-
-    def test_the_pages_render(self):
-        c = campaign(status=Campaign.Status.DRAFT)
-        for url in (
-            reverse("admin:campaigns_campaign_changelist"),
-            reverse("admin:campaigns_campaign_add"),
-            reverse("admin:campaigns_campaign_change", args=[c.pk]),
-            reverse("admin:campaigns_campaign_preview", args=[c.pk]),
-        ):
-            response = self.client.get(url)
-            self.assertEqual(response.status_code, 200, url)
-
-    def test_preview_is_written_for_a_real_reader(self):
-        c = campaign(status=Campaign.Status.DRAFT)
-        response = self.client.get(reverse("admin:campaigns_campaign_preview", args=[c.pk]))
-        self.assertContains(response, "Ada Lovelace")
-        self.assertContains(response, "Ada, this weekend at Frieze")
-
-    def test_schedule_then_send_now_from_the_buttons(self):
-        c = campaign(status=Campaign.Status.DRAFT)
-        self.client.post(reverse("admin:campaigns_campaign_schedule", args=[c.pk]))
-        c.refresh_from_db()
-        self.assertEqual(c.status, Campaign.Status.SCHEDULED)
-
-        with override_settings(SENDGRID_API_KEY="test-key"), \
-                patch("campaigns.sending.deliver", return_value="msg-1") as deliver:
-            self.client.post(reverse("admin:campaigns_campaign_send_now", args=[c.pk]))
-        c.refresh_from_db()
-        self.assertEqual(c.status, Campaign.Status.SENT)
-        self.assertEqual(deliver.call_args.args[0], "ada@example.com")
-
-    def test_state_changes_need_a_post(self):
-        c = campaign(status=Campaign.Status.DRAFT)
-        response = self.client.get(reverse("admin:campaigns_campaign_send_now", args=[c.pk]))
-        self.assertEqual(response.status_code, 405)
-        c.refresh_from_db()
-        self.assertEqual(c.status, Campaign.Status.DRAFT)
-
-    @override_settings(SENDGRID_API_KEY="test-key")
-    @patch("campaigns.sending.deliver", return_value="msg-1")
-    def test_a_test_send_goes_to_the_editor_not_the_reader(self, deliver):
-        c = campaign(status=Campaign.Status.DRAFT)
-        self.client.post(reverse("admin:campaigns_campaign_test_send", args=[c.pk]))
-        self.assertEqual(deliver.call_count, 1)
-        self.assertEqual(deliver.call_args.args[0], "editor@example.com")
-        self.assertTrue(deliver.call_args.args[1].startswith("[Test]"))
-        self.assertFalse(c.deliveries.exists())
-
-    def test_cancelling_stops_anything_not_yet_sent(self):
-        c = campaign()
-        self.client.post(reverse("admin:campaigns_campaign_cancel", args=[c.pk]))
-        c.refresh_from_db()
-        self.assertEqual(c.status, Campaign.Status.CANCELLED)
-        self.assertEqual(send_campaign(c, budget_seconds=30).attempted, 0)
-
-    def test_campaigns_appear_in_the_sidebar_and_index(self):
-        response = self.client.get(reverse("admin:index"))
-        self.assertContains(response, reverse("admin:campaigns_campaign_changelist"))
-
-
-@plain_static
-class PreviewEscapingTests(TestCase):
-    """The rendered email is a SafeString. Dropped into an attribute unescaped,
-    its first double quote ends the srcdoc early and the iframe shows nothing."""
-
-    def setUp(self):
-        cache.clear()
-        self.client.force_login(get_user_model().objects.create_superuser("e", "e@x.com", "pw"))
-        Reader.objects.create(email="ada@example.com", name="Ada")
-
-    def test_the_email_survives_the_srcdoc_attribute(self):
-        c = campaign(status=Campaign.Status.DRAFT)
-        response = self.client.get(reverse("admin:campaigns_campaign_preview", args=[c.pk]))
-        self.assertContains(response, 'srcdoc="&lt;!doctype html&gt;')
-        self.assertNotContains(response, 'srcdoc="<!doctype')
-
-
 def _weekly_today():
     config = SiteConfig.load()
     config.send_frequency = SiteConfig.Frequency.WEEKLY
