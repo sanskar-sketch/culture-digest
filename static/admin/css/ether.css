@@ -388,7 +388,12 @@ ul.errorlist { margin: 6px 0 0; padding: 0; list-style: none; color: var(--error
 #changelist.filtered .results, #changelist.filtered .paginator, #changelist.filtered .actions,
 #changelist.filtered #toolbar, #changelist.filtered .xfull { margin-right: 0 !important; width: auto !important; }
 
-.e-toolbar-row { display: flex; align-items: stretch; gap: 10px; margin: 0 0 14px; flex-wrap: wrap; }
+.e-toolbar-row { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; flex-wrap: wrap; }
+/* changelists.css loads after this file and sets #toolbar's margin at the
+   same specificity, so it wins a plain "#toolbar { margin: 0 }" - the class
+   here outranks it. Without this the stray 15px bottom margin inflates the
+   row and drags the Filters button's height with it. */
+.e-toolbar-row #toolbar { margin: 0; }
 #toolbar {
   background: var(--e-surface); border: 1px solid var(--e-line);
   border-radius: var(--e-radius); box-shadow: var(--e-shadow);
@@ -463,7 +468,7 @@ img[src*="icon-yes"], img[src*="icon-no"], img[src*="icon-unknown"] { width: 16p
 /* Filters trigger, next to search */
 .e-filters-trigger {
   display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 13px; font-weight: 600;
-  padding: 0 16px; border-radius: 999px; border: 1px solid var(--e-line); background: var(--e-surface-2);
+  padding: 0 16px; height: 46px; border-radius: 999px; border: 1px solid var(--e-line); background: var(--e-surface-2);
   color: var(--e-ink); cursor: pointer; white-space: nowrap; flex: none;
 }
 .e-filters-trigger:hover, .e-filters-trigger[aria-expanded="true"] { border-color: var(--e-accent); color: var(--e-accent); }
