@@ -1,0 +1,34 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · The Ether desk</title>
+<link rel="stylesheet" href="{% static 'desk/css/desk.css' %}">
+</head>
+<body>
+<div class="d-login-page">
+  <div class="d-login-card">
+    <div class="d-login-brand"><span class="dot"></span><strong>{{ site_config.site_name|default:"The Ether" }}</strong></div>
+    <p class="d-login-sub">Editorial desk</p>
+    {% if form.non_field_errors %}
+    <div class="d-messages">{% for error in form.non_field_errors %}<div class="d-msg error">{{ error }}</div>{% endfor %}</div>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <div class="d-field{% if form.username.errors %} has-error{% endif %}">
+        <label class="d-label" for="{{ form.username.id_for_label }}">Username</label>
+        {{ form.username }}
+      </div>
+      <div class="d-field{% if form.password.errors %} has-error{% endif %}">
+        <label class="d-label" for="{{ form.password.id_for_label }}">Password</label>
+        {{ form.password }}
+      </div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit" class="d-btn primary">Sign in</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

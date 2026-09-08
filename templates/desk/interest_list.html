@@ -1,0 +1,36 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1><p>{{ page_blurb }}</p></div>
+<div class="d-btn-row"><a href="{{ add_url }}" class="d-btn primary">Add interest</a></div>
+{% include "desk/_toolbar.html" %}
+<div class="d-table-wrap">
+  <div class="d-table-scroll">
+  <table class="d-table">
+    <thead><tr><th>Name</th><th>Category</th><th>Listings</th><th>Readers interested</th><th>Slug</th></tr></thead>
+    <tbody>
+      {% for tag in page_obj %}
+      <tr>
+        <td><a class="d-row-link" href="{% url 'desk:interests_change' tag.pk %}">{{ tag.name }}</a></td>
+        <td>
+          <form method="post" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="tag_id" value="{{ tag.pk }}">
+            <select name="category_value" onchange="this.form.submit()" style="min-height:32px;font-size:12.5px;padding:4px 26px 4px 8px;">
+              <option value=""{% if not tag.category %} selected{% endif %}>—</option>
+              {% for value, label in categories %}<option value="{{ value }}"{% if tag.category == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </form>
+        </td>
+        <td>{% if tag.listings_count %}{{ tag.listings_count }}{% else %}<span style="color:var(--d-bad)">none yet</span>{% endif %}</td>
+        <td>{{ tag.readers_count|default:"—" }}</td>
+        <td><code>{{ tag.slug }}</code></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="d-empty">No interests match. <a href="{{ add_url }}">Add one</a>.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% include "desk/_pagination.html" %}
+{% endblock %}

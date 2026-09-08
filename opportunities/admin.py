@@ -24,7 +24,7 @@ class TagAdmin(admin.ModelAdmin):
             _readers=Count("interested_readers", distinct=True),
         )
 
-    @admin.display(description="Opportunities", ordering="_opportunities")
+    @admin.display(description="Listings", ordering="_opportunities")
     def opportunity_count(self, obj):
         count = obj._opportunities
         if not count:
@@ -121,7 +121,7 @@ class OpportunityAdmin(admin.ModelAdmin):
             if added:
                 self.message_user(
                     request,
-                    f"Added {added} sample opportunities as drafts. Review them, replace "
+                    f"Added {added} sample listings as drafts. Review them, replace "
                     f"the placeholder booking links, then publish the ones you want.",
                     messages.SUCCESS,
                 )
@@ -277,15 +277,15 @@ class OpportunityAdmin(admin.ModelAdmin):
         updated = queryset.update(status=status)
         self.message_user(
             request,
-            f"{updated} opportunit{'y' if updated == 1 else 'ies'} marked {label}.",
+            f"{updated} listing{'' if updated == 1 else 's'} marked {label}.",
             messages.SUCCESS,
         )
 
-    @admin.action(description="Publish selected opportunities")
+    @admin.action(description="Publish selected listings")
     def publish(self, request, queryset):
         self._set_status(request, queryset, Opportunity.Status.PUBLISHED, "published")
 
-    @admin.action(description="Archive selected opportunities")
+    @admin.action(description="Archive selected listings")
     def archive(self, request, queryset):
         self._set_status(request, queryset, Opportunity.Status.ARCHIVED, "archived")
 

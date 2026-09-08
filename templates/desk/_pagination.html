@@ -1,0 +1,20 @@
+{% load desk_extras %}
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="d-pagination">
+  {% if page_obj.has_previous %}
+    <a href="{% qs_with page=page_obj.previous_page_number %}" aria-label="Previous page">&larr;</a>
+  {% endif %}
+  {% for num in page_obj.paginator.page_range %}
+    {% if num == page_obj.number %}
+      <span class="current">{{ num }}</span>
+    {% elif num == 1 or num == page_obj.paginator.num_pages or num|add:"-1" == page_obj.number or num|add:"1" == page_obj.number %}
+      <a href="{% qs_with page=num %}">{{ num }}</a>
+    {% elif num == 2 or num|add:"1" == page_obj.paginator.num_pages %}
+      <span class="ellipsis">&hellip;</span>
+    {% endif %}
+  {% endfor %}
+  {% if page_obj.has_next %}
+    <a href="{% qs_with page=page_obj.next_page_number %}" aria-label="Next page">&rarr;</a>
+  {% endif %}
+</div>
+{% endif %}

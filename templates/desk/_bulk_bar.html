@@ -1,0 +1,9 @@
+<div class="d-bulkbar">
+  <span>Action:</span>
+  <select name="action">
+    <option value="">---------</option>
+    {% for value, label in bulk_actions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="d-btn small">Go</button>
+  <span data-selected-count>0 selected</span>
+</div>

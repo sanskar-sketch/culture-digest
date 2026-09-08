@@ -1,0 +1,17 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1></div>
+{% if error %}
+<p style="color:var(--d-bad);">This template won't render: {{ error }}</p>
+{% else %}
+<div class="d-card">
+  <p style="font-size:13px;margin:0 0 6px;"><strong>Subject:</strong> {{ preview_subject }}</p>
+  <p style="font-size:12px;color:var(--d-muted);margin:0;">Rendered with stand-in data. No reader was touched and nothing was sent.</p>
+</div>
+<div class="d-split">
+  <div class="d-card"><h2>HTML</h2><iframe srcdoc="{{ preview_html|force_escape }}" class="d-preview-frame"></iframe></div>
+  <div class="d-card"><h2>Plain text</h2><pre class="d-preview-text">{{ preview_text }}</pre></div>
+</div>
+{% endif %}
+<a class="d-btn" href="{% url 'desk:templates_change' template_obj.pk %}">Back to editing</a>
+{% endblock %}

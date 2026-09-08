@@ -1,0 +1,236 @@
+from django.contrib import messages
+from django.db.models import Count
+from django.http import HttpResponseNotAllowed
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+
+from campaigns.models import Campaign, CampaignDelivery
+from campaigns.sending import WEB_BUDGET_SECONDS, preview_for, send_campaign, send_test
+from desk.forms import CampaignForm
+from desk.permissions import staff_required
+from desk.utils import filter_options, paginate, search
+from readers.models import Reader
+
+BULK_ACTIONS = (
+    ("schedule", "Schedule (goes at its send time, or straight away)"),
+    ("send_now", "Send now (really emails the audience)"),
+    ("cancel", "Cancel"),
+    ("back_to_draft", "Back to draft"),
+    ("retry_failed", "Retry failed or stuck deliveries"),
+)
+
+
+def _progress(campaign):
+    counts = dict(campaign.deliveries.values_list("status").annotate(n=Count("id")))
+    report = {value: counts.get(value, 0) for value in CampaignDelivery.Status.values}
+    report["total"] = sum(counts.values())
+    return report
+
+
+def _do_schedule(request, campaign) -> bool:
+    try:
+        campaign.full_clean()
+    except Exception as exc:
+        messages.error(request, f"{campaign}: can't schedule - {exc}")
+        return False
+    campaign.status = Campaign.Status.SCHEDULED
+    campaign.save(update_fields=["status", "updated_at"])
+    when = (f"for {timezone.localtime(campaign.send_at):%a %-d %b, %H:%M}"
+            if campaign.send_at else "for the scheduler's next pass (within a few minutes)")
+    messages.success(request, f"{campaign}: scheduled {when}.")
+    return True
+
+
+def _do_send_now(request, campaign):
+    if campaign.status not in (Campaign.Status.SCHEDULED, Campaign.Status.SENDING):
+        try:
+            campaign.full_clean()
+        except Exception as exc:
+            messages.error(request, f"{campaign}: can't send - {exc}")
+            return
+        campaign.status = Campaign.Status.SCHEDULED
+        campaign.send_at = None
+        campaign.save(update_fields=["status", "send_at", "updated_at"])
+    run = send_campaign(campaign, budget_seconds=WEB_BUDGET_SECONDS)
+    messages.success(request, f"{campaign}: {run.message}") if (run.sent or run.finished) and not run.failed \
+        else messages.error(request, f"{campaign}: {run.message}") if run.failed \
+        else messages.warning(request, f"{campaign}: {run.message}")
+
+
+@staff_required
+def campaign_list(request):
+    qs = Campaign.objects.all()
+    qs = search(qs, request, ["name", "subject", "brief", "body"])
+    status = request.GET.get("status")
+    if status:
+        qs = qs.filter(status=status)
+    personalise = request.GET.get("personalise")
+    if personalise in ("1", "0"):
+        qs = qs.filter(personalise=(personalise == "1"))
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        ids = request.POST.getlist("selected")
+        selected = list(Campaign.objects.filter(pk__in=ids))
+        if not ids:
+            messages.warning(request, "Nothing selected.")
+        elif action == "schedule":
+            for c in selected:
+                _do_schedule(request, c)
+        elif action == "send_now":
+            for c in selected:
+                _do_send_now(request, c)
+        elif action == "cancel":
+            n = Campaign.objects.filter(pk__in=ids).exclude(status=Campaign.Status.SENT).update(
+                status=Campaign.Status.CANCELLED, updated_at=timezone.now())
+            messages.success(request, f"Cancelled {n}.")
+        elif action == "back_to_draft":
+            n = Campaign.objects.filter(pk__in=ids).exclude(status=Campaign.Status.SENDING).update(
+                status=Campaign.Status.DRAFT, updated_at=timezone.now())
+            messages.success(request, f"Moved {n} back to draft.")
+        elif action == "retry_failed":
+            for c in selected:
+                n = c.deliveries.filter(
+                    status__in=[CampaignDelivery.Status.FAILED, CampaignDelivery.Status.SENDING]
+                ).update(status=CampaignDelivery.Status.PENDING, error="")
+                if n:
+                    c.status = Campaign.Status.SCHEDULED
+                    c.save(update_fields=["status", "updated_at"])
+                messages.success(request, f"{c}: {n} delivery{'' if n == 1 else 'ies'} queued again."
+                                 + (" The scheduler picks them up shortly." if n else ""))
+        return redirect(f"{request.path}?{request.GET.urlencode()}")
+
+    page_obj = paginate(request, qs.order_by("-created_at"))
+    for c in page_obj:
+        c.audience_size = c.audience().count()
+        c.progress_report = _progress(c)
+
+    filter_groups = [
+        {"title": "Status", "param": "status", "options": filter_options(request, "status", Campaign.Status.choices)},
+        {"title": "Personalise", "param": "personalise", "options": filter_options(request, "personalise", [("1", "Yes"), ("0", "No")])},
+    ]
+    context = {
+        "page_title": "Campaigns",
+        "page_blurb": "One-off emails on any subject - to everyone or a slice of readers, "
+                      "now or at a set time.",
+        "breadcrumbs": [("Campaigns", None)],
+        "page_obj": page_obj,
+        "result_count": qs.count(),
+        "search_placeholder": "Search campaigns…",
+        "filter_groups": filter_groups,
+        "has_active_filters": any(request.GET.get(g["param"]) for g in filter_groups),
+        "bulk_actions": BULK_ACTIONS,
+        "add_url": reverse("desk:campaigns_add"),
+    }
+    return render(request, "desk/campaign_list.html", context)
+
+
+@staff_required
+def campaign_form(request, pk=None):
+    instance = get_object_or_404(Campaign, pk=pk) if pk else None
+    if request.method == "POST":
+        form = CampaignForm(request.POST, instance=instance)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            if not obj.pk:
+                obj.created_by = request.user
+            obj.audience_categories = form.cleaned_data["audience_categories"]
+            obj.save()
+            form.save_m2m()
+            messages.success(request, f"Saved “{obj.name}”.")
+            if "save_add_another" in request.POST:
+                return redirect("desk:campaigns_add")
+            return redirect("desk:campaigns_change", pk=obj.pk)
+    else:
+        form = CampaignForm(instance=instance)
+
+    context = {
+        "page_title": "Add campaign" if not instance else instance.name,
+        "breadcrumbs": [("Campaigns", reverse("desk:campaigns_list")),
+                        ("Add" if not instance else instance.name, None)],
+        "form": form,
+        "instance": instance,
+        "audience_count": instance.audience().count() if instance else None,
+        "audience_description": instance.audience_description() if instance else None,
+        "progress": _progress(instance) if instance else None,
+        "deliveries": instance.deliveries.select_related("reader").order_by("pk")[:200] if instance else None,
+    }
+    return render(request, "desk/campaign_form.html", context)
+
+
+def _sample_reader(campaign, request):
+    wanted = request.GET.get("reader") or request.POST.get("reader")
+    if wanted:
+        found = campaign.audience().filter(pk=wanted).first()
+        if found:
+            return found
+    first = campaign.audience().first()
+    if first:
+        return first
+    return Reader(name="Ada Example", email="ada@example.com", location="London",
+                  interest_categories=["music"])
+
+
+@staff_required
+def campaign_preview(request, pk):
+    campaign = get_object_or_404(Campaign, pk=pk)
+    reader = _sample_reader(campaign, request)
+    try:
+        preview = preview_for(campaign, reader, budget_seconds=12)
+        error = None
+    except Exception as exc:
+        preview, error = {}, str(exc)
+    context = {
+        "page_title": f"Preview: {campaign.name}",
+        "breadcrumbs": [("Campaigns", reverse("desk:campaigns_list")), (campaign.name, reverse("desk:campaigns_change", args=[pk])), ("Preview", None)],
+        "campaign": campaign,
+        "reader": reader,
+        "preview": preview,
+        "error": error,
+        "readers": list(campaign.audience()[:50]),
+    }
+    return render(request, "desk/campaign_preview.html", context)
+
+
+@staff_required
+def campaign_test_send(request, pk):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    campaign = get_object_or_404(Campaign, pk=pk)
+    if not request.user.email:
+        messages.error(request, "Your account has no email address - add one under Access → Users first.")
+        return redirect("desk:campaigns_change", pk=pk)
+    try:
+        note = send_test(campaign, request.user.email, _sample_reader(campaign, request))
+        messages.success(request, note)
+    except Exception as exc:
+        messages.error(request, f"Test send failed: {exc}")
+    return redirect("desk:campaigns_change", pk=pk)
+
+
+@staff_required
+def campaign_schedule(request, pk):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    _do_schedule(request, get_object_or_404(Campaign, pk=pk))
+    return redirect("desk:campaigns_change", pk=pk)
+
+
+@staff_required
+def campaign_send_now(request, pk):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    _do_send_now(request, get_object_or_404(Campaign, pk=pk))
+    return redirect("desk:campaigns_change", pk=pk)
+
+
+@staff_required
+def campaign_cancel(request, pk):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    campaign = get_object_or_404(Campaign, pk=pk)
+    campaign.status = Campaign.Status.CANCELLED
+    campaign.save(update_fields=["status", "updated_at"])
+    messages.success(request, f"{campaign}: cancelled. Anyone not yet emailed won't be.")
+    return redirect("desk:campaigns_change", pk=pk)

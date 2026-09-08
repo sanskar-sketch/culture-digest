@@ -1,0 +1,65 @@
+<!doctype html>
+{% load static %}
+<html lang="en"{% if request.session.desk_theme %} data-theme="{{ request.session.desk_theme }}"{% endif %}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ page_title|default:"The Ether" }} · The Ether desk{% endblock %}</title>
+<link rel="stylesheet" href="{% static 'desk/css/desk.css' %}">
+{% block extrahead %}{% endblock %}
+</head>
+<body>
+<div class="d-shell">
+  <nav class="d-side" aria-label="Sections">
+    <div class="d-brand">
+      <span class="dot"></span>
+      <span><strong>{{ site_config.site_name|default:"The Ether" }}</strong><small>Editorial desk</small></span>
+      <button type="button" class="d-menu-toggle" aria-expanded="false">Menu</button>
+    </div>
+    <div class="d-nav">
+      <div class="d-nav-group">
+        <a href="{% url 'desk:dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>Overview</a>
+      </div>
+      {% for section in sidebar_sections %}
+      <div class="d-nav-group{% if section.collapsed %} is-quiet{% endif %}">
+        <span class="d-nav-label">{{ section.title }}</span>
+        {% for row in section.rows %}
+        <a href="{{ row.url }}"{% if row.active %} class="is-active"{% endif %}>
+          <span>{{ row.name }}</span>
+          {% if row.add_url %}<a class="d-add" href="{{ row.add_url }}" title="Add {{ row.name|lower }}" onclick="event.stopPropagation()">+</a>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="d-side-foot">
+      <span class="who">{% firstof request.user.get_short_name request.user.get_username %}</span>
+      <a href="/">View site</a>
+      <a href="{% url 'desk:password_change' %}">Password</a>
+      <form method="post" action="{% url 'desk:logout' %}" class="d-inline">{% csrf_token %}<button type="submit">Log out</button></form>
+    </div>
+  </nav>
+
+  <div class="d-main">
+    <div class="d-topbar">
+      <div class="d-crumbs">
+        <a href="{% url 'desk:dashboard' %}">Desk</a>
+        {% for label, url in breadcrumbs %}<span class="sep">&rsaquo;</span>{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}<span>{{ label }}</span>{% endif %}{% endfor %}
+      </div>
+    </div>
+    <div class="d-content">
+      {% if messages %}
+      <div class="d-messages">
+        {% for message in messages %}
+        <div class="d-msg {{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+<script src="{% static 'desk/js/desk.js' %}" defer></script>
+{% block extrabody %}{% endblock %}
+</body>
+</html>

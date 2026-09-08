@@ -1,0 +1,30 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1><p>{{ page_blurb }}</p></div>
+{% include "desk/_toolbar.html" %}
+<div class="d-table-wrap">
+  <div class="d-table-scroll">
+  <table class="d-table">
+    <thead><tr><th>Listing</th><th>Reader</th><th>Score</th><th>Feedback</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for rec in page_obj %}
+      <tr>
+        <td class="wrap"><a class="d-row-link" href="{% url 'desk:listings_change' rec.opportunity_id %}">{{ rec.opportunity.title }}</a></td>
+        <td><a class="d-row-link" href="{% url 'desk:readers_change' rec.issue.reader_id %}">{{ rec.issue.reader.email }}</a></td>
+        <td>{{ rec.score|floatformat:1 }}</td>
+        <td>
+          {% if rec.feedback == "more_like_this" %}<span class="d-pill accent">More like this</span>
+          {% elif rec.feedback == "booked" %}<span class="d-pill good">Booked</span>
+          {% elif rec.feedback == "save" %}<span class="d-pill accent">Saved</span>
+          {% elif rec.feedback == "not_for_me" %}<span class="d-pill bad">Not for me</span>
+          {% else %}<span class="d-pill neutral">—</span>{% endif %}
+        </td>
+        <td>{{ rec.created_at|date:"j M Y" }}</td>
+      </tr>
+      {% empty %}<tr><td colspan="5" class="d-empty">No recommendations match.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% include "desk/_pagination.html" %}
+{% endblock %}

@@ -1,5 +1,5 @@
 {% extends "admin/change_list.html" %}
-{% load i18n admin_urls %}
+{% load i18n admin_urls admin_list %}
 
 {% comment %}
 Every list page says what it is for. The title is the plain name of the
@@ -27,4 +27,51 @@ of the same name - the loader skips this file when resolving the parent.
   {% else %}
     {{ block.super }}
   {% endif %}
+{% endblock %}
+
+{% comment %}
+Filters as a popup, not a permanent column: a button next to search opens
+a side panel over the page instead of the list fighting a reserved column
+for space. Rewritten in full (not block.super + a wrapper) so a close
+button and the backdrop can sit in the same markup Django would render.
+Without JavaScript the panel is a normal block on the page, exactly as
+before - ether.js is what turns it into a popup.
+{% endcomment %}
+{% block search %}
+<div class="e-toolbar-row">
+  {{ block.super }}
+  {% if cl.has_filters %}
+  <button type="button" class="e-filters-trigger" aria-haspopup="dialog"
+          aria-controls="changelist-filter" aria-expanded="false">
+    <span>{% translate 'Filters' %}</span>
+    <span class="e-filters-count" hidden>0</span>
+  </button>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block filters %}
+{% if cl.has_filters %}
+<div class="e-filter-backdrop" hidden></div>
+<nav id="changelist-filter" aria-labelledby="changelist-filter-header">
+  <div class="e-filter-head">
+    <h2 id="changelist-filter-header">{% translate 'Filters' %}</h2>
+    <button type="button" class="e-filter-close" aria-label="{% translate 'Close' %}">&times;</button>
+  </div>
+  {% if cl.is_facets_optional or cl.has_active_filters %}
+  <div id="changelist-filter-extra-actions">
+    {% if cl.is_facets_optional %}<h3>
+      {% if cl.add_facets %}<a href="{{ cl.remove_facet_link }}" class="hidelink">{% translate "Hide counts" %}</a>
+      {% else %}<a href="{{ cl.add_facet_link }}" class="viewlink">{% translate "Show counts" %}</a>{% endif %}
+    </h3>{% endif %}
+    {% if cl.has_active_filters %}<h3>
+      <a href="{{ cl.clear_all_filters_qs }}">&#10006; {% translate "Clear all filters" %}</a>
+    </h3>{% endif %}
+  </div>
+  {% endif %}
+  <div class="e-filter-body">
+    {% for spec in cl.filter_specs %}{% admin_list_filter cl spec %}{% endfor %}
+  </div>
+</nav>
+{% endif %}
 {% endblock %}

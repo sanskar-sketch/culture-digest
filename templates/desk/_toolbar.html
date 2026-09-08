@@ -1,0 +1,53 @@
+{% load desk_extras %}
+<div class="d-toolbar">
+  {% if search_placeholder %}
+  <form method="get" class="d-search" role="search">
+    <input type="search" name="q" value="{{ request.GET.q }}" placeholder="{{ search_placeholder }}" aria-label="Search">
+    {% for key, value in request.GET.items %}{% if key != "q" and key != "page" %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+    <button type="submit" class="d-btn small">Search</button>
+    {% if result_count is not None %}<span class="d-result-count">{{ result_count }} result{{ result_count|pluralize }}</span>{% endif %}
+  </form>
+  {% endif %}
+  {% if filter_groups %}
+  <button type="button" class="d-filters-trigger" aria-haspopup="dialog" aria-controls="d-filter-panel" aria-expanded="false">
+    <span>Filters</span><span class="d-filters-count" hidden>0</span>
+  </button>
+  {% endif %}
+  {% block toolbar_extra %}{% endblock %}
+</div>
+
+{% if filter_groups %}
+<div class="d-filter-backdrop" hidden></div>
+<nav class="d-filter-panel" id="d-filter-panel" hidden aria-label="Filters">
+  <div class="d-filter-head">
+    <h2>Filters</h2>
+    <button type="button" class="d-filter-close" aria-label="Close">&times;</button>
+  </div>
+  {% if has_active_filters %}
+  <div class="d-filter-actions">
+    <a href="{{ request.path }}">&#10006; Clear all filters</a>
+  </div>
+  {% endif %}
+  <div class="d-filter-body">
+    {% for group in filter_groups %}
+    <details class="d-filter-group" data-title="{{ group.title }}">
+      <summary>
+        <span class="d-filter-title">{{ group.title }}</span>
+        <span class="d-filter-picked" hidden></span>
+        <span class="d-filter-chevron" aria-hidden="true"></span>
+      </summary>
+      {% if group.options|length > 9 %}
+      <div class="d-filter-narrow"><input type="search" placeholder="Type to narrow&hellip;" aria-label="Narrow {{ group.title }}"></div>
+      {% endif %}
+      <ul class="d-chips">
+        {% for opt in group.options %}
+        <li class="{% if opt.selected %}selected{% endif %}{% if not opt.value %} is-default{% endif %}">
+          <a href="{% qs_with_param param=group.param value=opt.value %}">{{ opt.label }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endfor %}
+  </div>
+</nav>
+{% endif %}

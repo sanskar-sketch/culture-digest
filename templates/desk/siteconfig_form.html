@@ -1,0 +1,104 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1></div>
+
+<form method="post" class="d-form" data-tabs="siteconfig" style="max-width:900px;">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="d-messages">{% for error in form.non_field_errors %}<div class="d-msg error">{{ error }}</div>{% endfor %}</div>
+  {% endif %}
+
+  <div class="d-fieldset" data-tab-panel="Branding">
+    <p class="d-fieldset-desc">Shown on the public pages and in the newsletter.</p>
+    {% include "desk/_field.html" with field=form.site_name %}
+    {% include "desk/_field.html" with field=form.tagline %}
+    {% include "desk/_field.html" with field=form.hero_eyebrow %}
+    {% include "desk/_field.html" with field=form.hero_headline %}
+    {% include "desk/_field.html" with field=form.hero_subhead %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Sending">
+    <p class="d-fieldset-desc">How many picks go out, to whom, and how often the same thing may reappear.</p>
+    {% include "desk/_field.html" with field=form.recommendations_per_send %}
+    {% include "desk/_field.html" with field=form.min_recommendations %}
+    {% include "desk/_field.html" with field=form.cooldown_days %}
+    {% include "desk/_field.html" with field=form.email_from %}
+    {% include "desk/_field.html" with field=form.subject_template %}
+    {% include "desk/_field.html" with field=form.send_welcome_email %}
+    {% include "desk/_field.html" with field=form.welcome_subject %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Schedule">
+    <p class="d-fieldset-desc">When the newsletter goes out. A scheduler runs every few minutes; on a send day it sends on its first pass after the send hour, once. One-off emails are scheduled from Campaigns.</p>
+    {% include "desk/_field.html" with field=form.send_frequency %}
+    {% include "desk/_field.html" with field=form.send_weekday %}
+    {% include "desk/_field.html" with field=form.send_day_of_month %}
+    {% include "desk/_field.html" with field=form.send_hour %}
+    <p style="font-size:13px;color:var(--d-muted);">Last scheduled send completed: {{ config.last_sent_on|default:"never" }}</p>
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Email templates">
+    <p class="d-fieldset-desc">Leave these empty to use the built-in emails. To write your own, go to Email templates, start from the built-in version, then select it here.</p>
+    {% include "desk/_field.html" with field=form.welcome_template %}
+    {% include "desk/_field.html" with field=form.newsletter_template %}
+    {% include "desk/_field.html" with field=form.campaign_template %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Matching — raises a score">
+    <p class="d-fieldset-desc">Higher numbers mean a stronger pull. These decide which listings a reader actually sees.</p>
+    {% include "desk/_field.html" with field=form.weight_tag_overlap %}
+    {% include "desk/_field.html" with field=form.weight_category %}
+    {% include "desk/_field.html" with field=form.weight_inferred_tag %}
+    {% include "desk/_field.html" with field=form.weight_critic_rating %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Matching — lowers or excludes">
+    {% include "desk/_field.html" with field=form.penalty_avoid_tag %}
+    {% include "desk/_field.html" with field=form.penalty_price_step %}
+    {% include "desk/_field.html" with field=form.max_price_distance %}
+    {% include "desk/_field.html" with field=form.penalty_mainstream_gap %}
+    {% include "desk/_field.html" with field=form.penalty_scale_gap %}
+    {% include "desk/_field.html" with field=form.penalty_out_of_area %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Learning from feedback">
+    <p class="d-fieldset-desc">How much each feedback click shifts future picks. This is the loop that makes recommendations improve over time.</p>
+    {% include "desk/_field.html" with field=form.feedback_more_like_this %}
+    {% include "desk/_field.html" with field=form.feedback_saved %}
+    {% include "desk/_field.html" with field=form.feedback_booked %}
+    {% include "desk/_field.html" with field=form.feedback_not_for_me %}
+    {% include "desk/_field.html" with field=form.dislike_drop_threshold %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="AI assistance">
+    <p class="d-fieldset-desc">Every feature falls back to a deterministic template when switched off or unavailable. API keys stay in the environment, not here.</p>
+    {% include "desk/_field.html" with field=form.ai_enabled %}
+    {% include "desk/_field.html" with field=form.ai_write_rationales %}
+    {% include "desk/_field.html" with field=form.ai_write_campaigns %}
+    {% include "desk/_field.html" with field=form.ai_interpret_readers %}
+    {% include "desk/_field.html" with field=form.ai_classify_opportunities %}
+    {% include "desk/_field.html" with field=form.ai_model %}
+    {% include "desk/_field.html" with field=form.ai_timeout_seconds %}
+    {% include "desk/_field.html" with field=form.ai_send_budget_seconds %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Shipped wording">
+    <p class="d-fieldset-desc">Text that ships with a default. Defaults only apply when this configuration is first created, so an improved default never reaches an existing site on its own - this shows where yours differs, and lets you take the newer wording if you want it.</p>
+    {% if drift %}
+    <table class="d-table" style="margin-bottom:14px;">
+      <thead><tr><th>Field</th><th>Yours</th><th>Shipped</th></tr></thead>
+      <tbody>{% for d in drift %}<tr><td><code>{{ d.field }}</code></td><td class="wrap">{{ d.current|default:"(empty)" }}</td><td class="wrap" style="color:var(--d-muted);">{{ d.shipped }}</td></tr>{% endfor %}</tbody>
+    </table>
+    <form method="post" action="{% url 'desk:siteconfig_reset_wording' %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Take the shipped wording for these {{ drift|length }} field(s)</button></form>
+    {% else %}
+    <p style="color:var(--d-good);font-size:14px;">Everything matches the shipped wording.</p>
+    {% endif %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Metadata">
+    <p style="font-size:13px;color:var(--d-muted);margin:0;">Last updated {{ config.updated_at|date:"j M Y, H:i" }}</p>
+  </div>
+
+  <div class="d-form-actions"><button type="submit" class="d-btn primary">Save</button></div>
+</form>
+{% endblock %}

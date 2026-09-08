@@ -1,0 +1,14 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1><p>To {{ issue.reader.email }} · {{ issue.created_at|date:"j M Y, H:i" }}{% if issue.sent_at %} · sent {{ issue.sent_at|date:"j M Y, H:i" }}{% else %} · not sent{% endif %}</p></div>
+<div class="d-sublist">
+  {% for rec in recommendations %}
+  <div class="d-sublist-row">
+    <span style="flex:0 0 260px;font-weight:600;color:var(--d-ink);">{{ rec.opportunity.title }}</span>
+    <span style="flex:0 0 100px;">{{ rec.score|floatformat:1 }}</span>
+    <span style="flex:0 0 140px;">{{ rec.get_feedback_display }}</span>
+    <span style="flex:1;color:var(--d-muted);">{{ rec.rationale|truncatewords:20 }}</span>
+  </div>
+  {% empty %}<div class="d-sublist-empty">No picks in this issue.</div>{% endfor %}
+</div>
+{% endblock %}

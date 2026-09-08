@@ -1,0 +1,17 @@
+{% load desk_extras %}
+{% with widget=field|field_type %}
+<div class="d-field{% if field.errors %} has-error{% endif %}">
+  {% if widget == "CheckboxInput" %}
+    <div class="d-checkbox-row">{{ field }}<label for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+  {% else %}
+    <label class="d-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {% if widget == "CheckboxSelectMultiple" %}
+      <div class="d-check-grid">{{ field }}</div>
+    {% else %}
+      {{ field }}
+    {% endif %}
+  {% endif %}
+  {% for error in field.errors %}<p class="d-errors">{{ error }}</p>{% endfor %}
+  {% if field.help_text %}<span class="d-help">{{ field.help_text|safe }}</span>{% endif %}
+</div>
+{% endwith %}

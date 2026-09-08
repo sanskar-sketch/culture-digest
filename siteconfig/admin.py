@@ -41,7 +41,7 @@ class EmailTemplateForm(forms.ModelForm):
 @admin.register(EmailTemplate)
 class EmailTemplateAdmin(admin.ModelAdmin):
     form = EmailTemplateForm
-    change_form_template = "admin/siteconfig/tabbed_change_form.html"
+    change_form_template = "admin/siteconfig/emailtemplate/change_form.html"
     list_display = ("name", "kind", "in_use", "updated_at")
     list_filter = ("kind",)
     search_fields = ("name", "subject", "html_body", "notes")
@@ -81,9 +81,17 @@ class EmailTemplateAdmin(admin.ModelAdmin):
                  name="siteconfig_emailtemplate_from_builtin"),
         ] + super().get_urls()
 
+    def changelist_view(self, request, extra_context=None):
+        extra_context = {**(extra_context or {}), "kinds": EmailTemplate.Kind.choices}
+        return super().changelist_view(request, extra_context=extra_context)
+
     def from_builtin(self, request, kind):
         """Create a copy of the shipped email, so editing starts from the real
         thing rather than an empty box."""
+        from django.http import HttpResponseNotAllowed
+
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
         if kind not in EmailTemplate.Kind.values:
             self.message_user(request, f"Unknown kind {kind!r}.", messages.ERROR)
             return redirect(reverse("admin:siteconfig_emailtemplate_changelist"))

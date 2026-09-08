@@ -1,0 +1,31 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1><p>{{ page_blurb }}</p></div>
+
+<div class="d-btn-row">
+  {% for kind, label in kinds %}
+  <form method="post" action="{% url 'desk:templates_from_builtin' kind %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Start from built-in {{ label|lower }}</button></form>
+  {% endfor %}
+  <a href="{{ add_url }}" class="d-btn primary">Add template</a>
+</div>
+
+{% include "desk/_toolbar.html" %}
+<div class="d-table-wrap">
+  <div class="d-table-scroll">
+  <table class="d-table">
+    <thead><tr><th>Name</th><th>Kind</th><th>In use</th><th>Updated</th></tr></thead>
+    <tbody>
+      {% for t in page_obj %}
+      <tr>
+        <td><a class="d-row-link" href="{% url 'desk:templates_change' t.pk %}">{{ t.name }}</a></td>
+        <td>{{ t.get_kind_display }}</td>
+        <td>{% if t.in_use %}<span class="d-pill good">Yes</span>{% else %}<span class="d-pill neutral">No</span>{% endif %}</td>
+        <td>{{ t.updated_at|date:"j M Y, H:i" }}</td>
+      </tr>
+      {% empty %}<tr><td colspan="4" class="d-empty">No templates yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% include "desk/_pagination.html" %}
+{% endblock %}

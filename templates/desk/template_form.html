@@ -1,0 +1,34 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1></div>
+{% if instance %}<div class="d-btn-row"><a class="d-btn" href="{% url 'desk:templates_preview' instance.pk %}">Preview</a></div>{% endif %}
+<form method="post" class="d-form" style="max-width:900px;">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="d-messages">{% for error in form.non_field_errors %}<div class="d-msg error">{{ error }}</div>{% endfor %}</div>
+  {% endif %}
+  <div class="d-fieldset">
+    {% include "desk/_field.html" with field=form.name %}
+    {% include "desk/_field.html" with field=form.kind %}
+    {% include "desk/_field.html" with field=form.notes %}
+  </div>
+  <div class="d-fieldset">
+    <h2>Subject</h2>
+    {% include "desk/_field.html" with field=form.subject %}
+  </div>
+  <div class="d-fieldset">
+    <h2>What you can use</h2>
+    <p style="font-size:13px;">{% for p in placeholders %}<code>{{ p }}</code> {% endfor %}</p>
+    <p style="font-size:12px;color:var(--d-muted);margin:10px 0 0;">Anything you leave out simply won't appear. Keep the unsubscribe link - it has to be there.</p>
+  </div>
+  <div class="d-fieldset">
+    <h2>HTML version</h2>
+    {% include "desk/_field.html" with field=form.html_body %}
+  </div>
+  <div class="d-fieldset">
+    <h2>Plain-text version</h2>
+    {% include "desk/_field.html" with field=form.text_body %}
+  </div>
+  <div class="d-form-actions"><button type="submit" class="d-btn primary">Save</button></div>
+</form>
+{% endblock %}

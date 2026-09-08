@@ -1,0 +1,17 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+{% comment %}
+Writing a template from a blank box is the wrong starting point; these copy
+the built-in version so editing starts from the real thing. POST, because
+each press creates a row.
+{% endcomment %}
+{% block object-tools-items %}
+  {% for kind, label in kinds %}
+  <li>
+    <form method="post" action="{% url 'admin:siteconfig_emailtemplate_from_builtin' kind %}">
+      {% csrf_token %}<button type="submit">{% translate 'Start from built-in' %} {{ label|lower }}</button>
+    </form>
+  </li>
+  {% endfor %}
+  {{ block.super }}
+{% endblock %}

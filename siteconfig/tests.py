@@ -87,7 +87,7 @@ class EmailTemplateTests(TestCase):
 
     def test_starting_from_the_built_in_version_copies_it(self):
         self.client.force_login(staff())
-        self.client.get(
+        self.client.post(
             reverse("admin:siteconfig_emailtemplate_from_builtin", args=["newsletter"]),
             follow=True)
         template = EmailTemplate.objects.get(kind="newsletter")
@@ -236,3 +236,37 @@ class ShippedWordingTests(TestCase):
 
         self.config.refresh_from_db()
         self.assertIn("filtered", self.config.tagline)
+
+
+
+@plain_static
+class EmailTemplateButtonsTests(TestCase):
+    """The starting points and the preview are reachable from the pages."""
+
+    def setUp(self):
+        cache.clear()
+        self.client.force_login(get_user_model().objects.create_superuser(
+            "tb", "tb@example.com", "pw"))
+
+    def test_list_page_offers_the_built_in_starting_points(self):
+        response = self.client.get(reverse("admin:siteconfig_emailtemplate_changelist"))
+        for kind in ("welcome", "newsletter", "campaign"):
+            self.assertContains(
+                response, reverse("admin:siteconfig_emailtemplate_from_builtin", args=[kind]))
+
+    def test_change_page_offers_preview(self):
+        template = EmailTemplate.objects.create(
+            name="t", kind=EmailTemplate.Kind.CAMPAIGN, html_body="<p>{{ body_html }}</p>")
+        response = self.client.get(
+            reverse("admin:siteconfig_emailtemplate_change", args=[template.pk]))
+        self.assertContains(
+            response, reverse("admin:siteconfig_emailtemplate_preview", args=[template.pk]))
+
+    def test_starting_from_built_in_creates_a_copy_and_needs_a_post(self):
+        url = reverse("admin:siteconfig_emailtemplate_from_builtin", args=["campaign"])
+        self.assertEqual(self.client.get(url).status_code, 405)
+        before = EmailTemplate.objects.count()
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(EmailTemplate.objects.count(), before + 1)
+        self.assertIn("{{ body_html }}", EmailTemplate.objects.latest("pk").html_body)

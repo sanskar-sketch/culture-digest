@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "opportunities",
     "recommendations",
     "campaigns",
+    "desk",
 ]
 
 MIDDLEWARE = [
@@ -80,6 +81,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "siteconfig.context_processors.site_config",
+                "desk.context_processors.desk_context",
             ],
         },
     },

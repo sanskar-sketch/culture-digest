@@ -1,0 +1,66 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>Editorial desk</h1></div>
+
+<div class="d-grid">
+  <div class="d-stat accent">
+    <div class="d-label">Live catalogue</div>
+    <div class="d-value">{{ stats.opportunities.live }}</div>
+    <div class="d-sub">{{ stats.opportunities.published }} published · {{ stats.opportunities.draft }} draft</div>
+  </div>
+  <div class="d-stat">
+    <div class="d-label">Readers</div>
+    <div class="d-value">{{ stats.readers.active }}</div>
+    <div class="d-sub">{{ stats.readers.new_this_week }} new this week · {{ stats.readers.open_to_surprise }} up for a wildcard</div>
+  </div>
+  <div class="d-stat">
+    <div class="d-label">Recommendations</div>
+    <div class="d-value">{{ stats.feedback.total }}</div>
+    <div class="d-sub">across {{ stats.issues_total }} issue{{ stats.issues_total|pluralize }}{% if stats.issues_unsent %} · {{ stats.issues_unsent }} unsent{% endif %}</div>
+  </div>
+  <div class="d-stat">
+    <div class="d-label">Feedback rate</div>
+    <div class="d-value">{{ stats.feedback.response_rate }}%</div>
+    <div class="d-sub">{{ stats.feedback.responded }} of {{ stats.feedback.total }} replied to</div>
+  </div>
+</div>
+
+<div class="d-card">
+  <h2>Configuration</h2>
+  {% for row in configuration %}
+  <div class="d-row">
+    <span class="{% if row.ok %}d-ok-dot{% else %}d-bad-dot{% endif %}"></span>
+    <span class="d-name" style="flex-basis:160px;">{{ row.name }}</span>
+    <span style="flex:1;{% if not row.ok %}color:var(--d-warn){% endif %}">{{ row.detail }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="d-split">
+  <div class="d-card">
+    <h2>Catalogue coverage</h2>
+    {% for row in stats.coverage %}
+    <div class="d-row">
+      <span class="d-name">{{ row.label }}</span>
+      <span class="d-bar"><span style="width: {% widthratio row.count stats.opportunities.live|default:1 100 %}%"></span></span>
+      <span class="d-num{% if not row.count %} d-warn-text{% endif %}">{{ row.count }}</span>
+    </div>
+    {% endfor %}
+    {% if stats.empty_categories %}
+    <p style="font-size:12px;margin:12px 0 0;color:var(--d-warn);">
+      Nothing live in {% for row in stats.empty_categories %}{{ row.label }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+    </p>
+    {% endif %}
+  </div>
+  <div class="d-card">
+    <h2>What readers said</h2>
+    <div class="d-row"><span class="d-name">More like this</span><span class="d-bar"><span style="width: {% widthratio stats.feedback.more_like_this stats.feedback.total|default:1 100 %}%"></span></span><span class="d-num">{{ stats.feedback.more_like_this }}</span></div>
+    <div class="d-row"><span class="d-name">Booked</span><span class="d-bar"><span style="width: {% widthratio stats.feedback.booked stats.feedback.total|default:1 100 %}%"></span></span><span class="d-num">{{ stats.feedback.booked }}</span></div>
+    <div class="d-row"><span class="d-name">Saved</span><span class="d-bar"><span style="width: {% widthratio stats.feedback.saved stats.feedback.total|default:1 100 %}%"></span></span><span class="d-num">{{ stats.feedback.saved }}</span></div>
+    <div class="d-row"><span class="d-name">Not for me</span><span class="d-bar"><span style="width: {% widthratio stats.feedback.not_for_me stats.feedback.total|default:1 100 %}%"></span></span><span class="d-num">{{ stats.feedback.not_for_me }}</span></div>
+    <p style="font-size:12px;color:var(--d-muted);margin:12px 0 0;">
+      {{ stats.tags_total }} interest{{ stats.tags_total|pluralize }}{% if stats.tags_unused %}, <span style="color:var(--d-warn)">{{ stats.tags_unused }} not yet on any listing</span>{% endif %}.
+    </p>
+  </div>
+</div>
+{% endblock %}

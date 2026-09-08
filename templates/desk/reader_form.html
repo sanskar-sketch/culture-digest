@@ -1,0 +1,88 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1></div>
+
+<div class="d-btn-row">
+  <form method="post" class="d-inline"><input type="hidden" name="action" value="preview">{% csrf_token %}<button type="submit" class="d-btn">Preview newsletter</button></form>
+  <form method="post" class="d-inline" data-confirm="Really email {{ instance.email }} now?"><input type="hidden" name="action" value="send">{% csrf_token %}<button type="submit" class="d-btn danger">Send newsletter now</button></form>
+  <form method="post" class="d-inline"><input type="hidden" name="action" value="interpret">{% csrf_token %}<button type="submit" class="d-btn">Interpret taste with AI</button></form>
+</div>
+
+<form method="post" class="d-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="d-messages">{% for error in form.non_field_errors %}<div class="d-msg error">{{ error }}</div>{% endfor %}</div>
+  {% endif %}
+
+  <div class="d-fieldset">
+    <h2>Who they are</h2>
+    {% include "desk/_field.html" with field=form.email %}
+    {% include "desk/_field.html" with field=form.name %}
+    {% include "desk/_field.html" with field=form.age %}
+    {% include "desk/_field.html" with field=form.is_active %}
+  </div>
+
+  <div class="d-fieldset">
+    <h2>Where they are</h2>
+    {% include "desk/_field.html" with field=form.location %}
+    {% include "desk/_field.html" with field=form.travel_radius %}
+    {% include "desk/_field.html" with field=form.other_travel %}
+    {% include "desk/_field.html" with field=form.travel_destinations %}
+  </div>
+
+  <div class="d-fieldset">
+    <h2>Taste</h2>
+    {% include "desk/_field.html" with field=form.interest_categories %}
+    {% include "desk/_field.html" with field=form.interest_tags %}
+    {% include "desk/_field.html" with field=form.mainstream_preference %}
+    {% include "desk/_field.html" with field=form.scale_preference %}
+    {% include "desk/_field.html" with field=form.open_to_surprise %}
+    {% include "desk/_field.html" with field=form.other_categories %}
+    {% include "desk/_field.html" with field=form.other_interests %}
+    {% include "desk/_field.html" with field=form.loved_examples %}
+    {% include "desk/_field.html" with field=form.disliked_examples %}
+    {% include "desk/_field.html" with field=form.notes %}
+  </div>
+
+  <div class="d-fieldset">
+    <h2>Practical</h2>
+    {% include "desk/_field.html" with field=form.budget %}
+    {% include "desk/_field.html" with field=form.other_budget %}
+    {% include "desk/_field.html" with field=form.availability %}
+    {% include "desk/_field.html" with field=form.other_availability %}
+  </div>
+
+  <div class="d-fieldset">
+    <h2>What AI read into their free text</h2>
+    <p class="d-fieldset-desc">Inferred, not stated by the reader - weighted below their own picks when matching. Use "Interpret taste with AI" above to refresh.</p>
+    <p style="font-size:14px;margin:0 0 10px;">{{ instance.ai_taste_summary|default:"Nothing yet." }}</p>
+    {% if instance.ai_inferred_tags.exists %}<p style="font-size:13px;color:var(--d-muted);margin:0 0 6px;">Inferred interests: {{ instance.ai_inferred_tags.all|join:", " }}</p>{% endif %}
+    {% if instance.ai_avoid_tags.exists %}<p style="font-size:13px;color:var(--d-muted);margin:0;">Signalled avoiding: {{ instance.ai_avoid_tags.all|join:", " }}</p>{% endif %}
+  </div>
+
+  <div class="d-fieldset">
+    <h2>Engagement</h2>
+    <p style="font-size:13px;margin:0 0 8px;">Profile {{ completeness }}% filled in.</p>
+    {% if feedback_breakdown %}
+      {% for label, n in feedback_breakdown %}<p style="font-size:13px;margin:0;">{{ label }}: <strong>{{ n }}</strong></p>{% endfor %}
+    {% else %}<p style="font-size:13px;color:var(--d-muted);margin:0;">Nothing yet.</p>{% endif %}
+  </div>
+
+  <div class="d-form-actions"><button type="submit" class="d-btn primary">Save</button></div>
+</form>
+
+<h2 style="font-size:15px;margin:24px 0 10px;">Newsletter issues</h2>
+<div class="d-sublist">
+  {% for issue in issues %}
+  <div class="d-sublist-row">
+    <a class="d-row-link" href="{% url 'desk:issues_change' issue.pk %}" style="flex:0 0 140px;">Issue #{{ issue.pk }}</a>
+    <span style="flex:0 0 130px;color:var(--d-muted);">{{ issue.created_at|date:"j M Y" }}</span>
+    <span style="flex:1;">
+      {% for rec in issue.recommendations.all %}{{ rec.opportunity.title }} — <em>{{ rec.get_feedback_display }}</em>{% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}
+    </span>
+  </div>
+  {% empty %}
+  <div class="d-sublist-empty">Nothing sent yet.</div>
+  {% endfor %}
+</div>
+{% endblock %}
