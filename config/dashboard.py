@@ -19,11 +19,11 @@ SECTIONS = [
         "title": "The catalogue",
         "blurb": "Everything the newsletter can draw on. This is where the work is.",
         "rows": [
-            {"key": "listings", "name": "Listings",
+            {"key": "listings", "name": "Listings", "singular": "listing",
              "blurb": "Shows, exhibitions, meals, talks, walks - everything the "
                       "newsletter can recommend. A listing stays a draft, invisible "
                       "to readers, until you publish it."},
-            {"key": "interests", "name": "Interests",
+            {"key": "interests", "name": "Interests", "singular": "interest",
              "blurb": "The interests readers pick from when they sign up, and that "
                       "you tag listings with. Where the two overlap is how a "
                       "listing finds its reader."},
@@ -34,7 +34,7 @@ SECTIONS = [
         "title": "Readers",
         "blurb": "Who is subscribed, and what they told us about their taste.",
         "rows": [
-            {"key": "readers", "name": "Readers",
+            {"key": "readers", "name": "Readers", "singular": "reader",
              "blurb": "Everyone subscribed: what they told us about their taste, "
                       "what they have been sent, and how they responded."},
         ],
@@ -44,16 +44,16 @@ SECTIONS = [
         "title": "What goes out",
         "blurb": "The newsletters themselves, and how they read.",
         "rows": [
-            {"key": "campaigns", "name": "Campaigns",
+            {"key": "campaigns", "name": "Campaigns", "singular": "campaign",
              "blurb": "One-off emails on any subject - to everyone or a slice of "
                       "readers, now or at a set time."},
-            {"key": "issues", "name": "Newsletter issues",
+            {"key": "issues", "name": "Newsletter issues", "singular": "issue",
              "blurb": "One row per newsletter sent to one reader, with the picks "
                       "it contained."},
-            {"key": "recommendations", "name": "Recommendations",
+            {"key": "recommendations", "name": "Recommendations", "singular": "recommendation",
              "blurb": "Every individual pick ever made, with the reader's verdict "
                       "on it. Where you see what lands and what doesn't."},
-            {"key": "templates", "name": "Email templates",
+            {"key": "templates", "name": "Email templates", "singular": "email template",
              "blurb": "The welcome, newsletter and campaign emails as editable "
                       "templates, with preview. Nothing here means the built-in "
                       "versions are used."},
@@ -64,7 +64,7 @@ SECTIONS = [
         "title": "Settings",
         "blurb": "How the whole thing behaves - branding, schedule, matching, AI.",
         "rows": [
-            {"key": "siteconfig", "name": "Site configuration",
+            {"key": "siteconfig", "name": "Site configuration", "singular": "setting",
              "blurb": "One page, tabbed: branding, sending, schedule, matching "
                       "weights, feedback learning and AI."},
         ],
@@ -74,12 +74,16 @@ SECTIONS = [
         "title": "Access",
         "blurb": "Who can get in here.",
         "collapsed": True,
+        # Managing accounts is how someone grants themselves more power, so
+        # these are the one part of the desk a plain editor can't reach.
+        "superuser_only": True,
         "rows": [
-            {"key": "users", "name": "Users", "blurb": "Editor accounts.",
-             "external_admin_url_name": "admin:auth_user_changelist"},
-            {"key": "groups", "name": "Groups",
-             "blurb": "Permission groups, if you want more than one kind of editor.",
-             "external_admin_url_name": "admin:auth_group_changelist"},
+            {"key": "users", "name": "Users", "singular": "user",
+             "blurb": "Editor accounts: who can sign in, and what they're allowed "
+                      "to do once they're here."},
+            {"key": "groups", "name": "Groups", "singular": "group",
+             "blurb": "Bundles of permissions, if you want more than one kind of "
+                      "editor rather than granting everything to everyone."},
         ],
     },
 ]

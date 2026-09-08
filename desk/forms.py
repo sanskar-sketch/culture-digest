@@ -1,6 +1,8 @@
 """Plain ModelForms for the desk. No admin machinery involved."""
 
 from django import forms
+from django.contrib.auth.forms import SetPasswordForm, UserCreationForm
+from django.contrib.auth.models import Group, Permission, User
 
 from campaigns.models import Campaign
 from opportunities.models import Category, Opportunity, Tag
@@ -204,3 +206,79 @@ class SiteConfigForm(FriendlyChoices, forms.ModelForm):
         widgets = {
             "hero_subhead": forms.Textarea(attrs={"rows": 3}),
         }
+
+
+# --- accounts and permissions ------------------------------------------
+#
+# A password is never rendered back, only set, and always through Django's
+# own forms so hashing and the configured validators apply exactly as they
+# do everywhere else. These forms are only reachable by a superuser (see
+# desk.views.access).
+
+ROLE_HELP = {
+    "is_active": "Unticking this blocks sign-in without deleting the account or "
+                 "anything they made.",
+    "is_staff": "Required to open the desk at all.",
+    "is_superuser": "Every permission, including managing these accounts. Grant "
+                    "it sparingly.",
+}
+
+
+class _UserFieldHelp:
+    """Django's own wording here is written for its admin; say it plainly."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, help_text in ROLE_HELP.items():
+            if name in self.fields:
+                self.fields[name].help_text = help_text
+        if "groups" in self.fields:
+            self.fields["groups"].help_text = "Permissions granted through membership."
+
+
+class UserCreateForm(_UserFieldHelp, FriendlyChoices, UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ("username", "first_name", "last_name", "email",
+                  "is_active", "is_staff", "is_superuser", "groups")
+        widgets = {"groups": forms.CheckboxSelectMultiple}
+
+
+class UserEditForm(_UserFieldHelp, FriendlyChoices, forms.ModelForm):
+    """Editing never touches the password - that is its own page, so a
+    stray save can't silently change someone's credentials."""
+
+    class Meta:
+        model = User
+        fields = ("username", "first_name", "last_name", "email",
+                  "is_active", "is_staff", "is_superuser", "groups")
+        widgets = {"groups": forms.CheckboxSelectMultiple}
+
+
+class UserPasswordForm(SetPasswordForm):
+    """Django's SetPasswordForm: confirmation and the project's password
+    validators, without needing to know the old one."""
+
+
+class GroupForm(forms.ModelForm):
+    permissions = forms.ModelMultipleChoiceField(
+        queryset=Permission.objects.none(), required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="What members of this group may do. Anyone with superuser "
+                  "ticked already has all of these.")
+
+    class Meta:
+        model = Group
+        fields = ("name", "permissions")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Only the project's own models - the rest of Django's permission
+        # table is noise no editor here will ever need.
+        self.fields["permissions"].queryset = (
+            Permission.objects
+            .filter(content_type__app_label__in=[
+                "opportunities", "readers", "recommendations", "campaigns", "siteconfig"])
+            .select_related("content_type")
+            .order_by("content_type__app_label", "codename")
+        )

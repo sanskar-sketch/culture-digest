@@ -1,0 +1,30 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1><p>{{ page_blurb }}</p></div>
+<div class="d-btn-row"><a href="{{ add_url }}" class="d-btn primary">Add group</a></div>
+{% include "desk/_toolbar.html" %}
+<div class="d-table-wrap">
+  <div class="d-table-scroll">
+  <table class="d-table">
+    <thead><tr><th>Name</th><th>Members</th><th>Permissions</th></tr></thead>
+    <tbody>
+      {% for group in page_obj %}
+      <tr>
+        <td><a class="d-row-link" href="{% url 'desk:groups_change' group.pk %}">{{ group.name }}</a></td>
+        <td>{{ group.members|default:"—" }}</td>
+        <td>{{ group.permissions_count|default:"—" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3" class="d-empty">
+        <p><strong>No groups yet.</strong></p>
+        <p>You only need one if you want more than one kind of editor. Otherwise tick
+           "Editor" on each user and leave this empty.</p>
+        <p><a class="d-btn primary" href="{{ add_url }}">Add the first group</a></p>
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% include "desk/_pagination.html" %}
+{% endblock %}

@@ -22,3 +22,22 @@ def staff_required(view):
         return view(request, *args, **kwargs)
 
     return wrapped
+
+
+def superuser_required(view):
+    """For managing accounts and permissions.
+
+    Deliberately stricter than the rest of the desk: everything else is
+    editorial work, but this is where someone could grant themselves more
+    power than they were given, so being staff is not enough.
+    """
+
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path(), login_url="desk:login")
+        if not (request.user.is_active and request.user.is_superuser):
+            return render(request, "desk/forbidden.html", status=403)
+        return view(request, *args, **kwargs)
+
+    return wrapped

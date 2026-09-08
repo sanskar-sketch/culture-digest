@@ -1,0 +1,57 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1></div>
+
+{% if instance %}
+<div class="d-btn-row">
+  <a class="d-btn" href="{% url 'desk:users_password' instance.pk %}">Set password</a>
+  <a class="d-btn" href="{% url 'desk:users_add' %}">Add another</a>
+</div>
+{% endif %}
+
+{% if is_self %}
+<div class="d-messages"><div class="d-msg warning">This is your own account. Removing your
+own editor or superuser access will lock you out of these pages.</div></div>
+{% endif %}
+
+<form method="post" class="d-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="d-messages">{% for error in form.non_field_errors %}<div class="d-msg error">{{ error }}</div>{% endfor %}</div>
+  {% endif %}
+
+  <div class="d-fieldset">
+    <h2>Who they are</h2>
+    {% include "desk/_field.html" with field=form.username %}
+    {% include "desk/_field.html" with field=form.first_name %}
+    {% include "desk/_field.html" with field=form.last_name %}
+    {% include "desk/_field.html" with field=form.email %}
+  </div>
+
+  {% if form.password1 %}
+  <div class="d-fieldset">
+    <h2>Password</h2>
+    <p class="d-fieldset-desc">Set once here. Afterwards it can only be replaced, never read back.</p>
+    {% include "desk/_field.html" with field=form.password1 %}
+    {% include "desk/_field.html" with field=form.password2 %}
+  </div>
+  {% endif %}
+
+  <div class="d-fieldset">
+    <h2>What they can do</h2>
+    {% include "desk/_field.html" with field=form.is_active %}
+    {% include "desk/_field.html" with field=form.is_staff %}
+    {% include "desk/_field.html" with field=form.is_superuser %}
+    {% include "desk/_field.html" with field=form.groups %}
+  </div>
+
+  {% if instance %}
+  <div class="d-fieldset">
+    <h2>Metadata</h2>
+    <p style="font-size:13px;color:var(--d-muted);margin:0;">Joined {{ instance.date_joined|date:"j M Y, H:i" }} · last signed in {{ instance.last_login|date:"j M Y, H:i"|default:"never" }}</p>
+  </div>
+  {% endif %}
+
+  <div class="d-form-actions"><button type="submit" class="d-btn primary">Save</button></div>
+</form>
+{% endblock %}

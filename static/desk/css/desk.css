@@ -93,18 +93,52 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; 
   display: block; padding: 8px 10px 6px; font-size: 11px; font-weight: 700;
   letter-spacing: .09em; text-transform: uppercase; color: #7d7d8c;
 }
-.d-nav a {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 9px 12px; margin: 1px 0; border-radius: 9px; font-size: 14px;
-  color: #d4d4dd; text-decoration: none;
+/* One row = the link, plus an optional "+" beside it. They are siblings,
+   never nested, so the row stays a single flex line. */
+.d-nav-row {
+  display: flex; align-items: center; gap: 4px;
+  margin: 1px 0; border-radius: 9px; padding-right: 4px;
 }
-.d-nav a:hover { background: rgba(255,255,255,.06); color: #fff; }
+.d-nav-row:hover { background: rgba(255,255,255,.06); }
+.d-nav-row.is-active { background: var(--d-accent); }
+/* :not(.d-add) matters - ".d-nav a" alone outranks ".d-add" on
+   specificity, which stretched the + to fill the row instead of leaving
+   it a 22px circle. */
+.d-nav a:not(.d-add), .d-nav-link {
+  flex: 1 1 auto; min-width: 0; padding: 9px 12px; border-radius: 9px;
+  font-size: 14px; color: #d4d4dd; text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.d-nav a:not(.d-add):hover, .d-nav-link:hover { color: #fff; }
+.d-nav > .d-nav-group > a:hover { background: rgba(255,255,255,.06); }
 .d-nav a.is-active { background: var(--d-accent); color: #fff; font-weight: 600; }
-.d-nav a .d-add {
-  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
-  font-size: 14px; line-height: 1; color: inherit; opacity: .6;
+.d-nav-row.is-active .d-nav-link { color: #fff; font-weight: 600; }
+
+.d-nav a.d-add, .d-add {
+  position: relative; flex: none; padding: 0;
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 15px; line-height: 1; color: #d4d4dd; text-decoration: none; opacity: .55;
 }
-.d-nav a .d-add:hover { opacity: 1; background: rgba(255,255,255,.15); }
+.d-add:hover { opacity: 1; background: rgba(255,255,255,.16); color: #fff; }
+.d-nav-row.is-active .d-add { color: #fff; opacity: .8; }
+
+/* Instant tooltip - the native title attribute waits about a second,
+   which reads as nothing happening.
+   It opens to the LEFT, over the row's own title. The sidebar sets
+   overflow-y, which forces overflow-x to a scrolling value too, and there
+   are only ~16px to the right of the + inside it - opening that way left
+   the tooltip clipped to a sliver. */
+.d-add[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; right: calc(100% + 6px); top: 50%; transform: translateY(-50%);
+  padding: 5px 9px; border-radius: 7px; white-space: nowrap;
+  background: var(--d-ink); color: var(--d-bg);
+  font-size: 12px; font-weight: 600; letter-spacing: 0;
+  opacity: 0; pointer-events: none; transition: opacity .12s ease;
+  z-index: 40;
+}
+:root:not([data-theme="light"]) .d-add[data-tip]::after { background: #f2f2f7; color: #17171c; }
+.d-add[data-tip]:hover::after, .d-add[data-tip]:focus-visible::after { opacity: 1; }
 .d-nav-group.is-quiet .d-nav-label { opacity: .7; }
 
 .d-side-foot {

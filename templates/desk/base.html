@@ -24,10 +24,17 @@
       <div class="d-nav-group{% if section.collapsed %} is-quiet{% endif %}">
         <span class="d-nav-label">{{ section.title }}</span>
         {% for row in section.rows %}
-        <a href="{{ row.url }}"{% if row.active %} class="is-active"{% endif %}>
-          <span>{{ row.name }}</span>
-          {% if row.add_url %}<a class="d-add" href="{{ row.add_url }}" title="Add {{ row.name|lower }}" onclick="event.stopPropagation()">+</a>{% endif %}
-        </a>
+        {% comment %}
+        Siblings in a flex row. An <a> inside an <a> is invalid, and the
+        parser closes the outer one early - which is what pushed the +
+        onto its own line below the title.
+        {% endcomment %}
+        <div class="d-nav-row{% if row.active %} is-active{% endif %}">
+          <a class="d-nav-link" href="{{ row.url }}">{{ row.name }}</a>
+          {% if row.add_url %}
+          <a class="d-add" href="{{ row.add_url }}" data-tip="{{ row.add_label }}" aria-label="{{ row.add_label }}">+</a>
+          {% endif %}
+        </div>
         {% endfor %}
       </div>
       {% endfor %}

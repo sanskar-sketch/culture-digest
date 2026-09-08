@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import auth, campaigns, dashboard, interests, listings, newsletters, readers
+from .views import access, auth, campaigns, dashboard, interests, listings, newsletters, readers
 from .views import settings as settings_views
 from .views import templates as template_views
 
@@ -43,6 +43,15 @@ urlpatterns = [
     path("templates/add/", template_views.template_form, name="templates_add"),
     path("templates/<int:pk>/", template_views.template_form, name="templates_change"),
     path("templates/<int:pk>/preview/", template_views.template_preview, name="templates_preview"),
+
+    path("users/", access.user_list, name="users_list"),
+    path("users/add/", access.user_form, name="users_add"),
+    path("users/<int:pk>/", access.user_form, name="users_change"),
+    path("users/<int:pk>/password/", access.user_password, name="users_password"),
+
+    path("groups/", access.group_list, name="groups_list"),
+    path("groups/add/", access.group_form, name="groups_add"),
+    path("groups/<int:pk>/", access.group_form, name="groups_change"),
 
     path("settings/", settings_views.siteconfig_form, name="siteconfig"),
     path("settings/reset-wording/", settings_views.reset_wording, name="siteconfig_reset_wording"),

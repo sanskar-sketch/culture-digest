@@ -347,10 +347,14 @@ class RetiredAdminRedirectTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("desk:readers_list"))
 
-    def test_users_and_groups_still_work(self):
-        for url in ("/admin/auth/user/", "/admin/auth/group/"):
-            response = self.client.get(url)
-            self.assertEqual(response.status_code, 200, url)
+    def test_users_and_groups_now_redirect_too(self):
+        """They were the last thing left in the old admin; the desk has its
+        own now, so nothing there is reachable any more."""
+        for old, expected in [("/admin/auth/user/", reverse("desk:users_list")),
+                              ("/admin/auth/group/", reverse("desk:groups_list"))]:
+            response = self.client.get(old)
+            self.assertEqual(response.status_code, 302, old)
+            self.assertEqual(response.url, expected, old)
 
 
 class QueryCountTests(LoggedInTestCase):
@@ -474,3 +478,111 @@ class DropdownWordingTests(LoggedInTestCase):
         self.assertEqual(response.status_code, 302)
         reader.refresh_from_db()
         self.assertEqual(reader.budget, "")
+
+
+@plain_static
+class AccessSectionTests(TestCase):
+    """Users and Groups, the last thing that still pointed at Django's admin.
+
+    Stricter than the rest of the desk on purpose: this is where someone
+    could grant themselves more power than they were given.
+    """
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.boss = User.objects.create_superuser("boss", "boss@example.com", "pw")
+        self.editor = User.objects.create_user("ed", "ed@example.com", "pw", is_staff=True)
+
+    def test_a_plain_editor_cannot_reach_or_even_see_accounts(self):
+        self.client.login(username="ed", password="pw")
+        for url in (reverse("desk:users_list"), reverse("desk:groups_list"),
+                    reverse("desk:users_add"), reverse("desk:users_change", args=[self.boss.pk])):
+            self.assertEqual(self.client.get(url).status_code, 403, url)
+        # And it isn't dangled in front of them either.
+        self.assertNotContains(self.client.get(reverse("desk:dashboard")),
+                               reverse("desk:users_list"))
+
+    def test_a_superuser_gets_the_pages(self):
+        self.client.login(username="boss", password="pw")
+        for url in (reverse("desk:users_list"), reverse("desk:users_add"),
+                    reverse("desk:users_change", args=[self.editor.pk]),
+                    reverse("desk:users_password", args=[self.editor.pk]),
+                    reverse("desk:groups_list"), reverse("desk:groups_add")):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        self.assertContains(self.client.get(reverse("desk:dashboard")),
+                            reverse("desk:users_list"))
+
+    def test_adding_a_user_hashes_the_password(self):
+        self.client.login(username="boss", password="pw")
+        response = self.client.post(reverse("desk:users_add"), {
+            "username": "newbie", "first_name": "", "last_name": "", "email": "n@example.com",
+            "password1": "a-long-enough-passphrase", "password2": "a-long-enough-passphrase",
+            "is_active": "on", "is_staff": "on",
+        })
+        self.assertEqual(response.status_code, 302)
+        user = get_user_model().objects.get(username="newbie")
+        self.assertNotEqual(user.password, "a-long-enough-passphrase")
+        self.assertTrue(user.check_password("a-long-enough-passphrase"))
+        self.assertTrue(user.is_staff)
+
+    def test_editing_a_user_never_touches_their_password(self):
+        self.client.login(username="boss", password="pw")
+        before = self.editor.password
+        self.client.post(reverse("desk:users_change", args=[self.editor.pk]), {
+            "username": "ed", "first_name": "Ed", "last_name": "", "email": "ed@example.com",
+            "is_active": "on", "is_staff": "on",
+        })
+        self.editor.refresh_from_db()
+        self.assertEqual(self.editor.first_name, "Ed")
+        self.assertEqual(self.editor.password, before)
+
+    def test_setting_a_password_applies_the_projects_validators(self):
+        self.client.login(username="boss", password="pw")
+        url = reverse("desk:users_password", args=[self.editor.pk])
+        rejected = self.client.post(url, {"new_password1": "123", "new_password2": "123"})
+        self.assertEqual(rejected.status_code, 200)
+        self.editor.refresh_from_db()
+        self.assertFalse(self.editor.check_password("123"))
+
+        accepted = self.client.post(url, {"new_password1": "a-long-enough-passphrase",
+                                          "new_password2": "a-long-enough-passphrase"})
+        self.assertEqual(accepted.status_code, 302)
+        self.editor.refresh_from_db()
+        self.assertTrue(self.editor.check_password("a-long-enough-passphrase"))
+
+    def test_changing_your_own_password_does_not_sign_you_out(self):
+        self.client.login(username="boss", password="pw")
+        self.client.post(reverse("desk:users_password", args=[self.boss.pk]),
+                         {"new_password1": "another-long-passphrase",
+                          "new_password2": "another-long-passphrase"})
+        self.assertEqual(self.client.get(reverse("desk:users_list")).status_code, 200)
+
+    def test_a_group_carries_only_this_projects_permissions(self):
+        from desk.forms import GroupForm
+
+        apps = {p.content_type.app_label for p in GroupForm().fields["permissions"].queryset}
+        self.assertNotIn("admin", apps)
+        self.assertNotIn("contenttypes", apps)
+        self.assertTrue({"opportunities", "readers"} <= apps)
+
+
+@plain_static
+class SidebarAddLinkTests(LoggedInTestCase):
+    """The "+" sits beside its row rather than below it, which it did when
+    it was an <a> nested inside another <a> - invalid markup the parser
+    repaired by closing the outer link early."""
+
+    def test_the_add_link_is_a_sibling_not_nested_in_the_row_link(self):
+        html = self.client.get(reverse("desk:dashboard")).content.decode()
+        row = html.split('class="d-nav-row', 1)[1].split("</div>", 1)[0]
+        self.assertIn('class="d-nav-link"', row)
+        self.assertIn('class="d-add"', row)
+        # The row link must be closed before the add link opens.
+        self.assertLess(row.index("</a>"), row.index('class="d-add"'))
+
+    def test_the_add_link_names_one_thing_not_many(self):
+        html = self.client.get(reverse("desk:dashboard")).content.decode()
+        self.assertIn('data-tip="Add listing"', html)
+        self.assertIn('data-tip="Add interest"', html)
+        self.assertNotIn('data-tip="Add listings"', html)

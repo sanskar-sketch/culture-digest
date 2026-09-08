@@ -6,12 +6,11 @@ from campaigns.views import run_scheduled
 
 from .health import healthz
 
-# Screens the desk replaced. The old admin is still mounted, because Users
-# and Groups genuinely live there - the desk doesn't rebuild a password and
-# permissions UI - so the retired pages are redirected one by one rather
-# than the whole /admin/ tree being sealed off. An old bookmark lands on
-# the working page instead of an unmaintained copy of it. Anything not
-# listed here still renders, and carries the "this has moved" banner from
+# Screens the desk replaced. That is now all of them, Users and Groups
+# included, so nothing in the old admin is reachable any more. It stays
+# mounted only because reverse("admin:…") still resolves in a few places;
+# every path below lands on the desk instead. Anything not listed still
+# renders with the "this has moved" banner from
 # templates/admin/base_site.html as the fallback.
 RETIRED_ADMIN_PAGES = {
     "opportunities/opportunity": "desk:listings_list",
@@ -22,6 +21,8 @@ RETIRED_ADMIN_PAGES = {
     "recommendations/recommendation": "desk:recommendations_list",
     "siteconfig/siteconfig": "desk:siteconfig",
     "siteconfig/emailtemplate": "desk:templates_list",
+    "auth/user": "desk:users_list",
+    "auth/group": "desk:groups_list",
 }
 
 urlpatterns = [

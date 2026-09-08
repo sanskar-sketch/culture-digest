@@ -1,0 +1,20 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-head"><h1>{{ page_title }}</h1></div>
+<form method="post" class="d-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="d-messages">{% for error in form.non_field_errors %}<div class="d-msg error">{{ error }}</div>{% endfor %}</div>
+  {% endif %}
+  <div class="d-fieldset">
+    {% include "desk/_field.html" with field=form.name %}
+  </div>
+  <div class="d-fieldset">
+    <h2>Permissions</h2>
+    <p class="d-fieldset-desc">Only this project's own models are listed; Django's internal
+      permissions are left out because nothing here uses them.</p>
+    {% include "desk/_field.html" with field=form.permissions %}
+  </div>
+  <div class="d-form-actions"><button type="submit" class="d-btn primary">Save</button></div>
+</form>
+{% endblock %}
