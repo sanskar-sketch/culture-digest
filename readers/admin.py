@@ -250,13 +250,13 @@ class ReaderAdmin(admin.ModelAdmin):
             filled += 1
         pct = round(filled / total * 100)
         colour = "#34c759" if pct >= 70 else "#ff9500" if pct >= 35 else "#8e8e93"
+        # Plain text, not a fixed-width bar: a flex row with a 60px track
+        # can't shrink, so on a squeezed column it overflowed the cell and
+        # printed on top of the next one.
         return format_html(
-            '<div title="{} of {} answered" style="display:flex;align-items:center;gap:8px">'
-            '<span style="flex:0 0 60px;height:6px;border-radius:999px;background:rgba(125,125,130,.2);'
-            'overflow:hidden;display:inline-block">'
-            '<span style="display:block;height:100%;width:{}%;background:{}"></span></span>'
-            '<span style="font-variant-numeric:tabular-nums">{}%</span></div>',
-            filled, total, pct, colour, pct,
+            '<span title="{} of {} answered" style="color:{};font-variant-numeric:tabular-nums">'
+            '{}%</span>',
+            filled, total, colour, pct,
         )
 
     @admin.display(description="Feedback so far")

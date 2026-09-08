@@ -12,9 +12,14 @@ from recommendations.sending import send_issue_for_reader
 from readers.models import Reader
 
 BULK_ACTIONS = (
-    ("preview", "Preview newsletter (dry run, nothing sent)"),
-    ("send", "Send newsletter now (really emails them)"),
-    ("interpret", "Interpret taste from free text with AI"),
+    {"value": "preview", "label": "Preview newsletter",
+     "title": "Dry run - builds what each selected reader would get. Nothing is sent"},
+    {"value": "send", "label": "Send newsletter now",
+     "title": "Really emails the selected readers, immediately",
+     "confirm": "This really emails the selected readers. Send now?"},
+    {"value": "interpret", "label": "Interpret taste with AI",
+     "title": "Re-read the selected readers' own words and refresh what AI infers "
+              "about their taste"},
 )
 
 

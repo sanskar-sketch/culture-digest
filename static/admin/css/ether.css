@@ -856,3 +856,17 @@ body.e-no-scroll { overflow: hidden; }
 @media (max-width: 480px) {
   #changelist-filter.e-filter-popup-active { width: 100vw; }
 }
+
+
+/* "This has moved to the desk" notice on the retired admin pages. */
+.e-moved {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  margin: 0 0 20px; padding: 12px 16px; border-radius: var(--e-radius);
+  background: var(--e-accent-soft); color: var(--e-ink); font-size: 13.5px;
+  border: 1px solid var(--e-accent);
+}
+.e-moved a, .e-moved a:link, .e-moved a:visited {
+  padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: var(--e-accent); color: #fff;
+}
+.e-moved a:hover { background: #4a48c4; color: #fff; }

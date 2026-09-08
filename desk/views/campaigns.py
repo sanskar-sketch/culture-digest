@@ -13,11 +13,19 @@ from desk.utils import filter_options, paginate, search
 from readers.models import Reader
 
 BULK_ACTIONS = (
-    ("schedule", "Schedule (goes at its send time, or straight away)"),
-    ("send_now", "Send now (really emails the audience)"),
-    ("cancel", "Cancel"),
-    ("back_to_draft", "Back to draft"),
-    ("retry_failed", "Retry failed or stuck deliveries"),
+    {"value": "schedule", "label": "Schedule",
+     "title": "Queue for the campaign's send time, or the scheduler's next pass if it "
+              "has none",
+     "confirm": "Scheduled campaigns really email their audience. Schedule now?"},
+    {"value": "send_now", "label": "Send now",
+     "title": "Skip the queue and start sending immediately",
+     "confirm": "This really emails the audience now. Send?"},
+    {"value": "cancel", "label": "Cancel",
+     "title": "Stop a scheduled or in-progress campaign - anyone not yet emailed won't be"},
+    {"value": "back_to_draft", "label": "Back to draft",
+     "title": "Return the selected campaigns to draft"},
+    {"value": "retry_failed", "label": "Retry failed",
+     "title": "Queue failed or stuck deliveries again"},
 )
 
 

@@ -12,10 +12,15 @@ from desk.utils import filter_options, paginate, search
 from opportunities.models import Category, Opportunity, Tag
 
 BULK_ACTIONS = (
-    ("publish", "Publish selected listings"),
-    ("archive", "Archive selected listings"),
-    ("back_to_draft", "Move selected back to draft"),
-    ("suggest", "Suggest tags & attributes with AI"),
+    {"value": "publish", "label": "Publish",
+     "title": "Make the selected listings visible to readers and eligible for matching"},
+    {"value": "archive", "label": "Archive",
+     "title": "Take the selected listings out of matching, keeping the record"},
+    {"value": "back_to_draft", "label": "Back to draft",
+     "title": "Un-publish the selected listings"},
+    {"value": "suggest", "label": "Suggest tags with AI",
+     "title": "Propose a category, interests, price and dials - nothing is saved until "
+              "you open the listing and accept it"},
 )
 
 

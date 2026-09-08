@@ -143,11 +143,15 @@
       var selectAll = form.querySelector("[data-select-all]");
       var rowChecks = Array.prototype.slice.call(form.querySelectorAll("input[name=selected]"));
       var counter = form.querySelector("[data-selected-count]");
+      var actions = Array.prototype.slice.call(form.querySelectorAll("[data-bulk-action]"));
 
       function refresh() {
         var n = rowChecks.filter(function (c) { return c.checked; }).length;
-        if (counter) counter.textContent = n + " selected";
+        if (counter) counter.textContent = n ? n + " selected" : "None selected";
         if (selectAll) selectAll.checked = n > 0 && n === rowChecks.length;
+        // Greyed out until something is ticked - pressing an action with an
+        // empty selection is never what anyone meant.
+        actions.forEach(function (button) { button.disabled = n === 0; });
         rowChecks.forEach(function (c) {
           var tr = c.closest("tr");
           if (tr) tr.classList.toggle("is-selected", c.checked);
@@ -165,9 +169,17 @@
   }
 
   function initConfirm() {
-    document.querySelectorAll("[data-confirm]").forEach(function (el) {
-      el.addEventListener("submit", function (e) {
-        if (!window.confirm(el.dataset.confirm)) e.preventDefault();
+    // On a form: confirm before it submits. On a button inside a form with
+    // several actions: confirm only for that button, since the others are
+    // harmless.
+    document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+      form.addEventListener("submit", function (e) {
+        if (!window.confirm(form.dataset.confirm)) e.preventDefault();
+      });
+    });
+    document.querySelectorAll("button[data-confirm]").forEach(function (button) {
+      button.addEventListener("click", function (e) {
+        if (!window.confirm(button.dataset.confirm)) e.preventDefault();
       });
     });
   }

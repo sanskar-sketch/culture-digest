@@ -296,9 +296,9 @@ table.d-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .d-empty { padding: 48px 24px; text-align: center; color: var(--d-muted); }
 .d-empty p { margin: 0 0 14px; }
 
-.d-bulkbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--d-line); background: var(--d-surface); font-size: 13px; color: var(--d-muted); flex-wrap: wrap; }
-.d-bulkbar select { min-height: 34px; }
+.d-bulkbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--d-line); background: var(--d-surface); font-size: 13px; color: var(--d-muted); flex-wrap: wrap; }
 .d-bulkbar .d-btn { padding: 6px 14px; font-size: 12.5px; }
+.d-bulk-count { min-width: 96px; font-variant-numeric: tabular-nums; }
 
 .d-pagination { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 14px; }
 .d-pagination a, .d-pagination span { display: inline-flex; min-width: 30px; height: 30px; align-items: center; justify-content: center; border-radius: 8px; font-size: 13px; padding: 0 8px; }

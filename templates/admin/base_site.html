@@ -18,4 +18,19 @@ page, so moving between areas never means going back to the index.
 {% endcomment %}
 {% block header %}{% endblock %}
 
+{% comment %}
+Everything except Users and Groups now lives in the desk (/desk/), which
+is a separate admin with its own templates and stylesheet. These pages
+still work but are no longer the ones being kept up to date, so say so
+rather than letting an old bookmark quietly land someone here.
+{% endcomment %}
+{% block pretitle %}
+{% if has_permission and opts.app_label != "auth" %}
+<div class="e-moved">
+  <span><strong>This is the old admin.</strong> Everything except Users and Groups has moved to the desk.</span>
+  <a href="{% url 'desk:dashboard' %}">Open the desk</a>
+</div>
+{% endif %}
+{% endblock %}
+
 {% block nav-sidebar %}{% include "admin/ether_sidebar.html" %}{% endblock %}
