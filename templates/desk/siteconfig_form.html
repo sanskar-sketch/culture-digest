@@ -38,7 +38,7 @@
   </div>
 
   <div class="d-fieldset" data-tab-panel="Email templates">
-    <p class="d-fieldset-desc">Leave these empty to use the built-in emails. To write your own, go to Email templates, start from the built-in version, then select it here.</p>
+    <p class="d-fieldset-desc">Leave these empty to use the built-in emails. To write your own, open <a href="{% url 'desk:templates_list' %}">Email designs</a>, start from the built-in version, then select it here.</p>
     {% include "desk/_field.html" with field=form.welcome_template %}
     {% include "desk/_field.html" with field=form.newsletter_template %}
     {% include "desk/_field.html" with field=form.campaign_template %}

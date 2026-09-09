@@ -797,3 +797,48 @@ class FilterClearTests(LoggedInTestCase):
         self.assertEqual(filtered.context["result_count"], 1)
         cleared = self.client.get(reverse("desk:listings_list"))
         self.assertEqual(cleared.context["result_count"], 2)
+
+
+class NoNestedFormsTests(LoggedInTestCase):
+    """A <form> inside a <form> is dropped by the browser, and its button then
+    submits the outer one - the wrong thing, silently. Tests that post to a
+    URL directly never notice, so this reads the markup as a browser would."""
+
+    def _nesting_depth_violations(self, html):
+        from html.parser import HTMLParser
+
+        class Walk(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.depth = 0
+                self.bad = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "form":
+                    self.depth += 1
+                    if self.depth > 1:
+                        self.bad.append(dict(attrs).get("action", "?"))
+
+            def handle_endtag(self, tag):
+                if tag == "form":
+                    self.depth = max(0, self.depth - 1)
+
+        walker = Walk()
+        walker.feed(html)
+        return walker.bad
+
+    def test_no_page_with_a_form_nests_another(self):
+        opp = opportunity()
+        campaign = Campaign.objects.create(name="c", subject="s", body="b", event=opp)
+        reader = Reader.objects.create(email="ada@example.com")
+        tag = Tag.objects.create(name="Jazz nights", category="music")
+        for url in [
+            reverse("desk:listings_list"), reverse("desk:listings_change", args=[opp.pk]),
+            reverse("desk:interests_list"), reverse("desk:interests_change", args=[tag.pk]),
+            reverse("desk:readers_list"), reverse("desk:readers_change", args=[reader.pk]),
+            reverse("desk:campaigns_list"), reverse("desk:campaigns_change", args=[campaign.pk]),
+            reverse("desk:siteconfig"), reverse("desk:templates_list"),
+        ]:
+            html = self.client.get(url).content.decode()
+            nested = self._nesting_depth_violations(html)
+            self.assertEqual(nested, [], f"{url}: {len(nested)} form(s) nested inside another")

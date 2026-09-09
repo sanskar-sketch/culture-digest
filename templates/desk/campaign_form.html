@@ -31,6 +31,7 @@
     <p class="d-fieldset-desc">Write a brief (the facts, why it matters, what to do) and let AI write each reader's version - or write the body yourself. Use Preview above to read it as a reader would.</p>
     {% include "desk/_field.html" with field=form.name %}
     {% include "desk/_field.html" with field=form.event %}
+    {% include "desk/_field.html" with field=form.angle %}
     {% include "desk/_field.html" with field=form.subject %}
     {% include "desk/_field.html" with field=form.brief %}
     {% include "desk/_field.html" with field=form.body %}
@@ -98,6 +99,24 @@
   {% endif %}
 
   {% if instance %}
+  <div class="d-fieldset" data-tab-panel="Run again">
+    <p class="d-fieldset-desc">Run this campaign again for another event. The angle, the audience and the personalisation carry over; the subject and body are written afresh from the new event's facts. This one is left as it is.</p>
+    {% if instance.angle %}<p style="font-size:14px;margin:0 0 12px;">Angle: <em>{{ instance.angle }}</em></p>{% else %}<p style="font-size:13px;color:var(--d-muted);margin:0 0 12px;">No angle set on this campaign - add one on The email tab so the re-run knows what it's for.</p>{% endif %}
+    {% comment %}
+    This tab sits inside the campaign's own <form>, and a form cannot nest:
+    the browser would drop the inner one and this button would save the
+    campaign instead. So the controls point at a form declared after the
+    main one, by id.
+    {% endcomment %}
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <select name="event" form="rerun-{{ instance.pk }}" aria-label="Event to run this for" required>
+        <option value="">Choose an event…</option>
+        {% for e in other_events %}<option value="{{ e.pk }}">{{ e.title }}{% if e.end_date %} (until {{ e.end_date }}){% endif %}</option>{% endfor %}
+      </select>
+      <button type="submit" form="rerun-{{ instance.pk }}" class="d-btn primary">Run again for this event</button>
+    </div>
+  </div>
+
   <div class="d-fieldset" data-tab-panel="Metadata">
     <p style="font-size:13px;color:var(--d-muted);margin:0;">Created by {{ instance.created_by|default:"—" }} on {{ instance.created_at|date:"j M Y, H:i" }} · last updated {{ instance.updated_at|date:"j M Y, H:i" }}</p>
   </div>
@@ -108,4 +127,5 @@
     <button type="submit" name="save_add_another" value="1" class="d-btn">Save and add another</button>
   </div>
 </form>
+{% if instance %}<form method="post" id="rerun-{{ instance.pk }}" action="{% url 'desk:campaigns_rerun' instance.pk %}" hidden>{% csrf_token %}</form>{% endif %}
 {% endblock %}

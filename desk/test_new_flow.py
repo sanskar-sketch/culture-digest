@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from campaigns.models import Campaign, CampaignDelivery, SavedTemplate
+from campaigns.models import Campaign, CampaignDelivery
 from opportunities import research
 from opportunities.models import Opportunity, Tag
 from readers import interests as reader_interests
@@ -227,15 +227,6 @@ class PickByInterestTests(DeskTestCase):
         narrow = self.client.get(self.url("tag=jazz-nights&tag=basement-rooms&match=all"))
         self.assertEqual(narrow.context["result_count"], 1)
 
-    def test_the_selection_can_be_kept_as_a_template(self):
-        response = self.client.post(self.url("tag=jazz-nights"), {
-            "action": "save_template", "selected": [self.ada.pk]}, follow=True)
-        template = SavedTemplate.objects.get()
-        self.assertEqual(template.kind, SavedTemplate.Kind.NEWSLETTER)
-        self.assertEqual(list(template.readers.all()), [self.ada])
-        self.assertEqual(list(template.audience_tags.all()), [self.tag])
-        self.assertContains(response, "Saved as a template")
-        self.assertEqual(NewsletterIssue.objects.count(), 0)  # nothing sent
 
     def test_sending_reaches_only_the_readers_ticked(self):
         response = self.client.post(self.url("tag=jazz-nights"), {

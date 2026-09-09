@@ -38,12 +38,10 @@ SECTIONS = [
         "key": "sending",
         "title": "Sending",
         "rows": [
-            {"key": "saved_templates", "name": "Templates", "singular": "template",
-             "blurb": "Sends you've set up once - audience, content, frequency - to "
-                      "run again or start a campaign from."},
             {"key": "campaigns", "name": "Campaigns", "singular": "campaign",
-             "blurb": "Type the idea; AI drafts the email and picks the audience; "
-                      "you review, edit and send."},
+             "blurb": "One email about one event, to the people it suits. AI drafts "
+                      "it; you review, edit and send - and run it again for the next "
+                      "event like it."},
         ],
     },
     {

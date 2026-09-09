@@ -5,8 +5,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from campaigns.models import Campaign, CampaignDelivery, SavedTemplate
+from campaigns.models import Campaign, CampaignDelivery
 from campaigns.sending import WEB_BUDGET_SECONDS, preview_for, send_campaign, send_test
+from opportunities.models import Opportunity
 from desk.forms import CampaignForm
 from desk.permissions import staff_required
 from desk.utils import filter_options, paginate, search
@@ -173,7 +174,6 @@ def campaign_list(request):
         "delete_kind": "campaigns",
         "add_url": reverse("desk:campaigns_add"),
         "idea_url": reverse("desk:campaigns_from_idea"),
-        "campaign_templates": SavedTemplate.objects.filter(kind=SavedTemplate.Kind.CAMPAIGN),
     }
     return render(request, "desk/campaign_list.html", context)
 
@@ -190,12 +190,10 @@ def campaign_from_idea(request):
     from opportunities.models import Category, Tag
     from recommendations import ai
 
-    templates = SavedTemplate.objects.filter(kind=SavedTemplate.Kind.CAMPAIGN)
     if request.method != "POST":
         return render(request, "desk/campaign_idea.html", {
             "page_title": "New campaign",
             "breadcrumbs": [("Campaigns", reverse("desk:campaigns_list")), ("New", None)],
-            "campaign_templates": templates,
             "ai_on": ai.is_enabled("write_campaigns"),
         })
 
@@ -235,16 +233,6 @@ def campaign_from_idea(request):
 
 
 @staff_required
-def campaign_from_template(request, pk):
-    if request.method != "POST":
-        return HttpResponseNotAllowed(["POST"])
-    template = get_object_or_404(SavedTemplate, pk=pk, kind=SavedTemplate.Kind.CAMPAIGN)
-    campaign = template.make_campaign(created_by=request.user)
-    messages.success(request, f"Started “{campaign.name}” from the template.")
-    return redirect("desk:campaigns_change", pk=campaign.pk)
-
-
-@staff_required
 def campaign_form(request, pk=None):
     instance = get_object_or_404(Campaign, pk=pk) if pk else None
     if request.method == "POST":
@@ -273,6 +261,9 @@ def campaign_form(request, pk=None):
         "audience_description": instance.audience_description() if instance else None,
         "progress": _progress(instance) if instance else None,
         "deliveries": instance.deliveries.select_related("reader").order_by("pk")[:200] if instance else None,
+        "other_events": (Opportunity.objects.exclude(status=Opportunity.Status.ARCHIVED)
+                         .exclude(pk=instance.event_id).order_by("-created_at")[:100]
+                         if instance else []),
     }
     return render(request, "desk/campaign_form.html", context)
 
@@ -402,20 +393,46 @@ def campaign_cancel(request, pk):
 
 @staff_required
 def campaign_from_event(request, pk):
-    """A campaign about one event, drafted from the event's own record.
-
-    The event is the brief: title, description, where, when, price, link.
-    AI writes the email and picks the audience from that and nothing else,
-    so the facts in the email are the facts on the event. Several campaigns
-    can point at one event - a different angle for a different crowd.
-    """
-    from opportunities.models import Category, Opportunity, Tag
-    from recommendations import ai
-
+    """A campaign about one event, drafted from the event's own record."""
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
     event = get_object_or_404(Opportunity, pk=pk)
     angle = (request.POST.get("angle") or "").strip()
+    campaign = _draft_about(request, event, angle)
+    return redirect("desk:campaigns_change", pk=campaign.pk)
+
+
+@staff_required
+def campaign_rerun(request, pk):
+    """Run this campaign again for another event.
+
+    What a template used to be for: the angle, the audience and the
+    personalisation are the reusable part, and they carry over. The
+    subject and body are about the new event, so they are written again
+    from its facts. The original is left exactly as it was.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    like = get_object_or_404(Campaign, pk=pk)
+    event = get_object_or_404(Opportunity, pk=request.POST.get("event"))
+    if event.status == Opportunity.Status.ARCHIVED:
+        messages.warning(request, f"“{event.title}” has ended - pick an event that is still on.")
+        return redirect("desk:campaigns_change", pk=pk)
+    campaign = _draft_about(request, event, like.angle, like=like)
+    return redirect("desk:campaigns_change", pk=campaign.pk)
+
+
+def _draft_about(request, event, angle, like=None):
+    """A campaign about `event`, in the spirit of `like` if one is given.
+
+    The event is the brief: title, description, where, when, price, link.
+    AI writes the email and picks the audience from that and nothing else,
+    so the facts in the email are the facts on the event. When `like` is an
+    earlier campaign being run again, its angle, audience rules,
+    personalisation and button label carry over; only the words are new.
+    """
+    from opportunities.models import Category, Tag
+    from recommendations import ai
 
     facts = "\n".join(filter(None, [
         f"Event: {event.title}",
@@ -431,33 +448,44 @@ def campaign_from_event(request, pk):
 
     draft = ai.draft_campaign(facts) if ai.is_enabled("write_campaigns") else None
     allowed = {v for v, _ in Category.choices}
+    carried = {
+        "angle": angle, "event": event, "link_url": event.booking_url,
+        "created_by": request.user,
+        "personalise": like.personalise if like else True,
+    }
     if draft:
         campaign = Campaign.objects.create(
-            event=event,
             name=(draft.get("name") or event.title)[:120],
             subject=(draft.get("subject") or event.title)[:200],
             brief=draft.get("brief") or facts, body=draft.get("body") or "",
-            link_label=(draft.get("link_label") or "")[:60] or "Book / learn more",
-            link_url=event.booking_url,
-            audience_categories=[c for c in draft.get("categories") or [] if c in allowed],
-            audience_location=(draft.get("location") or event.location_area or "")[:120],
-            created_by=request.user)
-        tags = list(Tag.objects.filter(slug__in=draft.get("tags") or [])) or list(event.tags.all())
-        campaign.audience_tags.set(tags)
+            link_label=(like.link_label if like else draft.get("link_label") or "Book / learn more")[:60],
+            audience_categories=(list(like.audience_categories) if like
+                                 else [c for c in draft.get("categories") or [] if c in allowed]),
+            audience_location=(like.audience_location if like
+                               else (draft.get("location") or event.location_area or ""))[:120],
+            **carried)
+        if like:
+            campaign.audience_tags.set(like.audience_tags.all())
+        else:
+            tags = list(Tag.objects.filter(slug__in=draft.get("tags") or [])) or list(event.tags.all())
+            campaign.audience_tags.set(tags)
         reach = campaign.audience().count()
         messages.success(
             request,
             f"Drafted “{campaign.name}” about {event.title} for {reach} "
-            f"reader{'' if reach == 1 else 's'}. Read it, change anything, then Preview "
-            "and Send. Nothing has gone out.")
+            f"reader{'' if reach == 1 else 's'}"
+            + (f", with the audience and angle of “{like.name}”" if like else "")
+            + ". Read it, change anything, then Preview and Send. Nothing has gone out.")
     else:
         campaign = Campaign.objects.create(
-            event=event, name=event.title[:120], subject=event.title[:200], brief=facts,
-            link_url=event.booking_url, audience_location=event.location_area or "",
-            audience_categories=[event.category] if event.category in allowed else [],
-            created_by=request.user)
-        campaign.audience_tags.set(event.tags.all())
+            name=event.title[:120], subject=event.title[:200], brief=facts,
+            link_label=like.link_label if like else "Book / learn more",
+            audience_location=(like.audience_location if like else event.location_area) or "",
+            audience_categories=(list(like.audience_categories) if like
+                                 else ([event.category] if event.category in allowed else [])),
+            **carried)
+        campaign.audience_tags.set(like.audience_tags.all() if like else event.tags.all())
         messages.warning(request, "AI didn't draft this one - the event's facts are saved as "
-                                  "the brief and its interests as the audience. Fill in the "
-                                  "body, or try again once AI is working (Settings → Health).")
-    return redirect("desk:campaigns_change", pk=campaign.pk)
+                                  "the brief. Fill in the body, or try again once AI is "
+                                  "working (Settings → Health).")
+    return campaign

@@ -20,15 +20,11 @@ def template_list(request):
     for t in page_obj:
         t.in_use = t.pk in in_use_ids
 
-    from .saved_templates import subnav
-
     context = {
         "page_title": "Email designs",
         "page_blurb": "How the welcome, newsletter and campaign emails look. Nothing here "
                       "means the built-in designs are used, which is fine.",
-        "breadcrumbs": [("Templates", reverse("desk:saved_templates_list")),
-                        ("Email designs", None)],
-        "subnav": subnav("designs"),
+        "breadcrumbs": [("Settings", reverse("desk:siteconfig")), ("Email designs", None)],
         "page_obj": page_obj,
         "result_count": qs.count(),
         "search_placeholder": "Search templates…",
@@ -70,8 +66,9 @@ def template_form(request, pk=None):
     placeholders = EmailTemplate.PLACEHOLDERS.get(
         instance.kind if instance else EmailTemplate.Kind.NEWSLETTER, [])
     context = {
-        "page_title": "Add email template" if not instance else instance.name,
-        "breadcrumbs": [("Email templates", reverse("desk:templates_list")),
+        "page_title": "Add email design" if not instance else instance.name,
+        "breadcrumbs": [("Settings", reverse("desk:siteconfig")),
+                        ("Email designs", reverse("desk:templates_list")),
                         ("Add" if not instance else instance.name, None)],
         "form": form,
         "instance": instance,
@@ -123,7 +120,8 @@ def template_preview(request, pk):
 
     return render(request, "desk/template_preview.html", {
         "page_title": f"Preview: {template.name}",
-        "breadcrumbs": [("Email templates", reverse("desk:templates_list")),
+        "breadcrumbs": [("Settings", reverse("desk:siteconfig")),
+                        ("Email designs", reverse("desk:templates_list")),
                         (template.name, reverse("desk:templates_change", args=[pk])), ("Preview", None)],
         "template_obj": template, "preview_html": html, "preview_text": text,
         "preview_subject": subject, "error": error,

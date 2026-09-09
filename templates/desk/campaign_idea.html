@@ -19,12 +19,4 @@
   </div>
 </form>
 
-{% if campaign_templates %}
-<h2 style="font-size:15px;margin:28px 0 10px;">Or start from a template</h2>
-<div style="display:flex;flex-wrap:wrap;gap:8px;">
-  {% for t in campaign_templates %}
-  <form method="post" action="{% url 'desk:campaigns_from_template' t.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">{{ t.name }}</button></form>
-  {% endfor %}
-</div>
-{% endif %}
 {% endblock %}

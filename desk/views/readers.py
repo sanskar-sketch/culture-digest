@@ -4,7 +4,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from campaigns.models import SavedTemplate
 from desk.forms import READER_PROFILE_FIELDS, ReaderForm
 from opportunities.models import Tag
 from desk.permissions import staff_required
@@ -18,9 +17,6 @@ BULK_ACTIONS = (
     {"value": "suggest_events", "label": "Suggest events for these",
      "title": "AI searches the web for events matching the interests these users have "
               "most and you have fewest events for, in the area most of them are in"},
-    {"value": "save_template", "label": "Save as template",
-     "title": "Keep this selection as a template you can run again or put on a "
-              "schedule. Nothing is sent"},
     {"value": "preview", "label": "Preview newsletter",
      "title": "Dry run - builds what each selected reader would get. Nothing is sent"},
     {"value": "send", "label": "Send newsletter now",
@@ -125,17 +121,6 @@ def reader_list(request):
                 else:
                     messages.info(request, "These users' interests all have live events "
                                            "already, or research is already running.")
-        elif action == "save_template":
-            template = SavedTemplate.objects.create(
-                name=f"{len(selected)} user{'' if len(selected) == 1 else 's'} - "
-                     f"{timezone.localdate():%-d %b}",
-                kind=SavedTemplate.Kind.NEWSLETTER, created_by=request.user)
-            template.readers.set(selected)
-            chosen = Tag.objects.filter(slug__in=request.GET.getlist("tag"))
-            template.audience_tags.set(chosen)
-            messages.success(request, "Saved as a template. Give it a name, set how "
-                                      "often it runs, then Run now or make it Active.")
-            return redirect("desk:saved_templates_change", pk=template.pk)
         elif action in ("preview", "send"):
             dry_run = action == "preview"
             for reader in selected:

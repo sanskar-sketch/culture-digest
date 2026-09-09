@@ -76,11 +76,6 @@ def run_due(budget_seconds: float, dry_run: bool = False) -> dict:
     if ended:
         report["lines"].append(f"Events: archived {ended} that had ended.")
     report["lines"].extend(start_repeats())
-    if not dry_run:
-        from . import templates_runner
-
-        report["lines"].extend(templates_runner.run_due(
-            budget_seconds=max(budget.seconds - budget.spent, 1.0)))
     campaigns = list(due_campaigns())
     if not campaigns:
         report["lines"].append("Campaigns: nothing due.")

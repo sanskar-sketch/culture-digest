@@ -65,14 +65,15 @@ on this page, so it says so rather than waiting to be noticed.
             {% else %}<span class="d-pill neutral">Editor</span>{% endif %}
           </td>
           <td>
-            <form method="post" class="d-inline">
-              {% csrf_token %}
-              <input type="hidden" name="tag_id" value="{{ tag.pk }}">
-              <select name="category_value" onchange="this.form.submit()" style="min-height:32px;font-size:12.5px;padding:4px 26px 4px 8px;">
-                <option value=""{% if not tag.category %} selected{% endif %}>—</option>
-                {% for value, label in categories %}<option value="{{ value }}"{% if tag.category == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-              </select>
-            </form>
+            {% comment %}
+            Owned by a form declared after the table, by id. A form cannot sit
+            inside the bulk form: the browser drops it, and this dropdown then
+            posts every row's tag_id at once and the view changes the wrong one.
+            {% endcomment %}
+            <select name="category_value" form="cat-{{ tag.pk }}" onchange="this.form.submit()" aria-label="Category for {{ tag.name }}" style="min-height:32px;font-size:12.5px;padding:4px 26px 4px 8px;">
+              <option value=""{% if not tag.category %} selected{% endif %}>—</option>
+              {% for value, label in categories %}<option value="{{ value }}"{% if tag.category == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
           </td>
           <td>{% if tag.listings_count %}{{ tag.listings_count }}{% else %}<span style="color:var(--d-bad)">none yet</span>{% endif %}</td>
           <td>{{ tag.readers_count|default:"—" }}</td>
@@ -87,5 +88,6 @@ on this page, so it says so rather than waiting to be noticed.
     </div>
   </div>
 </form>
+{% for tag in page_obj %}<form method="post" id="cat-{{ tag.pk }}" hidden>{% csrf_token %}<input type="hidden" name="tag_id" value="{{ tag.pk }}"></form>{% endfor %}
 {% include "desk/_pagination.html" %}
 {% endblock %}

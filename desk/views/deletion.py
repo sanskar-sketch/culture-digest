@@ -22,7 +22,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from campaigns.models import Campaign, SavedTemplate
+from campaigns.models import Campaign
 from desk.permissions import staff_required
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
@@ -59,12 +59,6 @@ DELETABLE = {
         "name": lambda o: o.name,
         "instead": None,
     },
-    "saved_templates": {
-        "model": SavedTemplate, "label": "template", "list_url": "desk:saved_templates_list",
-        "name": lambda o: o.name,
-        "instead": "Setting it to Paused stops it running while keeping everything "
-                   "you set up.",
-    },
     "users": {
         "model": User, "label": "user", "list_url": "desk:users_list",
         "name": lambda o: o.username, "superuser_only": True,
@@ -89,7 +83,6 @@ MODEL_WORDING = {
     "campaign": ("campaign", "campaigns"),
     "campaigndelivery": ("delivery record", "delivery records"),
     "emailtemplate": ("email design", "email designs"),
-    "savedtemplate": ("template", "templates"),
     "user": ("user", "users"),
     "group": ("group", "groups"),
 }

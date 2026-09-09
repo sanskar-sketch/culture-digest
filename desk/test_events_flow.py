@@ -192,3 +192,76 @@ class EventScreenTests(TestCase):
         choices = CampaignForm().fields["event"].queryset
         self.assertIn(self.gig, choices)
         self.assertNotIn(over, choices)
+
+
+@plain_static
+class RerunTests(TestCase):
+    """What a template was for: run a campaign again for the next event like it."""
+
+    def setUp(self):
+        cache.clear()
+        self.boss = get_user_model().objects.create_superuser("boss", "b@example.com", "pw")
+        self.client.login(username="boss", password="pw")
+        self.jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        self.rooms = Tag.objects.create(name="Basement rooms", slug="basement-rooms")
+        self.first = event("Trio residency")
+        self.next = event("Quartet at the Vortex", booking_url="https://example.com/quartet")
+        self.original = Campaign.objects.create(
+            name="Small rooms", event=self.first, angle="for people who like small rooms",
+            subject="s", brief="b", body="the original body", personalise=False,
+            link_label="Grab a seat", audience_location="London",
+            audience_categories=["music"], created_by=self.boss)
+        self.original.audience_tags.add(self.jazz, self.rooms)
+
+    def test_the_angle_and_audience_carry_over_and_the_words_are_new(self):
+        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
+             mock.patch("recommendations.ai.draft_campaign", return_value={
+                 "name": "Quartet night", "subject": "Four of them", "brief": "Quartet.",
+                 "body": "a brand new body", "link_label": "ignored",
+                 "tags": ["something-else"], "categories": ["film"], "location": "Leeds"}) as draft:
+            response = self.client.post(reverse("desk:campaigns_rerun", args=[self.original.pk]),
+                                        {"event": self.next.pk}, follow=True)
+        rerun = Campaign.objects.exclude(pk=self.original.pk).get()
+        self.assertEqual(rerun.event, self.next)
+        self.assertEqual(rerun.angle, "for people who like small rooms")
+        # audience is the original's, not AI's fresh guess
+        self.assertEqual(set(rerun.audience_tags.all()), {self.jazz, self.rooms})
+        self.assertEqual(rerun.audience_categories, ["music"])
+        self.assertEqual(rerun.audience_location, "London")
+        self.assertFalse(rerun.personalise)
+        self.assertEqual(rerun.link_label, "Grab a seat")
+        # but the words and the link are about the new event
+        self.assertEqual(rerun.body, "a brand new body")
+        self.assertEqual(rerun.link_url, "https://example.com/quartet")
+        self.assertIn("Quartet at the Vortex", draft.call_args.args[0])
+        self.assertIn("small rooms", draft.call_args.args[0])
+        self.assertContains(response, "with the audience and angle of “Small rooms”")
+
+    def test_the_original_is_left_exactly_as_it_was(self):
+        before = Campaign.objects.values().get(pk=self.original.pk)
+        self.client.post(reverse("desk:campaigns_rerun", args=[self.original.pk]),
+                         {"event": self.next.pk})
+        self.assertEqual(Campaign.objects.values().get(pk=self.original.pk), before)
+        self.assertEqual(Campaign.objects.count(), 2)
+
+    def test_an_ended_event_is_refused(self):
+        over = event("Over", status=Opportunity.Status.ARCHIVED)
+        response = self.client.post(reverse("desk:campaigns_rerun", args=[self.original.pk]),
+                                    {"event": over.pk}, follow=True)
+        self.assertContains(response, "has ended")
+        self.assertEqual(Campaign.objects.count(), 1)
+
+    def test_the_campaign_page_offers_other_events_but_not_its_own_or_ended_ones(self):
+        event("Over", status=Opportunity.Status.ARCHIVED)
+        page = self.client.get(reverse("desk:campaigns_change", args=[self.original.pk]))
+        offered = [e.title for e in page.context["other_events"]]
+        self.assertIn("Quartet at the Vortex", offered)
+        self.assertNotIn("Trio residency", offered)
+        self.assertNotIn("Over", offered)
+        self.assertContains(page, "Run again for this event")
+
+    def test_drafting_from_an_event_keeps_the_angle_for_next_time(self):
+        self.client.post(reverse("desk:campaigns_from_event", args=[self.next.pk]),
+                         {"angle": "for the curious"})
+        made = Campaign.objects.get(event=self.next)
+        self.assertEqual(made.angle, "for the curious")

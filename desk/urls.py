@@ -2,7 +2,7 @@ from django.urls import path
 from django.views.generic import RedirectView
 
 from .views import access, auth, campaigns, dashboard, deletion, insights, interests
-from .views import listings, newsletters, outreach, readers, saved_templates
+from .views import listings, newsletters, outreach, readers
 from .views import settings as settings_views
 from .views import templates as template_views
 
@@ -46,21 +46,8 @@ urlpatterns = [
     path("campaigns/<int:pk>/suggest-audience/", campaigns.campaign_suggest_audience,
          name="campaigns_suggest_audience"),
     path("campaigns/from-idea/", campaigns.campaign_from_idea, name="campaigns_from_idea"),
-    path("campaigns/from-template/<int:pk>/", campaigns.campaign_from_template,
-         name="campaigns_from_template"),
+    path("campaigns/<int:pk>/rerun/", campaigns.campaign_rerun, name="campaigns_rerun"),
 
-    # Saved sends. The email designs keep their URL *names* (templates_*) so
-    # nothing that links to them changes; only their path moves.
-    path("templates/", saved_templates.template_list, name="saved_templates_list"),
-    path("templates/add/", saved_templates.template_form, name="saved_templates_add"),
-    path("templates/<int:pk>/", saved_templates.template_form, name="saved_templates_change"),
-    path("templates/<int:pk>/preview/", saved_templates.template_preview,
-         name="saved_templates_preview"),
-    path("templates/<int:pk>/run/", saved_templates.template_run, name="saved_templates_run"),
-    path("templates/<int:pk>/suggest-audience/", saved_templates.template_suggest_audience,
-         name="saved_templates_suggest"),
-    path("templates/<int:pk>/start-campaign/", saved_templates.template_to_campaign,
-         name="saved_templates_to_campaign"),
 
     path("issues/", newsletters.issue_list, name="issues_list"),
     path("issues/<int:pk>/", newsletters.issue_detail, name="issues_change"),
