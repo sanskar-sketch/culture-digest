@@ -1,0 +1,9 @@
+{% comment %}
+Two screens under one sidebar entry. `tabs` is a list of (label, url, active, count).
+Plain links, so the browser's back button and a middle-click behave.
+{% endcomment %}
+<nav class="d-subnav" aria-label="Sections">
+  {% for label, url, active, count in tabs %}
+  <a href="{{ url }}"{% if active %} class="is-active" aria-current="page"{% endif %}>{{ label }}{% if count is not None %}<span class="n">{{ count }}</span>{% endif %}</a>
+  {% endfor %}
+</nav>

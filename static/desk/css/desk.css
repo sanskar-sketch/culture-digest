@@ -548,3 +548,14 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
 .d-chip-check input { width: 14px; height: 14px; accent-color: var(--d-accent); }
 .d-chip-check .n { color: var(--d-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .d-chip-check.is-on .n, .d-chip-check:has(input:checked) .n { color: var(--d-accent-ink); }
+
+
+/* ---------- sub-navigation (two screens that share one sidebar entry) --- */
+.d-subnav { display: flex; gap: 4px; margin: -6px 0 16px; border-bottom: 1px solid var(--d-line); }
+.d-subnav a, .d-subnav a:link, .d-subnav a:visited {
+  padding: 8px 14px; font-size: 13.5px; font-weight: 600; color: var(--d-muted);
+  text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.d-subnav a:hover { color: var(--d-ink); }
+.d-subnav a.is-active { color: var(--d-accent-ink); border-bottom-color: var(--d-accent); }
+.d-subnav .n { font-weight: 400; color: var(--d-muted); margin-left: 4px; font-size: 12px; }

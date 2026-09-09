@@ -7,7 +7,7 @@ from desk.forms import TagForm
 from desk.permissions import staff_required
 from desk.utils import filter_options, paginate, search
 from opportunities import research
-from opportunities.models import Category, Tag
+from opportunities.models import Category, Opportunity, Tag
 
 BULK_ACTIONS = (
     {"value": "research", "label": "Find listings with AI",
@@ -59,7 +59,11 @@ def interest_list(request):
         "page_blurb": "The interests readers pick from when they sign up, and that you "
                       "tag listings with. Where the two overlap is how a listing finds "
                       "its reader.",
-        "breadcrumbs": [("Interests", None)],
+        "breadcrumbs": [("Listings", reverse("desk:listings_list")), ("Interests", None)],
+        "subnav": [
+            ("Listings", reverse("desk:listings_list"), False, Opportunity.objects.count()),
+            ("Interests", reverse("desk:interests_list"), True, Tag.objects.count()),
+        ],
         "page_obj": page_obj,
         "result_count": qs.count(),
         "search_placeholder": "Search interests…",

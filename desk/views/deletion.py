@@ -22,7 +22,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from campaigns.models import Campaign
+from campaigns.models import Campaign, SavedTemplate
 from desk.permissions import staff_required
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
@@ -55,9 +55,15 @@ DELETABLE = {
                    "record of what was.",
     },
     "templates": {
-        "model": EmailTemplate, "label": "email template", "list_url": "desk:templates_list",
+        "model": EmailTemplate, "label": "email design", "list_url": "desk:templates_list",
         "name": lambda o: o.name,
         "instead": None,
+    },
+    "saved_templates": {
+        "model": SavedTemplate, "label": "template", "list_url": "desk:saved_templates_list",
+        "name": lambda o: o.name,
+        "instead": "Setting it to Paused stops it running while keeping everything "
+                   "you set up.",
     },
     "users": {
         "model": User, "label": "user", "list_url": "desk:users_list",
@@ -82,7 +88,8 @@ MODEL_WORDING = {
                        "recommendations and the reader feedback on them"),
     "campaign": ("campaign", "campaigns"),
     "campaigndelivery": ("delivery record", "delivery records"),
-    "emailtemplate": ("email template", "email templates"),
+    "emailtemplate": ("email design", "email designs"),
+    "savedtemplate": ("template", "templates"),
     "user": ("user", "users"),
     "group": ("group", "groups"),
 }

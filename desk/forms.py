@@ -4,7 +4,7 @@ from django import forms
 from django.contrib.auth.forms import SetPasswordForm, UserCreationForm
 from django.contrib.auth.models import Group, Permission, User
 
-from campaigns.models import Campaign
+from campaigns.models import Campaign, SavedTemplate
 from opportunities.models import Category, Opportunity, Tag
 from readers.models import Reader
 from siteconfig.emails import EmailTemplate
@@ -179,6 +179,42 @@ class CampaignForm(CampaignRepeatMixin, FriendlyChoices, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["audience_tags"].queryset = Tag.objects.all()
         self.fields["send_at"].input_formats = ["%Y-%m-%dT%H:%M"]
+        if self.instance.pk:
+            self.fields["audience_categories"].initial = self.instance.audience_categories
+
+
+class SavedTemplateForm(CampaignRepeatMixin, FriendlyChoices, forms.ModelForm):
+    """A saved send. Every field the model has, so nothing is set-and-forgotten."""
+
+    audience_categories = forms.MultipleChoiceField(
+        choices=Category.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label="Categories they follow",
+        help_text="Only readers who follow at least one of these. Nothing ticked means "
+                  "no restriction.")
+
+    class Meta:
+        model = SavedTemplate
+        fields = (
+            "name", "kind", "status",
+            "subject", "brief", "body", "auto_write", "auto_tag", "link_label", "link_url",
+            "readers", "audience_tags", "audience_categories", "audience_location",
+            "auto_select_audience",
+            "frequency", "starts_on", "ends_on", "send_hour",
+        )
+        widgets = {
+            "brief": forms.Textarea(attrs={"rows": 6}),
+            "body": forms.Textarea(attrs={"rows": 8}),
+            "readers": forms.CheckboxSelectMultiple,
+            "audience_tags": forms.CheckboxSelectMultiple,
+            "starts_on": forms.DateInput(attrs={"type": "date"}),
+            "ends_on": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["audience_tags"].queryset = Tag.objects.order_by("name")
+        self.fields["readers"].queryset = Reader.objects.filter(is_active=True).order_by("email")
+        self.fields["readers"].label = "Specific users"
         if self.instance.pk:
             self.fields["audience_categories"].initial = self.instance.audience_categories
 

@@ -2,6 +2,30 @@
 {% block content %}
 <div class="d-page-top"><h1>{{ page_title }}</h1></div>
 <p class="d-page-blurb">{{ page_blurb }}</p>
+
+<details class="d-card" style="margin-bottom:14px;"{% if chosen_tags %} open{% endif %}>
+  <summary style="cursor:pointer;font-weight:600;font-size:14px;">
+    Pick by interest{% if chosen_tags %} — {{ chosen_tags|length }} chosen{% endif %}
+  </summary>
+  <form method="get" style="margin-top:10px;">
+    {% for key, value in request.GET.items %}{% if key != "tag" and key != "match" and key != "page" %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px;">
+      {% for tag in all_tags %}
+      <label class="d-chip-check{% if tag.slug in chosen_slugs %} is-on{% endif %}">
+        <input type="checkbox" name="tag" value="{{ tag.slug }}"{% if tag.slug in chosen_slugs %} checked{% endif %}>
+        {{ tag.name }}<span class="n">{{ tag.n }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <label style="font-size:13px;display:inline-flex;align-items:center;gap:6px;margin-right:14px;">
+      <input type="checkbox" name="match" value="all"{% if match_all %} checked{% endif %}>
+      must have <strong>every</strong> ticked interest
+    </label>
+    <button type="submit" class="d-btn small primary">Show these users</button>
+    {% if chosen_tags %}<a class="d-btn small" href="{{ request.path }}">Clear</a>{% endif %}
+  </form>
+</details>
+
 {% include "desk/_toolbar.html" %}
 <form method="post" data-bulk-form>
   {% csrf_token %}
@@ -26,7 +50,8 @@
           <td>{{ reader.get_travel_radius_display|default:"—" }}</td>
           <td>{% if reader.recs_count %}{{ reader.recs_count }} sent · <strong>{{ reader.replied_count }}</strong> replied{% else %}—{% endif %}</td>
           <td style="font-variant-numeric:tabular-nums">{{ reader.completeness }}%</td>
-          <td>{% if reader.is_active %}<span class="d-pill good">Active</span>{% else %}<span class="d-pill neutral">Inactive</span>{% endif %}</td>
+          <td>{% if reader.is_active %}<span class="d-pill good">Active</span>{% else %}<span class="d-pill neutral">Inactive</span>{% endif %}
+            <a href="{% url 'desk:reader_tags' reader.pk %}" style="font-size:12px;margin-left:6px;">tags</a></td>
           <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'readers' reader.pk %}" aria-label="Delete {{ reader.email }}">Delete</a></td>
         </tr>
         {% empty %}

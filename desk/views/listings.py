@@ -117,6 +117,10 @@ def listing_list(request):
                       "can recommend. A listing stays a draft, invisible to readers, until "
                       "you publish it.",
         "breadcrumbs": [("Listings", None)],
+        "subnav": [
+            ("Listings", reverse("desk:listings_list"), True, Opportunity.objects.count()),
+            ("Interests", reverse("desk:interests_list"), False, Tag.objects.count()),
+        ],
         "page_obj": page_obj,
         "result_count": qs.count(),
         "search_placeholder": "Search listings…",

@@ -20,11 +20,15 @@ def template_list(request):
     for t in page_obj:
         t.in_use = t.pk in in_use_ids
 
+    from .saved_templates import subnav
+
     context = {
-        "page_title": "Email templates",
-        "page_blurb": "The welcome, newsletter and campaign emails as editable templates, "
-                      "with preview. Nothing here means the built-in versions are used.",
-        "breadcrumbs": [("Email templates", None)],
+        "page_title": "Email designs",
+        "page_blurb": "How the welcome, newsletter and campaign emails look. Nothing here "
+                      "means the built-in designs are used, which is fine.",
+        "breadcrumbs": [("Templates", reverse("desk:saved_templates_list")),
+                        ("Email designs", None)],
+        "subnav": subnav("designs"),
         "page_obj": page_obj,
         "result_count": qs.count(),
         "search_placeholder": "Search templates…",

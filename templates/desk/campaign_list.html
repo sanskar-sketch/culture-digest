@@ -3,10 +3,19 @@
 <div class="d-page-top">
   <h1>{{ page_title }}</h1>
   <div class="d-page-actions">
-    <a href="{{ add_url }}" class="d-btn primary">Add campaign</a>
+    <a href="{{ add_url }}" class="d-btn">Blank campaign</a>
+    <a href="{{ idea_url }}" class="d-btn primary">New campaign from an idea</a>
   </div>
 </div>
 <p class="d-page-blurb">{{ page_blurb }}</p>
+{% if campaign_templates %}
+<div class="d-card" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;">
+  <span style="font-size:13px;color:var(--d-muted);margin-right:4px;">Start from a template:</span>
+  {% for t in campaign_templates %}
+  <form method="post" action="{% url 'desk:campaigns_from_template' t.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn small">{{ t.name }}</button></form>
+  {% endfor %}
+</div>
+{% endif %}
 {% include "desk/_toolbar.html" %}
 <form method="post" data-bulk-form>
   {% csrf_token %}

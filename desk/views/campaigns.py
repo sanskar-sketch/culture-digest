@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from campaigns.models import Campaign, CampaignDelivery
+from campaigns.models import Campaign, CampaignDelivery, SavedTemplate
 from campaigns.sending import WEB_BUDGET_SECONDS, preview_for, send_campaign, send_test
 from desk.forms import CampaignForm
 from desk.permissions import staff_required
@@ -172,8 +172,76 @@ def campaign_list(request):
         "bulk_actions": BULK_ACTIONS,
         "delete_kind": "campaigns",
         "add_url": reverse("desk:campaigns_add"),
+        "idea_url": reverse("desk:campaigns_from_idea"),
+        "campaign_templates": SavedTemplate.objects.filter(kind=SavedTemplate.Kind.CAMPAIGN),
     }
     return render(request, "desk/campaign_list.html", context)
+
+
+@staff_required
+def campaign_from_idea(request):
+    """Type what the email is about; AI drafts everything; you review.
+
+    The draft is a real Campaign row from the moment it exists, so the
+    editor lands on the ordinary edit form with every field filled in and
+    the audience already set - and can change any of it before Preview or
+    Send. Nothing here sends.
+    """
+    from opportunities.models import Category, Tag
+    from recommendations import ai
+
+    templates = SavedTemplate.objects.filter(kind=SavedTemplate.Kind.CAMPAIGN)
+    if request.method != "POST":
+        return render(request, "desk/campaign_idea.html", {
+            "page_title": "New campaign",
+            "breadcrumbs": [("Campaigns", reverse("desk:campaigns_list")), ("New", None)],
+            "campaign_templates": templates,
+            "ai_on": ai.is_enabled("write_campaigns"),
+        })
+
+    idea = (request.POST.get("idea") or "").strip()
+    if not idea:
+        messages.warning(request, "Say what the email is about first.")
+        return redirect("desk:campaigns_from_idea")
+
+    draft = ai.draft_campaign(idea) if ai.is_enabled("write_campaigns") else None
+    if not draft:
+        campaign = Campaign.objects.create(
+            name=idea[:60], subject=idea[:120], brief=idea, created_by=request.user)
+        messages.warning(request, "AI didn't draft this one - the idea is saved as the "
+                                  "brief. Fill in the subject and body, or try again once "
+                                  "AI is working (Settings → Health).")
+        return redirect("desk:campaigns_change", pk=campaign.pk)
+
+    allowed = {v for v, _ in Category.choices}
+    campaign = Campaign.objects.create(
+        name=(draft.get("name") or idea[:60])[:120],
+        subject=(draft.get("subject") or idea[:120])[:200],
+        brief=draft.get("brief") or idea,
+        body=draft.get("body") or "",
+        link_label=(draft.get("link_label") or "")[:60] or "Book / learn more",
+        audience_categories=[c for c in draft.get("categories") or [] if c in allowed],
+        audience_location=(draft.get("location") or "")[:120],
+        created_by=request.user,
+    )
+    campaign.audience_tags.set(Tag.objects.filter(slug__in=draft.get("tags") or []))
+    reach = campaign.audience().count()
+    messages.success(
+        request,
+        f"Drafted “{campaign.name}” for {reach} reader{'' if reach == 1 else 's'} "
+        f"({campaign.audience_description()}). Read it, change anything, then Preview "
+        "and Send. Nothing has gone out.")
+    return redirect("desk:campaigns_change", pk=campaign.pk)
+
+
+@staff_required
+def campaign_from_template(request, pk):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    template = get_object_or_404(SavedTemplate, pk=pk, kind=SavedTemplate.Kind.CAMPAIGN)
+    campaign = template.make_campaign(created_by=request.user)
+    messages.success(request, f"Started “{campaign.name}” from the template.")
+    return redirect("desk:campaigns_change", pk=campaign.pk)
 
 
 @staff_required

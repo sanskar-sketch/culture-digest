@@ -2,7 +2,7 @@
 
 from django.urls import NoReverseMatch, reverse
 
-from config.dashboard import SECTIONS
+from config.dashboard import FOOTER_LINKS, SECTIONS
 
 
 def sidebar_sections(request):
@@ -34,3 +34,19 @@ def sidebar_sections(request):
             })
         sections.append({**section, "rows": rows})
     return sections
+
+
+def footer_links(request):
+    """Settings and accounts, at the foot of the sidebar."""
+    links = []
+    for link in FOOTER_LINKS:
+        if link.get("superuser_only") and not request.user.is_superuser:
+            continue
+        try:
+            url = reverse(f"desk:{link['key']}_list")
+        except NoReverseMatch:
+            url = reverse(f"desk:{link['key']}")
+        links.append({**link, "url": url,
+                      "active": request.path.startswith(url.rstrip("/") + "/")
+                                or request.path == url})
+    return links

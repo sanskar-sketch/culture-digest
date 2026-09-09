@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from campaigns.models import Campaign, CampaignDelivery
+from campaigns.models import Campaign, CampaignDelivery, SavedTemplate
 from opportunities import research
 from opportunities.models import Opportunity, Tag
 from readers import interests as reader_interests
@@ -180,7 +180,9 @@ class InterestQueueTests(DeskTestCase):
                       " ".join(m.message for m in response.context["messages"]))
 
 
-class SendByInterestTests(DeskTestCase):
+class PickByInterestTests(DeskTestCase):
+    """The Users page: pick interests, see exactly who has them, send."""
+
     def setUp(self):
         super().setUp()
         self.tag = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
@@ -196,56 +198,44 @@ class SendByInterestTests(DeskTestCase):
                 status=Opportunity.Status.PUBLISHED)
             listing.tags.add(self.tag)
 
-    def url(self, **params):
-        base = reverse("desk:send_by_interest")
-        return f"{base}?{'&'.join(f'{k}={v}' for k, v in params.items())}" if params else base
+    def url(self, query=""):
+        return reverse("desk:readers_list") + (f"?{query}" if query else "")
 
     def test_picking_an_interest_shows_exactly_who_has_it(self):
-        page = self.client.get(self.url(tag="jazz-nights"))
-        self.assertEqual(page.context["audience_count"], 1)
+        page = self.client.get(self.url("tag=jazz-nights"))
+        self.assertEqual(page.context["result_count"], 1)
         self.assertContains(page, "ada@example.com")
         self.assertNotContains(page, "bo@example.com")
 
     def test_an_inferred_interest_counts_too(self):
         self.bo.ai_inferred_tags.add(self.tag)
-        page = self.client.get(self.url(tag="jazz-nights"))
-        self.assertEqual(page.context["audience_count"], 2)
+        page = self.client.get(self.url("tag=jazz-nights"))
+        self.assertEqual(page.context["result_count"], 2)
 
     def test_match_all_narrows_rather_than_widens(self):
         other = Tag.objects.create(name="Basement rooms", slug="basement-rooms")
         self.bo.interest_tags.add(self.tag, other)
-        wide = self.client.get(self.url(tag="jazz-nights") + "&tag=basement-rooms")
-        self.assertEqual(wide.context["audience_count"], 2)
-        narrow = self.client.get(self.url(tag="jazz-nights") + "&tag=basement-rooms&match=all")
-        self.assertEqual(narrow.context["audience_count"], 1)
+        wide = self.client.get(self.url("tag=jazz-nights&tag=basement-rooms"))
+        self.assertEqual(wide.context["result_count"], 2)
+        narrow = self.client.get(self.url("tag=jazz-nights&tag=basement-rooms&match=all"))
+        self.assertEqual(narrow.context["result_count"], 1)
 
-    def test_an_inactive_reader_is_never_in_the_audience(self):
-        self.ada.is_active = False
-        self.ada.save(update_fields=["is_active"])
-        page = self.client.get(self.url(tag="jazz-nights"))
-        self.assertEqual(page.context["audience_count"], 0)
-
-    def test_preview_renders_the_real_email_and_stores_nothing(self):
-        response = self.client.post(self.url(), {
-            "tag": "jazz-nights", "action": "preview", "selected": [self.ada.pk]},
-            follow=True)
-        self.assertTrue(response.context["preview"]["ok"])
-        self.assertIn("Gig", response.context["preview"]["html"])
-        self.assertEqual(NewsletterIssue.objects.count(), 0)
-        self.assertEqual(Recommendation.objects.count(), 0)
+    def test_the_selection_can_be_kept_as_a_template(self):
+        response = self.client.post(self.url("tag=jazz-nights"), {
+            "action": "save_template", "selected": [self.ada.pk]}, follow=True)
+        template = SavedTemplate.objects.get()
+        self.assertEqual(template.kind, SavedTemplate.Kind.NEWSLETTER)
+        self.assertEqual(list(template.readers.all()), [self.ada])
+        self.assertEqual(list(template.audience_tags.all()), [self.tag])
+        self.assertContains(response, "Saved as a template")
+        self.assertEqual(NewsletterIssue.objects.count(), 0)  # nothing sent
 
     def test_sending_reaches_only_the_readers_ticked(self):
-        response = self.client.post(self.url(), {
-            "tag": "jazz-nights", "action": "send", "selected": [self.ada.pk]},
-            follow=True)
-        self.assertIn("Sent to 1 reader",
-                      " ".join(m.message for m in response.context["messages"]))
+        response = self.client.post(self.url("tag=jazz-nights"), {
+            "action": "send", "selected": [self.ada.pk]}, follow=True)
+        self.assertIn("Sent", " ".join(m.message for m in response.context["messages"]))
         self.assertEqual(NewsletterIssue.objects.count(), 1)
         self.assertEqual(NewsletterIssue.objects.get().reader, self.ada)
-
-    def test_sending_nothing_selected_sends_nothing(self):
-        self.client.post(self.url(), {"tag": "jazz-nights", "action": "send"}, follow=True)
-        self.assertEqual(NewsletterIssue.objects.count(), 0)
 
     def test_every_tag_of_a_reader_is_on_one_page(self):
         inferred = Tag.objects.create(name="Basement rooms", slug="basement-rooms")

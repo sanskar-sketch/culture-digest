@@ -25,16 +25,12 @@
   </div>
 </div>
 
-<div class="d-card">
-  <h2>Configuration</h2>
-  {% for row in configuration %}
-  <div class="d-row">
-    <span class="{% if row.ok %}d-ok-dot{% else %}d-bad-dot{% endif %}"></span>
-    <span class="d-name" style="flex-basis:160px;">{{ row.name }}</span>
-    <span style="flex:1;{% if not row.ok %}color:var(--d-warn){% endif %}">{{ row.detail }}</span>
-  </div>
-  {% endfor %}
+{% if problems %}
+<div class="d-msg warning" style="margin-bottom:18px;">
+  <span>{{ problems }} thing{{ problems|pluralize }} need{{ problems|pluralize:"s," }} attention in
+  <a href="{% url 'desk:siteconfig' %}#health">Settings</a>.</span>
 </div>
+{% endif %}
 
 <div class="d-split">
   <div class="d-card">

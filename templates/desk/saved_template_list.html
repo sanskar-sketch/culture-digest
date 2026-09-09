@@ -1,0 +1,49 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    <a href="{{ add_url }}?kind=newsletter" class="d-btn">New newsletter template</a>
+    <a href="{{ add_url }}?kind=campaign" class="d-btn primary">New campaign template</a>
+  </div>
+</div>
+{% include "desk/_subnav.html" with tabs=subnav %}
+<p class="d-page-blurb">{{ page_blurb }}</p>
+{% include "desk/_toolbar.html" %}
+<div class="d-table-wrap">
+  <div class="d-table-scroll">
+  <table class="d-table">
+    <thead><tr><th>Name</th><th>Kind</th><th>Who</th><th>How often</th><th>Status</th><th>Last run</th><th></th>
+      <th class="d-col-act"><span class="d-sr-only">Actions</span></th></tr></thead>
+    <tbody>
+      {% for t in page_obj %}
+      <tr>
+        <td><a class="d-row-link" href="{% url 'desk:saved_templates_change' t.pk %}">{{ t.name }}</a></td>
+        <td>{% if t.kind == "campaign" %}<span class="d-pill accent">Campaign</span>{% else %}<span class="d-pill neutral">Newsletter</span>{% endif %}</td>
+        <td class="wrap"><strong>{{ t.audience_size }}</strong> · {{ t.audience_description }}</td>
+        <td>{{ t.get_frequency_display }}{% if t.repeats and t.starts_on %}<br><span style="color:var(--d-muted);font-size:12px;">{{ t.starts_on }}{% if t.ends_on %} → {{ t.ends_on }}{% endif %}, {{ t.send_hour }}:00</span>{% endif %}</td>
+        <td>
+          {% if t.status == "active" %}<span class="d-pill good">Active</span>
+          {% elif t.status == "paused" %}<span class="d-pill warn">Paused</span>
+          {% else %}<span class="d-pill neutral">Draft</span>{% endif %}
+          {% if t.due %}<span class="d-pill accent" style="margin-left:4px;">due</span>{% endif %}
+        </td>
+        <td>{{ t.last_run_on|default:"never" }}{% if t.runs %} <span style="color:var(--d-muted);font-size:12px;">×{{ t.runs }}</span>{% endif %}</td>
+        <td style="white-space:nowrap;">
+          <form method="post" action="{% url 'desk:saved_templates_run' t.pk %}" class="d-inline" data-confirm="Run “{{ t.name }}” now? This really emails {{ t.audience_size }} reader{{ t.audience_size|pluralize }}.">{% csrf_token %}<button type="submit" class="d-btn small">Run now</button></form>
+          {% if t.kind == "campaign" %}<form method="post" action="{% url 'desk:saved_templates_to_campaign' t.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn small">Start a campaign</button></form>{% endif %}
+        </td>
+        <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'saved_templates' t.pk %}" aria-label="Delete {{ t.name }}">Delete</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="d-empty">
+        <p><strong>No templates yet.</strong></p>
+        <p>A template is a send you set up once: who gets it, what it says, how often. Make one here, or tick users on the Users page and press <em>Save as template</em>.</p>
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% include "desk/_pagination.html" %}
+{% endblock %}

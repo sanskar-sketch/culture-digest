@@ -2,8 +2,11 @@ from django.contrib import messages
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
+from campaigns.models import SavedTemplate
 from desk.forms import READER_PROFILE_FIELDS, ReaderForm
+from opportunities.models import Tag
 from desk.permissions import staff_required
 from desk.utils import filter_options, paginate, search
 from opportunities.models import Category
@@ -12,6 +15,9 @@ from recommendations.sending import send_issue_for_reader
 from readers.models import Reader
 
 BULK_ACTIONS = (
+    {"value": "save_template", "label": "Save as template",
+     "title": "Keep this selection as a template you can run again or put on a "
+              "schedule. Nothing is sent"},
     {"value": "preview", "label": "Preview newsletter",
      "title": "Dry run - builds what each selected reader would get. Nothing is sent"},
     {"value": "send", "label": "Send newsletter now",
@@ -77,12 +83,38 @@ def reader_list(request):
     if surprise in ("1", "0"):
         qs = qs.filter(open_to_surprise=(surprise == "1"))
 
+    # Pick by interest. Several at once, any or all, and an inferred
+    # interest counts as well as a picked one - the same rule the
+    # matching uses, so this list is who would actually be reached.
+    chosen_slugs = request.GET.getlist("tag")
+    chosen_tags = list(Tag.objects.filter(slug__in=chosen_slugs)) if chosen_slugs else []
+    match_all = request.GET.get("match") == "all"
+    if chosen_tags:
+        if match_all:
+            for tag in chosen_tags:
+                qs = qs.filter(Q(interest_tags=tag) | Q(ai_inferred_tags=tag))
+            qs = qs.distinct()
+        else:
+            qs = qs.filter(Q(interest_tags__in=chosen_tags)
+                           | Q(ai_inferred_tags__in=chosen_tags)).distinct()
+
     if request.method == "POST":
         action = request.POST.get("action")
         ids = request.POST.getlist("selected")
         selected = list(Reader.objects.filter(pk__in=ids))
         if not ids:
             messages.warning(request, "Nothing selected.")
+        elif action == "save_template":
+            template = SavedTemplate.objects.create(
+                name=f"{len(selected)} user{'' if len(selected) == 1 else 's'} - "
+                     f"{timezone.localdate():%-d %b}",
+                kind=SavedTemplate.Kind.NEWSLETTER, created_by=request.user)
+            template.readers.set(selected)
+            chosen = Tag.objects.filter(slug__in=request.GET.getlist("tag"))
+            template.audience_tags.set(chosen)
+            messages.success(request, "Saved as a template. Give it a name, set how "
+                                      "often it runs, then Run now or make it Active.")
+            return redirect("desk:saved_templates_change", pk=template.pk)
         elif action in ("preview", "send"):
             dry_run = action == "preview"
             for reader in selected:
@@ -121,11 +153,18 @@ def reader_list(request):
     ]
     has_active_filters = any(request.GET.get(g["param"]) for g in filter_groups)
 
+    all_tags = (Tag.objects
+                .annotate(n=Count("interested_readers", distinct=True))
+                .order_by("-n", "name"))
     context = {
-        "page_title": "Readers",
-        "page_blurb": "Everyone subscribed: what they told us about their taste, what "
-                      "they have been sent, and how they responded.",
-        "breadcrumbs": [("Readers", None)],
+        "page_title": "Users",
+        "page_blurb": "Everyone signed up. Tick users - or pick interests to select "
+                      "everyone who has them - then preview what they'd get and send.",
+        "breadcrumbs": [("Users", None)],
+        "all_tags": all_tags,
+        "chosen_slugs": chosen_slugs,
+        "chosen_tags": chosen_tags,
+        "match_all": match_all,
         "page_obj": page_obj,
         "result_count": qs.count(),
         "search_placeholder": "Search readers…",

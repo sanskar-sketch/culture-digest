@@ -41,6 +41,7 @@
     </div>
     <div class="d-side-foot">
       <span class="who">{% firstof request.user.get_short_name request.user.get_username %}</span>
+      {% for link in footer_links %}<a href="{{ link.url }}"{% if link.active %} style="color:#fff;"{% endif %}>{{ link.name }}</a>{% endfor %}
       <a href="/">View site</a>
       <a href="{% url 'desk:password_change' %}">Password</a>
       <form method="post" action="{% url 'desk:logout' %}" class="d-inline">{% csrf_token %}<button type="submit">Log out</button></form>

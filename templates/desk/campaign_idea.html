@@ -1,0 +1,30 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top"><h1>{{ page_title }}</h1></div>
+<p class="d-page-blurb">Say what the email is about. AI writes the subject, the brief, a draft body, and picks who should get it. You then read it, change anything, and send.</p>
+
+<form method="post" class="d-form" style="max-width:760px;">
+  {% csrf_token %}
+  <div class="d-fieldset">
+    <label for="idea" style="display:block;font-weight:600;margin-bottom:6px;">What's it about?</label>
+    <textarea id="idea" name="idea" rows="7" style="width:100%;" placeholder="e.g. Frieze is on this weekend. The Sculpture Park is free and open until 6. Tell people who like art and are in London - and that Sunday is quieter."></textarea>
+    <p style="font-size:12.5px;color:var(--d-muted);margin:8px 0 0;">Put the facts in - dates, prices, places. AI only uses what you write here; it won't fill gaps with guesses.</p>
+  </div>
+  {% if not ai_on %}
+  <div class="d-msg warning">AI isn't available right now, so this will save your idea as the brief for you to finish by hand. Check <a href="{% url 'desk:siteconfig' %}#health">Settings → Health</a>.</div>
+  {% endif %}
+  <div class="d-form-actions">
+    <button type="submit" class="d-btn primary">{% if ai_on %}Draft it with AI{% else %}Save as a brief{% endif %}</button>
+    <a class="d-btn" href="{% url 'desk:campaigns_list' %}">Cancel</a>
+  </div>
+</form>
+
+{% if campaign_templates %}
+<h2 style="font-size:15px;margin:28px 0 10px;">Or start from a template</h2>
+<div style="display:flex;flex-wrap:wrap;gap:8px;">
+  {% for t in campaign_templates %}
+  <form method="post" action="{% url 'desk:campaigns_from_template' t.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">{{ t.name }}</button></form>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

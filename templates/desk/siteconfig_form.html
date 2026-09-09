@@ -95,6 +95,17 @@
     {% endif %}
   </div>
 
+  <div class="d-fieldset" data-tab-panel="Health" id="health">
+    <p class="d-fieldset-desc">What is wired up, and whether it is actually working. Mostly for whoever set the site up.</p>
+    {% for row in configuration %}
+    <div class="d-row">
+      <span class="{% if row.ok %}d-ok-dot{% else %}d-bad-dot{% endif %}"></span>
+      <span class="d-name" style="flex-basis:160px;">{{ row.name }}</span>
+      <span style="flex:1;{% if not row.ok %}color:var(--d-warn){% endif %}">{{ row.detail }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
   <div class="d-fieldset" data-tab-panel="Metadata">
     <p style="font-size:13px;color:var(--d-muted);margin:0;">Last updated {{ config.updated_at|date:"j M Y, H:i" }}</p>
   </div>

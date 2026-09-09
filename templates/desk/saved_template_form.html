@@ -1,0 +1,62 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    {% if instance %}
+    <a class="d-btn" href="{% url 'desk:saved_templates_preview' instance.pk %}">Preview</a>
+    <form method="post" action="{% url 'desk:saved_templates_suggest' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Pick the audience with AI</button></form>
+    {% if instance.kind == "campaign" %}
+    <form method="post" action="{% url 'desk:saved_templates_to_campaign' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Start a campaign from this</button></form>
+    {% endif %}
+    <form method="post" action="{% url 'desk:saved_templates_run' instance.pk %}" class="d-inline" data-confirm="Run now? This really emails {{ audience_count }} reader{{ audience_count|pluralize }}.">{% csrf_token %}<button type="submit" class="d-btn danger">Run now</button></form>
+    <a class="d-btn danger" href="{% url 'desk:delete' 'saved_templates' instance.pk %}">Delete</a>
+    {% endif %}
+  </div>
+</div>
+
+<form method="post" class="d-form" data-tabs="saved-template">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="d-messages">{% for error in form.non_field_errors %}<div class="d-msg error">{{ error }}</div>{% endfor %}</div>
+  {% endif %}
+
+  <div class="d-fieldset" data-tab-panel="What">
+    <p class="d-fieldset-desc">A <strong>newsletter</strong> template sends each reader their own picks - nothing to write. A <strong>campaign</strong> template is one message from a brief; tick <em>Let AI write it</em> and each reader gets their own version.</p>
+    {% include "desk/_field.html" with field=form.name %}
+    {% include "desk/_field.html" with field=form.kind %}
+    {% include "desk/_field.html" with field=form.subject %}
+    {% include "desk/_field.html" with field=form.brief %}
+    {% include "desk/_field.html" with field=form.body %}
+    {% include "desk/_field.html" with field=form.auto_write %}
+    {% include "desk/_field.html" with field=form.auto_tag %}
+    {% include "desk/_field.html" with field=form.link_label %}
+    {% include "desk/_field.html" with field=form.link_url %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="Who">
+    <p class="d-fieldset-desc">Specific users, plus anyone the rules match. Leave everything empty for every active reader.</p>
+    {% if instance %}<p style="font-size:14px;margin:0 0 16px;"><strong>{{ audience_count }}</strong> reader{{ audience_count|pluralize }} right now: {{ audience_description }}.</p>{% endif %}
+    {% include "desk/_field.html" with field=form.auto_select_audience %}
+    {% include "desk/_field.html" with field=form.audience_tags %}
+    {% include "desk/_field.html" with field=form.audience_categories %}
+    {% include "desk/_field.html" with field=form.audience_location %}
+    {% include "desk/_field.html" with field=form.readers %}
+  </div>
+
+  <div class="d-fieldset" data-tab-panel="When">
+    <p class="d-fieldset-desc">Once means it only goes when you press Run now. Set a frequency and switch the status to Active to have the scheduler run it between the dates.</p>
+    {% if due %}<p style="font-size:13px;color:var(--d-muted);">Scheduler says: {{ due.1 }}</p>{% endif %}
+    {% include "desk/_field.html" with field=form.status %}
+    {% include "desk/_field.html" with field=form.frequency %}
+    {% include "desk/_field.html" with field=form.starts_on %}
+    {% include "desk/_field.html" with field=form.ends_on %}
+    {% include "desk/_field.html" with field=form.send_hour %}
+    {% if instance.last_run_on %}<p style="font-size:13px;color:var(--d-muted);">Last run {{ instance.last_run_on }} · {{ instance.runs }} run{{ instance.runs|pluralize }} so far.</p>{% endif %}
+  </div>
+
+  <div class="d-form-actions">
+    <button type="submit" class="d-btn primary">Save</button>
+  </div>
+</form>
+{% endblock %}

@@ -6,6 +6,7 @@ def desk_context(request):
     if not request.path.startswith("/desk/"):
         return {}
 
-    from .nav import sidebar_sections
+    from .nav import footer_links, sidebar_sections
 
-    return {"sidebar_sections": sidebar_sections(request)}
+    return {"sidebar_sections": sidebar_sections(request),
+            "footer_links": footer_links(request)}

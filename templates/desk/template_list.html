@@ -6,9 +6,10 @@
     {% for kind, label in kinds %}
   <form method="post" action="{% url 'desk:templates_from_builtin' kind %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Start from built-in {{ label|lower }}</button></form>
   {% endfor %}
-  <a href="{{ add_url }}" class="d-btn primary">Add template</a>
+  <a href="{{ add_url }}" class="d-btn primary">Add design</a>
   </div>
 </div>
+{% include "desk/_subnav.html" with tabs=subnav %}
 <p class="d-page-blurb">{{ page_blurb }}</p>
 
 {% include "desk/_toolbar.html" %}

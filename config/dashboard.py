@@ -15,82 +15,49 @@ from django.utils import timezone
 SECTIONS = [
     {
         "key": "catalogue",
-        "title": "The catalogue",
-        "blurb": "Everything the newsletter can draw on. This is where the work is.",
+        "title": "What you can send",
         "rows": [
             {"key": "listings", "name": "Listings", "singular": "listing",
-             "blurb": "Shows, exhibitions, meals, talks, walks - everything the "
-                      "newsletter can recommend. A listing stays a draft, invisible "
-                      "to readers, until you publish it."},
-            {"key": "interests", "name": "Interests", "singular": "interest",
-             "blurb": "The interests readers pick from when they sign up, and that "
-                      "you tag listings with. Where the two overlap is how a "
-                      "listing finds its reader."},
+             "blurb": "Everything the newsletter can recommend, and the interests "
+                      "readers ask for. A listing is invisible until you publish it."},
         ],
     },
     {
-        "key": "readers",
-        "title": "Readers",
-        "blurb": "Who is subscribed, and what they told us about their taste.",
+        "key": "people",
+        "title": "Who gets it",
         "rows": [
-            {"key": "readers", "name": "Readers", "singular": "reader",
-             "blurb": "Everyone subscribed: what they told us about their taste, "
-                      "what they have been sent, and how they responded."},
-            {"key": "send_by_interest", "name": "Send by interest",
-             "singular": "send",
-             "blurb": "Pick interests, see who has them, read what one of them "
-                      "would get, then send."},
+            {"key": "readers", "name": "Users", "singular": "user",
+             "blurb": "Everyone signed up. Tick users, or pick interests, then preview "
+                      "and send them their newsletter."},
+        ],
+    },
+    {
+        "key": "sending",
+        "title": "Sending",
+        "rows": [
+            {"key": "saved_templates", "name": "Templates", "singular": "template",
+             "blurb": "Sends you've set up once - audience, content, frequency - to "
+                      "run again or start a campaign from."},
+            {"key": "campaigns", "name": "Campaigns", "singular": "campaign",
+             "blurb": "Type the idea; AI drafts the email and picks the audience; "
+                      "you review, edit and send."},
+        ],
+    },
+    {
+        "key": "learning",
+        "title": "What happened",
+        "rows": [
             {"key": "insights", "name": "Insights", "singular": "insight",
              "blurb": "What readers say they want, and what they actually open."},
         ],
     },
-    {
-        "key": "goes-out",
-        "title": "What goes out",
-        "blurb": "The newsletters themselves, and how they read.",
-        "rows": [
-            {"key": "campaigns", "name": "Campaigns", "singular": "campaign",
-             "blurb": "One-off emails on any subject - to everyone or a slice of "
-                      "readers, now or at a set time."},
-            {"key": "issues", "name": "Newsletter issues", "singular": "issue",
-             "blurb": "One row per newsletter sent to one reader, with the picks "
-                      "it contained."},
-            {"key": "recommendations", "name": "Recommendations", "singular": "recommendation",
-             "blurb": "Every individual pick ever made, with the reader's verdict "
-                      "on it. Where you see what lands and what doesn't."},
-            {"key": "templates", "name": "Email templates", "singular": "email template",
-             "blurb": "The welcome, newsletter and campaign emails as editable "
-                      "templates, with preview. Nothing here means the built-in "
-                      "versions are used."},
-        ],
-    },
-    {
-        "key": "settings",
-        "title": "Settings",
-        "blurb": "How the whole thing behaves - branding, schedule, matching, AI.",
-        "rows": [
-            {"key": "siteconfig", "name": "Site configuration", "singular": "setting",
-             "blurb": "One page, tabbed: branding, sending, schedule, matching "
-                      "weights, feedback learning and AI."},
-        ],
-    },
-    {
-        "key": "access",
-        "title": "Access",
-        "blurb": "Who can get in here.",
-        "collapsed": True,
-        # Managing accounts is how someone grants themselves more power, so
-        # these are the one part of the desk a plain editor can't reach.
-        "superuser_only": True,
-        "rows": [
-            {"key": "users", "name": "Users", "singular": "user",
-             "blurb": "Editor accounts: who can sign in, and what they're allowed "
-                      "to do once they're here."},
-            {"key": "groups", "name": "Groups", "singular": "group",
-             "blurb": "Bundles of permissions, if you want more than one kind of "
-                      "editor rather than granting everything to everyone."},
-        ],
-    },
+]
+
+# Reached from the sidebar's foot rather than its body: one is settings,
+# the other is who may sign in. Neither is a thing you do every day.
+FOOTER_LINKS = [
+    {"key": "siteconfig", "name": "Settings"},
+    {"key": "users", "name": "Editor accounts", "superuser_only": True},
 ]
 
 

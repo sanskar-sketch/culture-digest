@@ -1,0 +1,25 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top"><h1>{{ page_title }}</h1></div>
+{% if readers|length > 1 %}
+<form method="get" class="d-card" style="display:flex;gap:10px;align-items:center;">
+  <label for="reader" style="font-size:13px;">Read it as</label>
+  <select name="reader" id="reader" onchange="this.form.submit()">
+    {% for r in readers %}<option value="{{ r.pk }}"{% if r == reader %} selected{% endif %}>{{ r.email }}</option>{% endfor %}
+  </select>
+</form>
+{% endif %}
+{% if error %}
+<div class="d-card" style="border-color:var(--d-warn);"><p style="margin:0;">{{ error }}</p></div>
+{% else %}
+<div class="d-card">
+  <p style="font-size:13px;margin:0 0 6px;"><strong>Subject:</strong> {{ preview.subject }}</p>
+  <p style="font-size:12px;color:var(--d-muted);margin:0;">Built as a real send would be, then thrown away. Nothing was sent or recorded.</p>
+</div>
+<div class="d-split">
+  <div class="d-card"><h2>The email</h2><iframe srcdoc="{{ preview.html|force_escape }}" class="d-preview-frame"></iframe></div>
+  <div class="d-card"><h2>Plain text</h2><pre class="d-preview-text">{{ preview.text }}</pre></div>
+</div>
+{% endif %}
+<a class="d-btn" href="{% url 'desk:saved_templates_change' template_obj.pk %}">Back to the template</a>
+{% endblock %}

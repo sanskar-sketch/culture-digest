@@ -8,6 +8,7 @@ does what it says.
 """
 
 import pathlib
+import re
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -586,7 +587,7 @@ class SidebarAddLinkTests(LoggedInTestCase):
     def test_the_add_link_names_one_thing_not_many(self):
         html = self.client.get(reverse("desk:dashboard")).content.decode()
         self.assertIn('data-tip="Add listing"', html)
-        self.assertIn('data-tip="Add interest"', html)
+        self.assertIn('data-tip="Add template"', html)
         self.assertNotIn('data-tip="Add listings"', html)
 
 
@@ -762,6 +763,9 @@ class StickyHeaderTests(LoggedInTestCase):
         """Pinning three lines of explanation would eat the screen it is
         meant to help you use."""
         html = self.client.get(reverse("desk:listings_list")).content.decode()
-        top = html.split('class="d-page-top"', 1)[1].split("</div>\n<p", 1)[0]
+        # The bar ends at the first block-level thing after it - the blurb,
+        # or the sub-navigation that now sits between the two.
+        after = html.split('class="d-page-top"', 1)[1]
+        top = re.split(r"</div>\s*(?=<p|<nav)", after, 1)[0]
         self.assertNotIn("d-page-blurb", top)
         self.assertIn('class="d-page-blurb"', html)

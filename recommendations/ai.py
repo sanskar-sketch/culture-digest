@@ -734,3 +734,68 @@ Brief: {campaign.brief or "(none)"}
 Body: {campaign.body or "(none)"}"""
     return _call(AUDIENCE_SYSTEM, user, AUDIENCE_SCHEMA, "campaign_audience",
                  max_tokens=800, feature="write_campaigns")
+
+
+# --------------------------------------------------------------------------
+# 7. A whole campaign from an idea
+# --------------------------------------------------------------------------
+#
+# The editor types what the email is about; this writes the rest - a name,
+# a subject, the brief that will be the only source of facts, a draft
+# body, and who it should go to. All of it lands on the edit form for the
+# editor to change before anything is sent. The one rule that carries over
+# from everywhere else: the facts come from the idea, not from the model.
+
+DRAFT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "description": "Internal, two to four words."},
+        "subject": {"type": "string", "description": "The email's subject line. May use "
+                    "{first_name}."},
+        "brief": {"type": "string", "description": "The facts from the idea, tidied into "
+                  "three to six lines: what, where, when, cost, what to do. Nothing that "
+                  "wasn't in the idea."},
+        "body": {"type": "string", "description": "The email as the editor would write "
+                 "it, two to four short paragraphs separated by blank lines. No greeting, "
+                 "no sign-off."},
+        "link_label": {"type": "string", "description": "Button text if the idea has "
+                       "somewhere to send people, else empty."},
+        "tags": {"type": "array", "items": {"type": "string"},
+                 "description": "Slugs from the list only."},
+        "categories": {"type": "array", "items": {"type": "string"}},
+        "location": {"type": "string", "description": "A place only if the idea is "
+                     "clearly local, else empty."},
+    },
+    "required": ["name", "subject", "brief", "body", "link_label", "tags",
+                 "categories", "location"],
+    "additionalProperties": False,
+}
+
+DRAFT_SYSTEM = """You turn an editor's rough idea for an email into a complete draft for
+a personalised culture newsletter.
+
+THE VOICE: first person, an editor with an opinion, dry rather than
+breathless. No hype, no "don't miss", no exclamation marks. Short paragraphs.
+
+THE FACTS: every date, price, venue, name and claim must come from the idea
+you are given. If the idea doesn't say, leave it out - do not fill gaps with
+plausible detail. Never invent a review, quote, rating or publication.
+
+THE AUDIENCE: only use tag slugs and category values from the lists provided.
+Narrow enough to be relevant, wide enough to be worth sending; three to six
+tags is usual. A location only if a reader would have to travel there."""
+
+
+def draft_campaign(idea: str) -> dict | None:
+    """A complete campaign draft from a sentence or two. Never sends anything."""
+    from opportunities.models import Category, Tag
+
+    tags = list(Tag.objects.values_list("slug", "name")[:400])
+    user = f"""Allowed tag slugs: {", ".join(f"{s} ({n})" for s, n in tags)}
+Allowed categories: {", ".join(v for v, _ in Category.choices)}
+Today: {timezone.localdate():%Y-%m-%d}
+
+The editor's idea:
+{idea.strip()}"""
+    return _call(DRAFT_SYSTEM, user, DRAFT_SCHEMA, "campaign_draft",
+                 max_tokens=1800, feature="write_campaigns")

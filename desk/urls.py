@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .views import access, auth, campaigns, dashboard, deletion, insights, interests
-from .views import listings, newsletters, outreach, readers
+from .views import listings, newsletters, outreach, readers, saved_templates
 from .views import settings as settings_views
 from .views import templates as template_views
 
@@ -27,7 +27,6 @@ urlpatterns = [
     path("readers/<int:pk>/", readers.reader_form, name="readers_change"),
     path("readers/<int:pk>/tags/", outreach.reader_tags, name="reader_tags"),
 
-    path("send/", outreach.send_by_interest, name="send_by_interest"),
     path("insights/", insights.insights, name="insights"),
 
     path("campaigns/", campaigns.campaign_list, name="campaigns_list"),
@@ -40,16 +39,32 @@ urlpatterns = [
     path("campaigns/<int:pk>/cancel/", campaigns.campaign_cancel, name="campaigns_cancel"),
     path("campaigns/<int:pk>/suggest-audience/", campaigns.campaign_suggest_audience,
          name="campaigns_suggest_audience"),
+    path("campaigns/from-idea/", campaigns.campaign_from_idea, name="campaigns_from_idea"),
+    path("campaigns/from-template/<int:pk>/", campaigns.campaign_from_template,
+         name="campaigns_from_template"),
+
+    # Saved sends. The email designs keep their URL *names* (templates_*) so
+    # nothing that links to them changes; only their path moves.
+    path("templates/", saved_templates.template_list, name="saved_templates_list"),
+    path("templates/add/", saved_templates.template_form, name="saved_templates_add"),
+    path("templates/<int:pk>/", saved_templates.template_form, name="saved_templates_change"),
+    path("templates/<int:pk>/preview/", saved_templates.template_preview,
+         name="saved_templates_preview"),
+    path("templates/<int:pk>/run/", saved_templates.template_run, name="saved_templates_run"),
+    path("templates/<int:pk>/suggest-audience/", saved_templates.template_suggest_audience,
+         name="saved_templates_suggest"),
+    path("templates/<int:pk>/start-campaign/", saved_templates.template_to_campaign,
+         name="saved_templates_to_campaign"),
 
     path("issues/", newsletters.issue_list, name="issues_list"),
     path("issues/<int:pk>/", newsletters.issue_detail, name="issues_change"),
     path("recommendations/", newsletters.recommendation_list, name="recommendations_list"),
 
-    path("templates/", template_views.template_list, name="templates_list"),
-    path("templates/start/<str:kind>/", template_views.template_from_builtin, name="templates_from_builtin"),
-    path("templates/add/", template_views.template_form, name="templates_add"),
-    path("templates/<int:pk>/", template_views.template_form, name="templates_change"),
-    path("templates/<int:pk>/preview/", template_views.template_preview, name="templates_preview"),
+    path("email-designs/", template_views.template_list, name="templates_list"),
+    path("email-designs/start/<str:kind>/", template_views.template_from_builtin, name="templates_from_builtin"),
+    path("email-designs/add/", template_views.template_form, name="templates_add"),
+    path("email-designs/<int:pk>/", template_views.template_form, name="templates_change"),
+    path("email-designs/<int:pk>/preview/", template_views.template_preview, name="templates_preview"),
 
     path("users/", access.user_list, name="users_list"),
     path("users/add/", access.user_form, name="users_add"),

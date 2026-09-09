@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.shortcuts import redirect, render
 
+from config import dashboard
 from desk.forms import SiteConfigForm
 from desk.permissions import staff_required
 from siteconfig.models import SiteConfig
@@ -24,6 +25,7 @@ def siteconfig_form(request):
         "form": form,
         "config": config,
         "drift": config.drift_from_defaults(),
+        "configuration": dashboard.configuration(),
     }
     return render(request, "desk/siteconfig_form.html", context)
 

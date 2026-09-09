@@ -500,6 +500,10 @@ class GuideWalkthrough(TestCase):
         names = {row["name"] for row in dashboard.configuration()}
         self.assertTrue({"Database", "Email sending", "AI assistance", "Scheduler",
                          "Debug mode", "Secret key"} <= names)
-        page = self.client.get(reverse("desk:dashboard"))
+        # The health rows moved off the Overview to Settings → Health; the
+        # Overview only says whether anything there needs attention.
+        page = self.client.get(reverse("desk:siteconfig"))
         self.assertContains(page, "Scheduler")
-        self.assertContains(page, "Configuration")
+        self.assertContains(page, "Health")
+        overview = self.client.get(reverse("desk:dashboard"))
+        self.assertNotContains(overview, "Secret key")
