@@ -1,4 +1,4 @@
-"""Campaigns from an idea, and the five-entry sidebar."""
+"""The three-entry sidebar, and what left it."""
 
 from datetime import timedelta
 from unittest import mock
@@ -9,7 +9,6 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from campaigns.models import Campaign, CampaignDelivery
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
 from recommendations.models import NewsletterIssue
@@ -37,13 +36,14 @@ class DeskCase(TestCase):
 class SidebarTests(DeskCase):
     """Five entries, in the order the user asked for, and nothing else."""
 
-    def test_the_sidebar_has_exactly_the_five_sections(self):
+    def test_the_sidebar_has_exactly_the_three_sections(self):
         html = self.client.get(reverse("desk:dashboard")).content.decode()
         nav = html.split('<div class="d-nav">', 1)[1].split('<div class="d-side-foot">', 1)[0]
-        for name in ("Events", "Interests", "Users", "Campaigns", "Insights"):
+        for name in ("Events", "Users", "Insights"):
             self.assertIn(f">{name}</a>", nav)
-        for gone in ("Listings", "Templates", "Send by interest", "Newsletter issues",
-                     "Recommendations", "Email templates", "Site configuration", "Groups"):
+        for gone in ("Listings", "Interests", "Campaigns", "Templates", "Send by interest",
+                     "Newsletter issues", "Recommendations", "Email templates",
+                     "Site configuration", "Groups"):
             self.assertNotIn(f">{gone}</a>", nav)
 
     def test_settings_and_accounts_sit_in_the_footer(self):
@@ -78,44 +78,10 @@ class SidebarTests(DeskCase):
                             reverse("desk:templates_list"))
         self.assertEqual(self.client.get("/desk/templates/").status_code, 404)
 
+    def test_interests_are_managed_from_settings(self):
+        page = self.client.get(reverse("desk:siteconfig"))
+        self.assertContains(page, reverse("desk:interests_list"))
+        self.assertEqual(self.client.get(reverse("desk:interests_list")).status_code, 200)
 
-
-
-
-
-class CampaignFromIdeaTests(DeskCase):
-    def setUp(self):
-        super().setUp()
-        self.jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
-        Reader.objects.create(email="ada@example.com", location="London",
-                              interest_categories=["music"]).interest_tags.add(self.jazz)
-
-    def test_the_idea_becomes_a_full_draft_you_land_on(self):
-        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
-             mock.patch("recommendations.ai.draft_campaign", return_value={
-                 "name": "Frieze weekend", "subject": "Frieze, {first_name}",
-                 "brief": "Frieze is on. Free Sunday.", "body": "Go on Sunday.",
-                 "link_label": "Plan the day", "tags": ["jazz-nights", "nope"],
-                 "categories": ["music", "nope"], "location": "London"}):
-            response = self.client.post(reverse("desk:campaigns_from_idea"),
-                                        {"idea": "Frieze is on this weekend"}, follow=True)
-        campaign = Campaign.objects.get()
-        self.assertEqual(campaign.name, "Frieze weekend")
-        self.assertEqual(campaign.status, Campaign.Status.DRAFT)
-        self.assertEqual(list(campaign.audience_tags.all()), [self.jazz])
-        self.assertEqual(campaign.audience_categories, ["music"])
-        self.assertEqual(campaign.audience_location, "London")
-        self.assertContains(response, "Drafted “Frieze weekend” for 1 reader")
-        self.assertEqual(CampaignDelivery.objects.count(), 0)
-
-    def test_without_ai_the_idea_is_kept_as_the_brief(self):
-        response = self.client.post(reverse("desk:campaigns_from_idea"),
-                                    {"idea": "Frieze is on"}, follow=True)
-        campaign = Campaign.objects.get()
-        self.assertEqual(campaign.brief, "Frieze is on")
-        self.assertContains(response, "the idea is saved as the brief")
-
-    def test_an_empty_idea_creates_nothing(self):
-        self.client.post(reverse("desk:campaigns_from_idea"), {"idea": "  "}, follow=True)
-        self.assertEqual(Campaign.objects.count(), 0)
-
+    def test_campaign_pages_are_gone(self):
+        self.assertEqual(self.client.get("/desk/campaigns/").status_code, 404)

@@ -19,7 +19,6 @@ cannot trust to be current is worse than one that costs a query.
 from django.db.models import Count, F, Q
 from django.shortcuts import render
 
-from campaigns.models import Campaign
 from desk.permissions import staff_required
 from opportunities.models import Category, Tag
 from readers.models import Reader
@@ -132,5 +131,4 @@ def insights(request):
         "sections": sections,
         "most_clicked": most_clicked,
         "ignored": ignored,
-        "campaigns_sent": Campaign.objects.filter(status=Campaign.Status.SENT).count(),
     })

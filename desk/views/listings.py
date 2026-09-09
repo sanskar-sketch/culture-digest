@@ -39,7 +39,12 @@ def _live_state(opp, today):
 @staff_required
 def listing_list(request):
     today = timezone.localdate()
-    qs = Opportunity.objects.annotate(recs_count=Count("recommendations", distinct=True)).prefetch_related("tags")
+    qs = Opportunity.objects.annotate(
+        recs_count=Count("recommendations", distinct=True),
+        # Readers who picked any of its interests: who it is good for.
+        good_for=Count("tags__interested_readers", distinct=True,
+                       filter=Q(tags__interested_readers__is_active=True)),
+    ).prefetch_related("tags")
     qs = search(qs, request, ["title", "description", "editorial_note", "location_area",
                               "location_name", "tags__name"])
 
@@ -130,6 +135,8 @@ def listing_list(request):
         "delete_kind": "listings",
         "add_url": reverse("desk:listings_add"),
         "readers_total": Reader.objects.filter(is_active=True).count(),
+        "wanted": list(Tag.objects.filter(origin=Tag.Origin.READER, opportunities__isnull=True)
+                       .order_by("-times_requested", "name")[:8]),
     }
     return render(request, "desk/listing_list.html", context)
 
@@ -186,20 +193,28 @@ def _suggest_classification(request, queryset):
 @staff_required
 def listing_form(request, pk=None):
     instance = get_object_or_404(Opportunity, pk=pk) if pk else None
+    filled = None
     if request.method == "POST":
         if request.POST.get("load_sample_catalogue") is not None:
             return _load_sample_catalogue(request)
-        form = OpportunityForm(request.POST, instance=instance)
-        if form.is_valid():
-            obj = form.save(commit=False)
-            if not obj.pk and not obj.created_by_id:
-                obj.created_by = request.user
-            obj.save()
-            form.save_m2m()
-            messages.success(request, f"Saved “{obj.title}”.")
-            if "save_add_another" in request.POST:
-                return redirect("desk:listings_add")
-            return redirect("desk:listings_change", pk=obj.pk)
+        if request.POST.get("fill_from") is not None:
+            filled = _fill_with_ai(request)
+            form = OpportunityForm(initial=filled or None)
+        else:
+            form = OpportunityForm(request.POST, instance=instance)
+            if form.is_valid():
+                creating = not instance
+                obj = form.save(commit=False)
+                if not obj.pk and not obj.created_by_id:
+                    obj.created_by = request.user
+                obj.save()
+                form.save_m2m()
+                messages.success(request, f"Saved “{obj.title}”.")
+                if creating and not obj.tags.exists():
+                    _tag_on_creation(request, obj)
+                if "save_add_another" in request.POST:
+                    return redirect("desk:listings_add")
+                return redirect("desk:listings_change", pk=obj.pk)
     else:
         form = OpportunityForm(instance=instance)
 
@@ -222,10 +237,80 @@ def listing_form(request, pk=None):
         "form": form,
         "instance": instance,
         "performance": performance,
-        "campaigns": instance.campaigns.order_by("-created_at") if instance else [],
         "suits": _who_would_like(instance) if instance else None,
+        "filled": filled,
     }
     return render(request, "desk/listing_form.html", context)
+
+
+def _tag_on_creation(request, event):
+    """A new event gets its interests straight away, so it can reach someone.
+
+    Only when the editor left them empty - a choice they made is kept - and
+    only the interests: category, price and the dials change what a reader
+    is told, so those stay a suggestion in the message.
+    """
+    from recommendations import ai
+
+    if not ai.is_enabled("classify_opportunities"):
+        return
+    suggestion = ai.classify_opportunity(event)
+    tags = list(Tag.objects.filter(slug__in=(suggestion or {}).get("tags") or []))
+    if tags:
+        event.tags.set(tags)
+        messages.info(request, "Tagged it: " + ", ".join(t.name for t in tags)
+                      + ". Change them below if that's wrong.")
+    else:
+        messages.info(request, "AI couldn't suggest interests for this one - tick some "
+                               "below so it can reach someone.")
+
+
+def _fill_with_ai(request):
+    """Turn a name and a place into a filled-in form, from the live web.
+
+    One event, one search, inside the request - so a short ceiling, and
+    the honest fallback is "couldn't find it", never a made-up entry.
+    """
+    from recommendations import ai
+
+    what = (request.POST.get("fill_from") or "").strip()
+    area = (request.POST.get("fill_area") or "").strip()
+    if not what:
+        messages.warning(request, "Say what the event is first.")
+        return None
+    if not ai.is_enabled("classify_opportunities"):
+        messages.warning(request, "AI is not configured, or event research is switched "
+                                  "off in Settings → AI assistance.")
+        return None
+    found = ai.research_listings(what, area=area, count=1, timeout=22.0)
+    rows = (found or {}).get("listings") or []
+    if not rows:
+        messages.warning(request, f"Couldn't find “{what}” anywhere reliable. Fill it in by "
+                                  "hand, or try with the venue or city added.")
+        return None
+    row = rows[0]
+    from opportunities.research import _choice, _date, _dial
+
+    initial = {
+        "title": row.get("title") or what,
+        "description": row.get("description", ""),
+        "category": _choice(row.get("category"), Category.choices, ""),
+        "price_tier": _choice(row.get("price_tier"), Opportunity.PriceTier.choices, ""),
+        "price_display": row.get("price_display", ""),
+        "location_name": row.get("location_name", ""),
+        "location_area": row.get("location_area", "") or area,
+        "booking_url": row.get("booking_url", ""),
+        "start_date": _date(row.get("start_date")),
+        "end_date": _date(row.get("end_date")),
+        "mainstream_to_unusual": _dial(row.get("mainstream_to_unusual")),
+        "intimate_to_large_scale": _dial(row.get("intimate_to_large_scale")),
+        "tags": list(Tag.objects.filter(slug__in=row.get("tags") or []).values_list("pk", flat=True)),
+        "editorial_note": "Filled in by AI from: " + "; ".join(
+            s.get("url", "") for s in row.get("sources") or []),
+    }
+    messages.success(request, f"Filled in from {len(row.get('sources') or [])} page(s) - "
+                              "check the date and price, then save. Nothing is saved yet.")
+    return initial
 
 
 def _who_would_like(event):

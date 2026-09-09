@@ -10,7 +10,6 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from campaigns.models import Campaign
 from opportunities import research
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
@@ -107,6 +106,7 @@ class EventScreenTests(TestCase):
         self.ada = Reader.objects.create(email="ada@example.com", location="London")
         self.ada.interest_tags.add(self.jazz)
         self.gig = event("Trio residency", end_date=timezone.localdate() + timedelta(days=30))
+        event("Untagged thing")
 
     def test_the_list_is_called_events_and_offers_suggestions(self):
         page = self.client.get(reverse("desk:listings_list"))
@@ -135,48 +135,9 @@ class EventScreenTests(TestCase):
         self.assertEqual(list(self.gig.tags.all()), [self.jazz])
         self.assertContains(response, "1 reader would be reached")
 
-    def test_a_campaign_drafted_from_the_event_carries_its_facts(self):
-        self.gig.tags.add(self.jazz)
-        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
-             mock.patch("recommendations.ai.draft_campaign", return_value={
-                 "name": "Trio this month", "subject": "A trio, {first_name}",
-                 "brief": "Trio residency, London, £12.", "body": "Go.",
-                 "link_label": "Book", "tags": [], "categories": ["music"],
-                 "location": ""}) as draft:
-            response = self.client.post(reverse("desk:campaigns_from_event", args=[self.gig.pk]),
-                                        {"angle": "for people who like small rooms"}, follow=True)
-        campaign = Campaign.objects.get()
-        self.assertEqual(campaign.event, self.gig)
-        self.assertEqual(campaign.link_url, "https://example.com/book")
-        self.assertEqual(list(campaign.audience_tags.all()), [self.jazz])  # fell back to the event's
-        self.assertIn("Trio residency", draft.call_args.args[0])
-        self.assertIn("small rooms", draft.call_args.args[0])
-        self.assertContains(response, "Drafted “Trio this month” about Trio residency")
-        self.assertEqual(campaign.status, Campaign.Status.DRAFT)
 
-    def test_without_ai_the_events_facts_become_the_brief(self):
-        self.gig.tags.add(self.jazz)
-        self.client.post(reverse("desk:campaigns_from_event", args=[self.gig.pk]), follow=True)
-        campaign = Campaign.objects.get()
-        self.assertEqual(campaign.event, self.gig)
-        self.assertIn("https://example.com/book", campaign.brief)
-        self.assertEqual(list(campaign.audience_tags.all()), [self.jazz])
 
-    def test_several_campaigns_can_point_at_one_event(self):
-        for _ in range(2):
-            self.client.post(reverse("desk:campaigns_from_event", args=[self.gig.pk]))
-        self.assertEqual(self.gig.campaigns.count(), 2)
-        page = self.client.get(reverse("desk:listings_change", args=[self.gig.pk]))
-        self.assertEqual(len(page.context["campaigns"]), 2)
 
-    def test_suggest_events_from_the_users_page_uses_the_ticked_readers(self):
-        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
-             mock.patch("opportunities.research.for_readers", return_value=["Jazz nights"]) as fr:
-            response = self.client.post(reverse("desk:readers_list"),
-                                        {"action": "suggest_events", "selected": [self.ada.pk]},
-                                        follow=True)
-        self.assertEqual(list(fr.call_args.args[0]), [self.ada])
-        self.assertContains(response, "Searching for events for Jazz nights")
 
     def test_suggest_for_my_readers_from_the_events_page(self):
         with mock.patch("recommendations.ai.is_enabled", return_value=True), \
@@ -185,83 +146,71 @@ class EventScreenTests(TestCase):
                                         {"action": "suggest_for_readers"}, follow=True)
         self.assertContains(response, "Searching for events for Jazz nights")
 
-    def test_the_campaign_form_can_name_its_event_but_not_an_archived_one(self):
-        from desk.forms import CampaignForm
-
-        over = event("Over", status=Opportunity.Status.ARCHIVED)
-        choices = CampaignForm().fields["event"].queryset
-        self.assertIn(self.gig, choices)
-        self.assertNotIn(over, choices)
-
-
-@plain_static
-class RerunTests(TestCase):
-    """What a template was for: run a campaign again for the next event like it."""
-
-    def setUp(self):
-        cache.clear()
-        self.boss = get_user_model().objects.create_superuser("boss", "b@example.com", "pw")
-        self.client.login(username="boss", password="pw")
-        self.jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
-        self.rooms = Tag.objects.create(name="Basement rooms", slug="basement-rooms")
-        self.first = event("Trio residency")
-        self.next = event("Quartet at the Vortex", booking_url="https://example.com/quartet")
-        self.original = Campaign.objects.create(
-            name="Small rooms", event=self.first, angle="for people who like small rooms",
-            subject="s", brief="b", body="the original body", personalise=False,
-            link_label="Grab a seat", audience_location="London",
-            audience_categories=["music"], created_by=self.boss)
-        self.original.audience_tags.add(self.jazz, self.rooms)
-
-    def test_the_angle_and_audience_carry_over_and_the_words_are_new(self):
+    def test_a_new_event_is_tagged_on_creation_when_the_editor_left_it_blank(self):
+        data = {"title": "Late set", "slug": "", "category": "music", "status": "draft",
+                "description": "x", "editorial_note": "", "price_tier": "budget",
+                "price_display": "", "location_name": "", "location_area": "London",
+                "booking_url": "https://example.com/late", "start_date": "", "end_date": "",
+                "critic_rating": "", "critic_rating_source": "", "critic_quote": "",
+                "mainstream_to_unusual": "3", "intimate_to_large_scale": "2"}
         with mock.patch("recommendations.ai.is_enabled", return_value=True), \
-             mock.patch("recommendations.ai.draft_campaign", return_value={
-                 "name": "Quartet night", "subject": "Four of them", "brief": "Quartet.",
-                 "body": "a brand new body", "link_label": "ignored",
-                 "tags": ["something-else"], "categories": ["film"], "location": "Leeds"}) as draft:
-            response = self.client.post(reverse("desk:campaigns_rerun", args=[self.original.pk]),
-                                        {"event": self.next.pk}, follow=True)
-        rerun = Campaign.objects.exclude(pk=self.original.pk).get()
-        self.assertEqual(rerun.event, self.next)
-        self.assertEqual(rerun.angle, "for people who like small rooms")
-        # audience is the original's, not AI's fresh guess
-        self.assertEqual(set(rerun.audience_tags.all()), {self.jazz, self.rooms})
-        self.assertEqual(rerun.audience_categories, ["music"])
-        self.assertEqual(rerun.audience_location, "London")
-        self.assertFalse(rerun.personalise)
-        self.assertEqual(rerun.link_label, "Grab a seat")
-        # but the words and the link are about the new event
-        self.assertEqual(rerun.body, "a brand new body")
-        self.assertEqual(rerun.link_url, "https://example.com/quartet")
-        self.assertIn("Quartet at the Vortex", draft.call_args.args[0])
-        self.assertIn("small rooms", draft.call_args.args[0])
-        self.assertContains(response, "with the audience and angle of “Small rooms”")
+             mock.patch("recommendations.ai.classify_opportunity", return_value={
+                 "category": "music", "tags": ["jazz-nights", "invented"], "price_tier": "budget",
+                 "mainstream_to_unusual": 3, "intimate_to_large_scale": 2, "reasoning": ""}):
+            response = self.client.post(reverse("desk:listings_add"), data, follow=True)
+        made = Opportunity.objects.get(title="Late set")
+        self.assertEqual(list(made.tags.all()), [self.jazz])
+        self.assertContains(response, "Tagged it: Jazz nights")
 
-    def test_the_original_is_left_exactly_as_it_was(self):
-        before = Campaign.objects.values().get(pk=self.original.pk)
-        self.client.post(reverse("desk:campaigns_rerun", args=[self.original.pk]),
-                         {"event": self.next.pk})
-        self.assertEqual(Campaign.objects.values().get(pk=self.original.pk), before)
-        self.assertEqual(Campaign.objects.count(), 2)
+    def test_an_editors_own_tags_are_not_overwritten_on_creation(self):
+        other = Tag.objects.create(name="Basement rooms", slug="basement-rooms")
+        data = {"title": "Late set", "slug": "", "category": "music", "status": "draft",
+                "description": "x", "editorial_note": "", "price_tier": "budget",
+                "price_display": "", "location_name": "", "location_area": "London",
+                "booking_url": "https://example.com/late", "start_date": "", "end_date": "",
+                "critic_rating": "", "critic_rating_source": "", "critic_quote": "",
+                "mainstream_to_unusual": "3", "intimate_to_large_scale": "2",
+                "tags": [other.pk]}
+        with mock.patch("recommendations.ai.classify_opportunity") as classify:
+            self.client.post(reverse("desk:listings_add"), data, follow=True)
+        classify.assert_not_called()
+        self.assertEqual(list(Opportunity.objects.get(title="Late set").tags.all()), [other])
 
-    def test_an_ended_event_is_refused(self):
-        over = event("Over", status=Opportunity.Status.ARCHIVED)
-        response = self.client.post(reverse("desk:campaigns_rerun", args=[self.original.pk]),
-                                    {"event": over.pk}, follow=True)
-        self.assertContains(response, "has ended")
-        self.assertEqual(Campaign.objects.count(), 1)
+    def test_fill_in_with_ai_prefills_the_form_and_saves_nothing(self):
+        found = {"listings": [{
+            "title": "Frieze Sculpture", "description": "Free, in the park.",
+            "category": "exhibition", "price_tier": "free", "price_display": "Free",
+            "location_name": "Regent's Park", "location_area": "London",
+            "booking_url": "https://example.com/frieze", "start_date": "2026-10-01",
+            "end_date": "2026-10-31", "mainstream_to_unusual": 2, "intimate_to_large_scale": 4,
+            "tags": ["jazz-nights"], "sources": [{"title": "Frieze", "url": "https://frieze.com"}]}],
+            "notes": ""}
+        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
+             mock.patch("recommendations.ai.research_listings", return_value=found) as research_call:
+            response = self.client.post(reverse("desk:listings_add"),
+                                        {"fill_from": "Frieze Sculpture", "fill_area": "London"})
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertEqual(form.initial["title"], "Frieze Sculpture")
+        self.assertEqual(form.initial["price_tier"], "free")
+        self.assertEqual(str(form.initial["start_date"]), "2026-10-01")
+        self.assertEqual(form.initial["tags"], [self.jazz.pk])
+        self.assertIn("https://frieze.com", form.initial["editorial_note"])
+        self.assertContains(response, "Filled in from 1 page")
+        self.assertFalse(Opportunity.objects.filter(title="Frieze Sculpture").exists())
+        # inside a request, so it must not be allowed the background run's patience
+        self.assertLessEqual(research_call.call_args.kwargs["timeout"], 25)
 
-    def test_the_campaign_page_offers_other_events_but_not_its_own_or_ended_ones(self):
-        event("Over", status=Opportunity.Status.ARCHIVED)
-        page = self.client.get(reverse("desk:campaigns_change", args=[self.original.pk]))
-        offered = [e.title for e in page.context["other_events"]]
-        self.assertIn("Quartet at the Vortex", offered)
-        self.assertNotIn("Trio residency", offered)
-        self.assertNotIn("Over", offered)
-        self.assertContains(page, "Run again for this event")
+    def test_fill_in_with_ai_that_finds_nothing_says_so(self):
+        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
+             mock.patch("recommendations.ai.research_listings", return_value={"listings": []}):
+            response = self.client.post(reverse("desk:listings_add"), {"fill_from": "Nonsense"})
+        self.assertContains(response, "Couldn")
+        self.assertEqual(Opportunity.objects.count(), 2)  # only setUp's
 
-    def test_drafting_from_an_event_keeps_the_angle_for_next_time(self):
-        self.client.post(reverse("desk:campaigns_from_event", args=[self.next.pk]),
-                         {"angle": "for the curious"})
-        made = Campaign.objects.get(event=self.next)
-        self.assertEqual(made.angle, "for the curious")
+    def test_the_list_says_who_each_event_is_good_for(self):
+        self.gig.tags.add(self.jazz)
+        page = self.client.get(reverse("desk:listings_list"))
+        self.assertContains(page, "1 user")
+        self.assertContains(page, "tag=jazz-nights")
+        self.assertContains(page, "nobody yet")  # an untagged event

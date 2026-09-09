@@ -12,7 +12,7 @@ RETIRED_ADMIN_PAGES = {
     "opportunities/opportunity": "desk:listings_list",
     "opportunities/tag": "desk:interests_list",
     "readers/reader": "desk:readers_list",
-    "campaigns/campaign": "desk:campaigns_list",
+    "campaigns/campaign": "desk:readers_list",
     "recommendations/newsletterissue": "desk:issues_list",
     "recommendations/recommendation": "desk:recommendations_list",
     "siteconfig/siteconfig": "desk:siteconfig",

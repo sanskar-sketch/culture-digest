@@ -4,7 +4,6 @@ from django import forms
 from django.contrib.auth.forms import SetPasswordForm, UserCreationForm
 from django.contrib.auth.models import Group, Permission, User
 
-from campaigns.models import Campaign
 from opportunities.models import Category, Opportunity, Tag
 from readers.models import Reader
 from siteconfig.emails import EmailTemplate
@@ -138,55 +137,6 @@ class ReaderForm(FriendlyChoices, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["interest_tags"].queryset = Tag.objects.all()
 
-
-class CampaignRepeatMixin:
-    """A repeating campaign has to end after it starts."""
-
-    def clean(self):
-        cleaned = super().clean()
-        starts, ends = cleaned.get("starts_on"), cleaned.get("ends_on")
-        if starts and ends and ends < starts:
-            self.add_error("ends_on", "The end date is before the start date.")
-        if cleaned.get("frequency") != Campaign.Frequency.ONCE and not starts:
-            self.add_error("starts_on", "A repeating campaign needs a start date.")
-        return cleaned
-
-
-class CampaignForm(CampaignRepeatMixin, FriendlyChoices, forms.ModelForm):
-    EMPTY_LABELS = {"event": "Not about a particular event"}
-
-    audience_categories = forms.MultipleChoiceField(
-        choices=Category.choices, required=False, widget=forms.CheckboxSelectMultiple,
-        label="Categories they follow",
-        help_text="Only readers who follow at least one of these. Nothing ticked means "
-                  "no restriction.")
-
-    class Meta:
-        model = Campaign
-        fields = (
-            "name", "event", "angle", "subject", "brief", "body", "personalise", "link_label", "link_url",
-            "audience_categories", "audience_tags", "audience_location",
-            "send_at", "frequency", "starts_on", "ends_on", "send_hour",
-        )
-        widgets = {
-            "brief": forms.Textarea(attrs={"rows": 6}),
-            "body": forms.Textarea(attrs={"rows": 10}),
-            "audience_tags": forms.CheckboxSelectMultiple,
-            "send_at": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
-            "starts_on": forms.DateInput(attrs={"type": "date"}),
-            "ends_on": forms.DateInput(attrs={"type": "date"}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["audience_tags"].queryset = Tag.objects.all()
-        self.fields["send_at"].input_formats = ["%Y-%m-%dT%H:%M"]
-        # Only events that could still be gone to. An archived one is over.
-        self.fields["event"].queryset = Opportunity.objects.exclude(
-            status=Opportunity.Status.ARCHIVED).order_by("-created_at")
-        self.fields["event"].label = "About which event"
-        if self.instance.pk:
-            self.fields["audience_categories"].initial = self.instance.audience_categories
 
 
 class EmailTemplateForm(FriendlyChoices, forms.ModelForm):

@@ -25,7 +25,6 @@ plain_static = override_settings(STORAGES={
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 })
 
-from campaigns.models import Campaign, CampaignDelivery
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
 from recommendations.models import NewsletterIssue, Recommendation
@@ -96,7 +95,7 @@ class PageRenderTests(LoggedInTestCase):
         urls = [
             reverse("desk:dashboard"), reverse("desk:listings_list"), reverse("desk:listings_add"),
             reverse("desk:interests_list"), reverse("desk:interests_add"),
-            reverse("desk:readers_list"), reverse("desk:campaigns_list"), reverse("desk:campaigns_add"),
+            reverse("desk:readers_list"),
             reverse("desk:issues_list"), reverse("desk:recommendations_list"),
             reverse("desk:templates_list"), reverse("desk:templates_add"), reverse("desk:siteconfig"),
         ]
@@ -108,7 +107,6 @@ class PageRenderTests(LoggedInTestCase):
         opp = opportunity()
         tag = Tag.objects.create(name="Jazz nights", category="music")
         reader = Reader.objects.create(email="ada@example.com", name="Ada")
-        campaign = Campaign.objects.create(name="c", subject="s", body="b")
         template = EmailTemplate.objects.create(
             name="t", kind=EmailTemplate.Kind.NEWSLETTER, html_body="<p>{{ reader.name }}</p>")
         issue = NewsletterIssue.objects.create(reader=reader)
@@ -118,8 +116,6 @@ class PageRenderTests(LoggedInTestCase):
             reverse("desk:listings_change", args=[opp.pk]),
             reverse("desk:interests_change", args=[tag.pk]),
             reverse("desk:readers_change", args=[reader.pk]),
-            reverse("desk:campaigns_change", args=[campaign.pk]),
-            reverse("desk:campaigns_preview", args=[campaign.pk]),
             reverse("desk:templates_change", args=[template.pk]),
             reverse("desk:templates_preview", args=[template.pk]),
             reverse("desk:issues_change", args=[issue.pk]),
@@ -189,42 +185,6 @@ class ReaderWorkflowTests(LoggedInTestCase):
 
 
 @override_settings(SENDGRID_API_KEY="test-key")
-class CampaignWorkflowTests(LoggedInTestCase):
-    @patch("campaigns.sending.deliver", return_value="msg-1")
-    def test_schedule_then_send_now(self, deliver):
-        Reader.objects.create(email="ada@example.com")
-        campaign = Campaign.objects.create(name="c", subject="s", body="Hello.")
-        self.client.post(reverse("desk:campaigns_schedule", args=[campaign.pk]))
-        campaign.refresh_from_db()
-        self.assertEqual(campaign.status, Campaign.Status.SCHEDULED)
-
-        self.client.post(reverse("desk:campaigns_send_now", args=[campaign.pk]))
-        campaign.refresh_from_db()
-        self.assertEqual(campaign.status, Campaign.Status.SENT)
-        deliver.assert_called_once()
-
-    @patch("campaigns.sending.deliver", return_value="msg-1")
-    def test_a_test_send_goes_to_the_editor(self, deliver):
-        Reader.objects.create(email="ada@example.com", name="Ada")
-        campaign = Campaign.objects.create(name="c", subject="s", body="Hello {first_name}.")
-        self.client.post(reverse("desk:campaigns_test_send", args=[campaign.pk]))
-        self.assertEqual(deliver.call_args.args[0], "editor@example.com")
-        self.assertFalse(campaign.deliveries.exists())
-
-    def test_state_changes_need_a_post(self):
-        campaign = Campaign.objects.create(name="c", subject="s", body="b")
-        response = self.client.get(reverse("desk:campaigns_send_now", args=[campaign.pk]))
-        self.assertEqual(response.status_code, 405)
-
-    def test_retry_failed_deliveries(self):
-        campaign = Campaign.objects.create(name="c", subject="s", body="b", status=Campaign.Status.SENT)
-        reader = Reader.objects.create(email="a@example.com")
-        CampaignDelivery.objects.create(campaign=campaign, reader=reader,
-                                        status=CampaignDelivery.Status.FAILED, error="boom")
-        self.client.post(reverse("desk:campaigns_list"), {"action": "retry_failed", "selected": [campaign.pk]})
-        self.assertEqual(
-            campaign.deliveries.get().status, CampaignDelivery.Status.PENDING)
-
 
 class EmailTemplateWorkflowTests(LoggedInTestCase):
     def test_start_from_builtin_needs_a_post_and_creates_a_copy(self):
@@ -271,21 +231,6 @@ class SiteConfigTests(LoggedInTestCase):
         self.client.post(reverse("desk:siteconfig_reset_wording"))
         self.assertEqual(SiteConfig.load().site_name, "The Ether")
 
-
-class PreviewEscapingTests(LoggedInTestCase):
-    """Ported from the old admin when its campaign preview was retired.
-
-    The rendered email is a SafeString. Dropped into an attribute
-    unescaped, its first double quote ends the srcdoc early and the
-    iframe shows nothing.
-    """
-
-    def test_the_email_survives_the_srcdoc_attribute(self):
-        Reader.objects.create(email="ada@example.com", name="Ada")
-        campaign = Campaign.objects.create(name="c", subject="s", body="Hello.")
-        response = self.client.get(reverse("desk:campaigns_preview", args=[campaign.pk]))
-        self.assertContains(response, 'srcdoc="&lt;!doctype html&gt;')
-        self.assertNotContains(response, 'srcdoc="<!doctype')
 
 
 class TemplatePreviewTests(LoggedInTestCase):
@@ -334,7 +279,7 @@ class RetiredAdminRedirectTests(TestCase):
             ("/admin/readers/reader/", reverse("desk:readers_list")),
             ("/admin/opportunities/opportunity/", reverse("desk:listings_list")),
             ("/admin/opportunities/tag/", reverse("desk:interests_list")),
-            ("/admin/campaigns/campaign/", reverse("desk:campaigns_list")),
+            ("/admin/campaigns/campaign/", reverse("desk:readers_list")),
             ("/admin/recommendations/newsletterissue/", reverse("desk:issues_list")),
             ("/admin/recommendations/recommendation/", reverse("desk:recommendations_list")),
             ("/admin/siteconfig/siteconfig/", reverse("desk:siteconfig")),
@@ -379,20 +324,6 @@ class QueryCountTests(LoggedInTestCase):
             measured.append(len(ctx.captured_queries))
         return measured[-1]
 
-    def test_the_campaigns_list_does_not_query_per_row(self):
-        url = reverse("desk:campaigns_list")
-        Reader.objects.create(email="a@example.com")
-        for i in range(3):
-            Campaign.objects.create(name=f"c{i}", subject="s", body="b")
-        few = self.counts_for(url)
-
-        for i in range(3, 18):
-            Campaign.objects.create(name=f"c{i}", subject="s", body="b")
-        many = self.counts_for(url)
-
-        self.assertEqual(few, many,
-                         f"{many - few} extra queries for 15 more campaigns - "
-                         "something is querying per row again")
 
     def test_the_readers_list_does_not_query_per_row(self):
         url = reverse("desk:readers_list")
@@ -425,7 +356,6 @@ class DropdownWordingTests(LoggedInTestCase):
         opp = opportunity()
         tag = Tag.objects.create(name="Jazz nights", category="music")
         reader = Reader.objects.create(email="ada@example.com")
-        campaign = Campaign.objects.create(name="c", subject="s", body="b")
         template = EmailTemplate.objects.create(
             name="t", kind=EmailTemplate.Kind.NEWSLETTER, html_body="<p>x</p>")
 
@@ -433,7 +363,6 @@ class DropdownWordingTests(LoggedInTestCase):
             reverse("desk:listings_add"), reverse("desk:listings_change", args=[opp.pk]),
             reverse("desk:interests_add"), reverse("desk:interests_change", args=[tag.pk]),
             reverse("desk:readers_change", args=[reader.pk]),
-            reverse("desk:campaigns_add"), reverse("desk:campaigns_change", args=[campaign.pk]),
             reverse("desk:templates_add"), reverse("desk:templates_change", args=[template.pk]),
             reverse("desk:siteconfig"), reverse("desk:listings_list"),
         ]:
@@ -587,8 +516,9 @@ class SidebarAddLinkTests(LoggedInTestCase):
     def test_the_add_link_names_one_thing_not_many(self):
         html = self.client.get(reverse("desk:dashboard")).content.decode()
         self.assertIn('data-tip="Add event"', html)
-        self.assertIn('data-tip="Add interest"', html)
         self.assertNotIn('data-tip="Add events"', html)
+        # Users arrive by signing up; there is deliberately no "+" for them.
+        self.assertNotIn('data-tip="Add user"', html)
 
 
 class DeleteTests(LoggedInTestCase):
@@ -630,7 +560,6 @@ class DeleteTests(LoggedInTestCase):
     def test_every_section_offers_delete_from_its_form(self):
         tag = Tag.objects.create(name="Jazz nights", category="music")
         reader = Reader.objects.create(email="ada@example.com")
-        campaign = Campaign.objects.create(name="c", subject="s", body="b")
         template = EmailTemplate.objects.create(
             name="t", kind=EmailTemplate.Kind.NEWSLETTER, html_body="<p>x</p>")
         opp = opportunity()
@@ -638,7 +567,6 @@ class DeleteTests(LoggedInTestCase):
             (reverse("desk:listings_change", args=[opp.pk]), "listings", opp.pk),
             (reverse("desk:interests_change", args=[tag.pk]), "interests", tag.pk),
             (reverse("desk:readers_change", args=[reader.pk]), "readers", reader.pk),
-            (reverse("desk:campaigns_change", args=[campaign.pk]), "campaigns", campaign.pk),
             (reverse("desk:templates_change", args=[template.pk]), "templates", template.pk),
         ]:
             self.assertContains(self.client.get(url), reverse("desk:delete", args=[kind, pk]))
@@ -654,7 +582,6 @@ class DeleteTests(LoggedInTestCase):
         link is there - not two pages deep behind the edit form."""
         tag = Tag.objects.create(name="Jazz nights", category="music")
         reader = Reader.objects.create(email="ada@example.com")
-        campaign = Campaign.objects.create(name="c", subject="s", body="b")
         template = EmailTemplate.objects.create(
             name="t", kind=EmailTemplate.Kind.NEWSLETTER, html_body="<p>x</p>")
         opp = opportunity()
@@ -662,7 +589,6 @@ class DeleteTests(LoggedInTestCase):
             (reverse("desk:listings_list"), "listings", opp.pk),
             (reverse("desk:interests_list"), "interests", tag.pk),
             (reverse("desk:readers_list"), "readers", reader.pk),
-            (reverse("desk:campaigns_list"), "campaigns", campaign.pk),
             (reverse("desk:templates_list"), "templates", template.pk),
         ]:
             with self.subTest(kind=kind):
@@ -829,14 +755,13 @@ class NoNestedFormsTests(LoggedInTestCase):
 
     def test_no_page_with_a_form_nests_another(self):
         opp = opportunity()
-        campaign = Campaign.objects.create(name="c", subject="s", body="b", event=opp)
         reader = Reader.objects.create(email="ada@example.com")
         tag = Tag.objects.create(name="Jazz nights", category="music")
         for url in [
             reverse("desk:listings_list"), reverse("desk:listings_change", args=[opp.pk]),
             reverse("desk:interests_list"), reverse("desk:interests_change", args=[tag.pk]),
             reverse("desk:readers_list"), reverse("desk:readers_change", args=[reader.pk]),
-            reverse("desk:campaigns_list"), reverse("desk:campaigns_change", args=[campaign.pk]),
+            reverse("desk:send") + f"?r={reader.pk}",
             reverse("desk:siteconfig"), reverse("desk:templates_list"),
         ]:
             html = self.client.get(url).content.decode()

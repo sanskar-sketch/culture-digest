@@ -10,19 +10,13 @@ form's Meta.fields is invisible, and nothing else says so.
 
 from django.test import TestCase
 
-from campaigns.models import Campaign
-from desk.forms import CampaignForm, EmailTemplateForm, OpportunityForm, ReaderForm, TagForm
+from desk.forms import EmailTemplateForm, OpportunityForm, ReaderForm, TagForm
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
 from siteconfig.emails import EmailTemplate
 
 # Fields deliberately kept off a desk form, with the reason.
 INTENTIONALLY_ABSENT = {
-    "campaigns.Campaign": {
-        # Set by the view (created_by) or by the send/schedule actions
-        # (status, started_at, finished_at, last_error), never hand-edited.
-        "created_by", "status", "started_at", "finished_at", "last_error",
-    },
     "opportunities.Opportunity": {
         # Set by the view from the logged-in user on first save.
         "created_by",
@@ -60,7 +54,6 @@ class DeskFormCoverageTests(TestCase):
             Opportunity: OpportunityForm,
             Tag: TagForm,
             Reader: ReaderForm,
-            Campaign: CampaignForm,
             EmailTemplate: EmailTemplateForm,
         }
         gaps = {}

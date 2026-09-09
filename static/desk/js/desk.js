@@ -141,13 +141,16 @@
   function initBulkSelect() {
     document.querySelectorAll("form[data-bulk-form]").forEach(function (form) {
       var selectAll = form.querySelector("[data-select-all]");
-      // A form may carry two kinds of tick box (listings and interests on
-      // the catalogue). A button names the kind it acts on in its
-      // data-bulk-action value; an empty value means the plain "selected".
-      var rowChecks = Array.prototype.slice.call(
-        form.querySelectorAll("input[name=selected], input[name=selected_interest]"));
       var counter = form.querySelector("[data-selected-count]");
       var actions = Array.prototype.slice.call(form.querySelectorAll("[data-bulk-action]"));
+      // A button names the tick boxes it acts on in its data-bulk-action
+      // value (empty means the plain "selected"). The boxes counted are
+      // whatever the buttons name, so a page can call its rows anything -
+      // the send page's are "event" - without this script knowing about it.
+      var names = {selected: true};
+      actions.forEach(function (b) { names[b.getAttribute("data-bulk-action") || "selected"] = true; });
+      var selector = Object.keys(names).map(function (n) { return "input[type=checkbox][name=" + n + "]"; }).join(", ");
+      var rowChecks = Array.prototype.slice.call(form.querySelectorAll(selector));
 
       function countOf(name) {
         return rowChecks.filter(function (c) { return c.checked && c.name === name; }).length;
@@ -155,13 +158,7 @@
 
       function refresh() {
         var n = rowChecks.filter(function (c) { return c.checked; }).length;
-        var listings = countOf("selected"), interests = countOf("selected_interest");
-        if (counter) {
-          var parts = [];
-          if (listings) parts.push(listings + " listing" + (listings === 1 ? "" : "s"));
-          if (interests) parts.push(interests + " interest" + (interests === 1 ? "" : "s"));
-          counter.textContent = parts.length ? parts.join(", ") + " selected" : "None selected";
-        }
+        if (counter) counter.textContent = n ? n + " selected" : "None selected";
         if (selectAll) selectAll.checked = n > 0 && n === rowChecks.length;
         // Greyed out until something it acts on is ticked - pressing an
         // action with an empty selection is never what anyone meant.

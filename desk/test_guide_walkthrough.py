@@ -19,7 +19,6 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from campaigns.models import Campaign, CampaignDelivery
 from config import dashboard
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
@@ -312,83 +311,6 @@ class GuideWalkthrough(TestCase):
         self.assertFalse(ok)
         self.assertIn("Not the send day", why)
 
-    # -- Step 6: campaigns --------------------------------------------------
-
-    def _add_campaign(self, **overrides):
-        # The schedule fields carry model defaults, so the real form arrives
-        # with these pre-filled; the test has to send what the browser would.
-        data = {"name": "Frieze weekend", "subject": "This weekend",
-                "brief": "Frieze is on. Free entry on Sunday.", "body": "",
-                "personalise": "on", "link_label": "", "link_url": "",
-                "audience_location": "", "send_at": "",
-                "frequency": "once", "starts_on": "", "ends_on": "", "send_hour": "9"}
-        data.update(overrides)
-        return follow(self.client, reverse("desk:campaigns_add"), data)
-
-    def test_17_a_new_campaign_is_a_draft_that_sends_nothing(self):
-        response = self._add_campaign()
-        self.assertIn("Saved “Frieze weekend”.", messages_in(response))
-        campaign = Campaign.objects.get()
-        self.assertEqual(campaign.status, Campaign.Status.DRAFT)
-        self.assertEqual(CampaignDelivery.objects.count(), 0)
-        self.assertContains(response, "Nothing goes out until you press Schedule or Send now.")
-
-    def test_18_the_audience_count_reflects_the_restrictions_you_set(self):
-        Reader.objects.create(email="london@example.com", location="London", is_active=True)
-        Reader.objects.create(email="leeds@example.com", location="Leeds", is_active=True)
-        self._add_campaign()
-        campaign = Campaign.objects.get()
-
-        page = self.client.get(reverse("desk:campaigns_change", args=[campaign.pk]))
-        self.assertEqual(page.context["audience_count"], 2)
-
-        self._add_campaign(name="Frieze weekend", audience_location="London")
-        narrowed = Campaign.objects.get(audience_location="London")
-        page = self.client.get(reverse("desk:campaigns_change", args=[narrowed.pk]))
-        self.assertEqual(page.context["audience_count"], 1)
-
-    def test_19_preview_renders_without_sending(self):
-        Reader.objects.create(email="ada@example.com", location="London")
-        self._add_campaign()
-        campaign = Campaign.objects.get()
-        response = self.client.get(reverse("desk:campaigns_preview", args=[campaign.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context["error"])
-        self.assertEqual(CampaignDelivery.objects.count(), 0)
-
-    def test_20_scheduling_says_when_and_cancelling_stops_it(self):
-        Reader.objects.create(email="ada@example.com", location="London")
-        self._add_campaign()
-        campaign = Campaign.objects.get()
-
-        response = follow(self.client, reverse("desk:campaigns_schedule", args=[campaign.pk]))
-        self.assertIn("scheduled", " ".join(messages_in(response)).lower())
-        campaign.refresh_from_db()
-        self.assertEqual(campaign.status, Campaign.Status.SCHEDULED)
-
-        response = follow(self.client, reverse("desk:campaigns_cancel", args=[campaign.pk]))
-        self.assertIn("Anyone not yet emailed won't be.", " ".join(messages_in(response)))
-        campaign.refresh_from_db()
-        self.assertEqual(campaign.status, Campaign.Status.CANCELLED)
-
-    def test_21_send_now_records_one_delivery_row_per_reader(self):
-        Reader.objects.create(email="ada@example.com", location="London")
-        Reader.objects.create(email="bo@example.com", location="London")
-        self._add_campaign()
-        campaign = Campaign.objects.get()
-        follow(self.client, reverse("desk:campaigns_send_now", args=[campaign.pk]))
-        campaign.refresh_from_db()
-        self.assertEqual(campaign.deliveries.count(), 2)
-        page = self.client.get(reverse("desk:campaigns_change", args=[campaign.pk]))
-        self.assertContains(page, "ada@example.com")
-
-    def test_22_a_test_send_needs_an_address_on_your_own_account(self):
-        self.boss.email = ""
-        self.boss.save(update_fields=["email"])
-        self._add_campaign()
-        campaign = Campaign.objects.get()
-        response = follow(self.client, reverse("desk:campaigns_test_send", args=[campaign.pk]))
-        self.assertIn("Your account has no email address", " ".join(messages_in(response)))
 
     # -- Step 7: email templates -------------------------------------------
 

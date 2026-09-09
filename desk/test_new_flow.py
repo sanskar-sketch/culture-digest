@@ -354,34 +354,6 @@ class RepeatingCampaignTests(TestCase):
         self.assertTrue(any("Weekly bulletin" in line for line in lines))
 
 
-class AudienceSuggestionTests(DeskTestCase):
-    def test_the_suggestion_is_applied_and_only_from_our_own_tables(self):
-        real = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
-        campaign = Campaign.objects.create(name="Frieze", subject="s", brief="b")
-        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
-             mock.patch("recommendations.ai.suggest_audience", return_value={
-                 "tags": ["jazz-nights", "invented-slug"],
-                 "categories": ["music", "not-a-category"],
-                 "location": "London", "reasoning": "It's a music thing."}):
-            self.client.post(reverse("desk:campaigns_suggest_audience", args=[campaign.pk]),
-                             follow=True)
-        campaign.refresh_from_db()
-        self.assertEqual(list(campaign.audience_tags.all()), [real])
-        self.assertEqual(campaign.audience_categories, ["music"])
-        self.assertEqual(campaign.audience_location, "London")
-
-    def test_it_sends_nothing(self):
-        campaign = Campaign.objects.create(name="Frieze", subject="s", brief="b")
-        Reader.objects.create(email="ada@example.com")
-        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
-             mock.patch("recommendations.ai.suggest_audience", return_value={
-                 "tags": [], "categories": [], "location": "", "reasoning": ""}):
-            self.client.post(reverse("desk:campaigns_suggest_audience", args=[campaign.pk]),
-                             follow=True)
-        self.assertEqual(CampaignDelivery.objects.count(), 0)
-        campaign.refresh_from_db()
-        self.assertEqual(campaign.status, Campaign.Status.DRAFT)
-
 
 class InsightsTests(DeskTestCase):
     def test_it_reports_what_readers_want_and_what_they_opened(self):

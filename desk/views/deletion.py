@@ -22,7 +22,6 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from campaigns.models import Campaign
 from desk.permissions import staff_required
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
@@ -47,12 +46,6 @@ DELETABLE = {
         "instead": "Unticking “Is active” stops every email without erasing what "
                    "they were sent or what they told you. Delete is for an actual "
                    "erasure request.",
-    },
-    "campaigns": {
-        "model": Campaign, "label": "campaign", "list_url": "desk:campaigns_list",
-        "name": lambda o: o.name,
-        "instead": "Cancelling stops anything not yet sent while keeping the "
-                   "record of what was.",
     },
     "templates": {
         "model": EmailTemplate, "label": "email design", "list_url": "desk:templates_list",

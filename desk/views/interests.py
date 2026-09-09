@@ -60,7 +60,7 @@ def interest_list(request):
                       "tag events with. Where the two overlap is how an event finds "
                       "its reader. Interests readers typed in themselves arrive here on "
                       "their own.",
-        "breadcrumbs": [("Interests", None)],
+        "breadcrumbs": [("Settings", reverse("desk:siteconfig")), ("Interests", None)],
         "page_obj": page_obj,
         "result_count": qs.count(),
         "search_placeholder": "Search interests…",

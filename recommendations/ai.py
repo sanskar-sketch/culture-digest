@@ -570,7 +570,7 @@ Hard rules:
 
 
 def research_listings(interest_name: str, area: str = "", count: int = 5,
-                      category_hint: str = "") -> dict | None:
+                      category_hint: str = "", timeout: float = 180.0) -> dict | None:
     """Search the web for real events matching an interest.
 
     Returns {"listings": [...], "notes": str} or None. Never raises: this
@@ -599,7 +599,7 @@ For the two dials: mainstream_to_unusual is 1 for crowd-pleasing and 5 for
 niche; intimate_to_large_scale is 1 for a small room and 5 for a big venue."""
 
     try:
-        response = _research_client().responses.create(
+        response = _research_client(timeout=timeout).responses.create(
             model=config.resolved_ai_model,
             instructions=RESEARCH_SYSTEM,
             input=prompt,

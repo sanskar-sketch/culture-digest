@@ -86,6 +86,7 @@ def send_issue_for_reader(
     *,
     dry_run: bool = False,
     min_recommendations: int | None = None,
+    pool=None,
 ) -> SendResult:
     """Match, build the issue, and send it.
 
@@ -99,7 +100,7 @@ def send_issue_for_reader(
     if min_recommendations is None:
         min_recommendations = config.min_recommendations
 
-    matches = matching.top_matches_for_reader(reader)
+    matches = matching.top_matches_for_reader(reader, pool=pool)
     if len(matches) < min_recommendations:
         return SendResult(
             reader_email=reader.email,
@@ -153,7 +154,8 @@ def send_issue_for_reader(
     )
 
 
-def preview_issue_for_reader(reader, min_recommendations: int | None = None) -> dict:
+def preview_issue_for_reader(reader, min_recommendations: int | None = None,
+                             pool=None) -> dict:
     """What this reader's next newsletter would look like, rendered.
 
     Same path as a real send - matching, rationales, the template - then
@@ -170,7 +172,7 @@ def preview_issue_for_reader(reader, min_recommendations: int | None = None) -> 
     if min_recommendations is None:
         min_recommendations = config.min_recommendations
 
-    matches = matching.top_matches_for_reader(reader)
+    matches = matching.top_matches_for_reader(reader, pool=pool)
     if len(matches) < min_recommendations:
         return {
             "ok": False, "match_count": len(matches),

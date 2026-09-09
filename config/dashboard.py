@@ -20,9 +20,6 @@ SECTIONS = [
             {"key": "listings", "name": "Events", "singular": "event",
              "blurb": "Everything the newsletter can recommend. An event is invisible "
                       "until you publish it, and archives itself once it has ended."},
-            {"key": "interests", "name": "Interests", "singular": "interest",
-             "blurb": "What readers pick at signup and what you tag events with. Where "
-                      "the two overlap is how an event finds its reader."},
         ],
     },
     {
@@ -30,18 +27,8 @@ SECTIONS = [
         "title": "Who gets it",
         "rows": [
             {"key": "readers", "name": "Users", "singular": "user",
-             "blurb": "Everyone signed up. Tick users, or pick interests, then preview "
-                      "and send them their newsletter."},
-        ],
-    },
-    {
-        "key": "sending",
-        "title": "Sending",
-        "rows": [
-            {"key": "campaigns", "name": "Campaigns", "singular": "campaign",
-             "blurb": "One email about one event, to the people it suits. AI drafts "
-                      "it; you review, edit and send - and run it again for the next "
-                      "event like it."},
+             "blurb": "Everyone signed up. Tick users, see the events that suit them, "
+                      "pick, read one, send."},
         ],
     },
     {
@@ -49,7 +36,7 @@ SECTIONS = [
         "title": "What happened",
         "rows": [
             {"key": "insights", "name": "Insights", "singular": "insight",
-             "blurb": "What readers say they want, and what they actually open."},
+             "blurb": "What users say they want, and what they actually open."},
         ],
     },
 ]

@@ -1,8 +1,8 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
-from .views import access, auth, campaigns, dashboard, deletion, insights, interests
-from .views import listings, newsletters, outreach, readers
+from .views import access, auth, dashboard, deletion, insights, interests
+from .views import listings, newsletters, outreach, readers, send
 from .views import settings as settings_views
 from .views import templates as template_views
 
@@ -22,7 +22,6 @@ urlpatterns = [
     path("events/add/", listings.listing_form, name="listings_add"),
     path("events/<int:pk>/", listings.listing_form, name="listings_change"),
     path("events/<int:pk>/who/", listings.listing_suggest_audience, name="listings_who"),
-    path("events/<int:pk>/campaign/", campaigns.campaign_from_event, name="campaigns_from_event"),
     path("listings/", RedirectView.as_view(pattern_name="desk:listings_list", query_string=True)),
 
     path("interests/", interests.interest_list, name="interests_list"),
@@ -33,20 +32,9 @@ urlpatterns = [
     path("readers/<int:pk>/", readers.reader_form, name="readers_change"),
     path("readers/<int:pk>/tags/", outreach.reader_tags, name="reader_tags"),
 
+    path("send/", send.send, name="send"),
     path("insights/", insights.insights, name="insights"),
 
-    path("campaigns/", campaigns.campaign_list, name="campaigns_list"),
-    path("campaigns/add/", campaigns.campaign_form, name="campaigns_add"),
-    path("campaigns/<int:pk>/", campaigns.campaign_form, name="campaigns_change"),
-    path("campaigns/<int:pk>/preview/", campaigns.campaign_preview, name="campaigns_preview"),
-    path("campaigns/<int:pk>/test-send/", campaigns.campaign_test_send, name="campaigns_test_send"),
-    path("campaigns/<int:pk>/schedule/", campaigns.campaign_schedule, name="campaigns_schedule"),
-    path("campaigns/<int:pk>/send-now/", campaigns.campaign_send_now, name="campaigns_send_now"),
-    path("campaigns/<int:pk>/cancel/", campaigns.campaign_cancel, name="campaigns_cancel"),
-    path("campaigns/<int:pk>/suggest-audience/", campaigns.campaign_suggest_audience,
-         name="campaigns_suggest_audience"),
-    path("campaigns/from-idea/", campaigns.campaign_from_idea, name="campaigns_from_idea"),
-    path("campaigns/<int:pk>/rerun/", campaigns.campaign_rerun, name="campaigns_rerun"),
 
 
     path("issues/", newsletters.issue_list, name="issues_list"),

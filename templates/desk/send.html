@@ -1,0 +1,87 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    <form method="post" class="d-inline">{% csrf_token %}<input type="hidden" name="r" value="{{ raw }}"><button type="submit" name="action" value="research" class="d-btn" title="AI searches the web for events matching what these users like most and you have fewest events for">Find more with AI</button></form>
+    <a class="d-btn" href="{% url 'desk:readers_list' %}">Back to users</a>
+  </div>
+</div>
+<p class="d-page-blurb">These are the events the matching would pick for these users - on their interests, where they are and how far they'll go, what they'll pay, and what they've said before. Tick the ones to send, read what one of them would get, then send. Each user gets their own email.</p>
+
+<div class="d-card" style="margin-bottom:14px;">
+  <h2>1 · Who</h2>
+  <p style="margin:0;font-size:13.5px;">
+    {% for r in readers %}<span class="d-pill neutral" style="margin:0 4px 4px 0;display:inline-block;">{{ r.email }}{% if r.location %} · {{ r.location }}{% endif %}</span>{% endfor %}
+  </p>
+</div>
+
+<form method="post" data-bulk-form>
+  {% csrf_token %}
+  <input type="hidden" name="r" value="{{ raw }}">
+  <h2 style="font-size:15px;margin:0 0 8px;">2 · Which events</h2>
+  <div class="d-bulkbar">
+    <span class="d-bulk-count" data-selected-count>None selected</span>
+    <label style="font-size:12.5px;display:inline-flex;align-items:center;gap:6px;">
+      Read it as
+      <select name="preview_reader" data-no-search style="min-height:30px;font-size:12.5px;">
+        {% for r in readers %}<option value="{{ r.pk }}"{% if preview_reader and r.pk == preview_reader.pk %} selected{% endif %}>{{ r.email }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" name="action" value="preview" class="d-btn small" data-bulk-action="event" title="Build one user's email from the ticked events. Nothing is sent">3 · Preview one</button>
+    <button type="submit" name="action" value="send" class="d-btn small danger" data-bulk-action="event"
+            data-confirm="This really emails {{ readers|length }} user{{ readers|length|pluralize }}, each their own picks from the ticked events. Send?"
+            title="Write each user's email from the ticked events and send it">4 · Write &amp; send</button>
+  </div>
+  <div class="d-table-wrap">
+    <div class="d-table-scroll">
+    <table class="d-table">
+      <thead><tr>
+        <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
+        <th>Event</th><th>Good for</th><th>When</th><th>Price</th><th>Area</th><th>Interests</th><th>Best score</th>
+      </tr></thead>
+      <tbody>
+        {% for row in rows %}
+        {% with e=row.event %}
+        <tr>
+          <td><input type="checkbox" name="event" value="{{ e.pk }}"{% if e.pk in chosen %} checked{% endif %} aria-label="Send {{ e.title }}"></td>
+          <td class="wrap"><a class="d-row-link" href="{% url 'desk:listings_change' e.pk %}">{{ e.title }}</a></td>
+          <td><strong>{{ row.suits|length }}</strong> of {{ readers|length }} <span style="color:var(--d-muted);font-size:12px;">({{ row.share }}%)</span></td>
+          <td>{% if e.start_date or e.end_date %}{{ e.start_date|default:"now" }} → {{ e.end_date|default:"open" }}{% else %}ongoing{% endif %}</td>
+          <td>{{ e.price_display|default:e.get_price_tier_display }}</td>
+          <td>{{ e.location_area|default:"—" }}</td>
+          <td class="wrap">{% for t in e.tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% empty %}<span style="color:var(--d-bad)">untagged</span>{% endfor %}</td>
+          <td style="font-variant-numeric:tabular-nums">{{ row.best|floatformat:1 }}</td>
+        </tr>
+        {% endwith %}
+        {% empty %}
+        <tr><td colspan="8" class="d-empty">Nothing published suits these users yet. Press <strong>Find more with AI</strong>, or <a href="{% url 'desk:listings_list' %}">add events</a> and tag them.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  <p style="font-size:12.5px;color:var(--d-muted);margin:8px 0 0;">Each user gets up to {{ per_send }} of the ticked events - the ones that suit them best, soonest first when scores tie. Someone the ticked events don't suit strongly enough is skipped rather than sent filler.</p>
+</form>
+
+{% if preview_reader %}
+<h2 style="font-size:15px;margin:24px 0 10px;">What {{ preview_reader.email }} would get</h2>
+{% if preview.ok %}
+<div class="d-card">
+  <p style="font-size:13px;margin:0 0 6px;"><strong>Subject:</strong> {{ preview.subject }}</p>
+  <p style="font-size:12px;color:var(--d-muted);margin:0;">Built exactly as the send will be, then thrown away. Nothing was sent or recorded.</p>
+</div>
+<div class="d-split">
+  <div class="d-card"><h2>The email</h2><iframe srcdoc="{{ preview.html|force_escape }}" class="d-preview-frame"></iframe></div>
+  <div class="d-card">
+    <h2>Why these, in this order</h2>
+    {% for pick in preview.picks %}
+    <p style="font-size:13px;margin:0 0 10px;"><strong>{{ pick.title }}</strong> <span style="color:var(--d-muted);">· score {{ pick.score|floatformat:1 }}</span><br><span style="color:var(--d-ink-2);">{{ pick.rationale|truncatewords:40 }}</span></p>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="d-card" style="border-color:var(--d-warn);"><p style="margin:0;font-size:14px;">{{ preview.message }}</p></div>
+{% endif %}
+{% endif %}
+{% endblock %}

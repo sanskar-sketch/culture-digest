@@ -14,16 +14,18 @@ from recommendations.sending import send_issue_for_reader
 from readers.models import Reader
 
 BULK_ACTIONS = (
-    {"value": "suggest_events", "label": "Suggest events for these",
-     "title": "AI searches the web for events matching the interests these users have "
-              "most and you have fewest events for, in the area most of them are in"},
-    {"value": "preview", "label": "Preview newsletter",
-     "title": "Dry run - builds what each selected reader would get. Nothing is sent"},
-    {"value": "send", "label": "Send newsletter now",
-     "title": "Really emails the selected readers, immediately",
-     "confirm": "This really emails the selected readers. Send now?"},
+    {"value": "choose", "label": "Suggest events & send",
+     "title": "See the events that suit these users - on their interests, area, budget "
+              "and what they've said - pick the ones to send, read one, send"},
+    {"value": "preview", "label": "Preview, from everything",
+     "title": "Dry run - builds what each selected user would get from every published "
+              "event. Nothing is sent"},
+    {"value": "send", "label": "Send now, from everything",
+     "title": "Skip choosing: each selected user gets their own picks from every "
+              "published event, immediately",
+     "confirm": "This really emails the selected users now. Send?"},
     {"value": "interpret", "label": "Interpret taste with AI",
-     "title": "Re-read the selected readers' own words and refresh what AI infers "
+     "title": "Re-read the selected users' own words and refresh what AI infers "
               "about their taste"},
 )
 
@@ -103,24 +105,8 @@ def reader_list(request):
         selected = list(Reader.objects.filter(pk__in=ids))
         if not ids:
             messages.warning(request, "Nothing selected.")
-        elif action == "suggest_events":
-            from opportunities import research
-            from recommendations import ai
-
-            if not ai.is_enabled("classify_opportunities"):
-                messages.warning(request, "AI is not configured, or event research is "
-                                          "switched off in Settings → AI assistance.")
-            else:
-                started = research.for_readers(Reader.objects.filter(pk__in=ids))
-                if started:
-                    messages.success(
-                        request,
-                        f"Searching for events for {', '.join(started)}. This takes a "
-                        "minute or two - they arrive under Events as drafts, with the "
-                        "pages they came from. Nothing is published until you say so.")
-                else:
-                    messages.info(request, "These users' interests all have live events "
-                                           "already, or research is already running.")
+        elif action == "choose":
+            return redirect(f"{reverse('desk:send')}?r={','.join(ids)}")
         elif action in ("preview", "send"):
             dry_run = action == "preview"
             for reader in selected:

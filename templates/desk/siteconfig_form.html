@@ -95,6 +95,10 @@
     {% endif %}
   </div>
 
+  <div class="d-fieldset" data-tab-panel="Interests">
+    <p class="d-fieldset-desc">Interests live on each event and on each user. The list itself - renaming one, giving it a category, deleting a typo - is <a href="{% url 'desk:interests_list' %}">managed here</a>. Interests users type in at signup arrive on their own.</p>
+  </div>
+
   <div class="d-fieldset" data-tab-panel="Health" id="health">
     <p class="d-fieldset-desc">What is wired up, and whether it is actually working. Mostly for whoever set the site up.</p>
     {% for row in configuration %}

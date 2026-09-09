@@ -206,7 +206,15 @@ def score_opportunity(
     return Match(opportunity=opportunity, score=score, reasons=reasons)
 
 
-def top_matches_for_reader(reader: Reader, limit: int | None = None) -> list[Match]:
+def top_matches_for_reader(reader: Reader, limit: int | None = None,
+                           pool=None) -> list[Match]:
+    """The best events for this reader, from the catalogue or from `pool`.
+
+    `pool` is the editor's shortlist - the events they chose on the send
+    page. Within it the same rules apply: published, not ended, not on
+    cooldown, scored and ranked for this reader. An editor choosing the
+    pool narrows what can be sent; it never overrides who it suits.
+    """
     from siteconfig.models import SiteConfig
 
     config = SiteConfig.load()
@@ -226,6 +234,8 @@ def top_matches_for_reader(reader: Reader, limit: int | None = None) -> list[Mat
         .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
         .prefetch_related("tags")
     )
+    if pool is not None:
+        candidates = candidates.filter(id__in=list(pool))
 
     feedback_weights = _feedback_tag_weights(reader, config)
 

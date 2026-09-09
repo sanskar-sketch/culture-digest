@@ -10,6 +10,11 @@
   </div>
 </div>
 <p class="d-page-blurb">{{ page_blurb }}</p>
+{% if wanted %}
+<div class="d-msg warning" style="margin-bottom:16px;">
+  <span>Users asked for {% for t in wanted %}<strong>{{ t.name }}</strong>{% if t.times_requested > 1 %} (×{{ t.times_requested }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %} and there's nothing to send them. <strong>Suggest events for my readers</strong> looks for exactly these.</span>
+</div>
+{% endif %}
 
 {% include "desk/_toolbar.html" %}
 
@@ -21,7 +26,7 @@
     <table class="d-table">
       <thead><tr>
         <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
-        <th>Title</th><th>Category</th><th>Status</th><th>Price</th><th>Area</th><th>Taste</th><th>Interests</th><th>Recommended</th><th>End date</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th>
+        <th>Title</th><th>Category</th><th>Status</th><th>Price</th><th>Area</th><th>Taste</th><th>Interests</th><th>Good for</th><th>Recommended</th><th>End date</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th>
       </tr></thead>
       <tbody>
         {% for opp in page_obj %}
@@ -40,16 +45,18 @@
           <td style="font-variant-numeric:tabular-nums">{{ opp.mainstream_to_unusual }}·{{ opp.intimate_to_large_scale }}</td>
           <td class="wrap">
             {% with tags=opp.tags.all %}
+              <a href="{% url 'desk:listings_change' opp.pk %}#id_tags" style="color:inherit;" title="Edit interests">
               {% if tags %}{% for t in tags|slice:":3" %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if tags|length > 3 %} +{{ tags|length|add:"-3" }}{% endif %}
-              {% else %}<span style="color:var(--d-bad)">untagged</span>{% endif %}
+              {% else %}<span style="color:var(--d-bad)">untagged</span>{% endif %}</a>
             {% endwith %}
           </td>
+          <td>{% if opp.good_for %}<a href="{% url 'desk:readers_list' %}?{% for t in opp.tags.all %}tag={{ t.slug }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">{{ opp.good_for }} user{{ opp.good_for|pluralize }}</a>{% else %}<span style="color:var(--d-muted)">nobody yet</span>{% endif %}</td>
           <td>{{ opp.recs_count|default:"—" }}</td>
           <td>{{ opp.end_date|default:"—" }}</td>
           <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'listings' opp.pk %}" aria-label="Delete {{ opp.title }}">Delete</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="11" class="d-empty">No events match. <a href="{{ request.path }}">Clear filters</a>, <a href="{{ add_url }}">add one</a>, or press <em>Suggest events for my readers</em>.</td></tr>
+        <tr><td colspan="12" class="d-empty">No events match. <a href="{{ request.path }}">Clear filters</a>, <a href="{{ add_url }}">add one</a>, or press <em>Suggest events for my readers</em>.</td></tr>
         {% endfor %}
       </tbody>
     </table>
