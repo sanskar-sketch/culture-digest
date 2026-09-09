@@ -38,8 +38,8 @@
                   <div style="font-size:15px; line-height:1.65; margin:0 0 8px; color:#4a4a4f;">
                     {{ body_html }}
                   </div>
-                  {% if campaign.link_url %}
-                  <a href="{{ campaign.link_url }}" style="display:inline-block; margin-top:10px; background:#000000; color:#ffffff; text-decoration:none; padding:12px 24px; border-radius:999px; font-size:14px; font-weight:500;">{{ campaign.link_label|default:"Book / learn more" }} &rarr;</a>
+                  {% if link_url|default:campaign.link_url %}
+                  <a href="{{ link_url|default:campaign.link_url }}" style="display:inline-block; margin-top:10px; background:#000000; color:#ffffff; text-decoration:none; padding:12px 24px; border-radius:999px; font-size:14px; font-weight:500;">{{ campaign.link_label|default:"Book / learn more" }} &rarr;</a>
                   {% endif %}
                 </td>
               </tr>

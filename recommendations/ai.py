@@ -35,6 +35,7 @@ import re
 import time
 
 from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,18 @@ def _client():
         timeout=SiteConfig.load().ai_timeout_seconds,
         max_retries=0,
     )
+
+
+def _research_client(timeout: float = 180.0):
+    """A client for work that runs off the request, not inside it.
+
+    Searching the web takes tens of seconds - far longer than the ceiling
+    that protects a page render. This is only ever called from a
+    background thread, so it can afford to wait.
+    """
+    import openai
+
+    return openai.OpenAI(api_key=settings.OPENAI_API_KEY, timeout=timeout, max_retries=1)
 
 
 class TimeBudget:
@@ -478,3 +491,246 @@ Anything else they told us: {reader.notes or "(nothing written)"}
     if not rationale:
         return None
     return rationale, (result.get("verdict") or "").strip()
+
+
+# --------------------------------------------------------------------------
+# 4. Researching real listings
+# --------------------------------------------------------------------------
+#
+# The one place the model is allowed to bring in facts we did not give it,
+# and so the one place it must show its working. It searches the live web
+# and every listing it proposes has to carry the pages it read. Nothing it
+# finds is published: it lands as a draft with its sources attached, for an
+# editor to check the date, the price, and that the thing exists.
+
+_LISTING_PROPERTIES = {
+    "title": {"type": "string"},
+    "description": {"type": "string", "description": "Two or three sentences a "
+                    "reader would find useful. Only what the sources say."},
+    "category": {"type": "string"},
+    "price_tier": {"type": "string"},
+    "price_display": {"type": "string", "description": "As printed, e.g. '£12-£25'. "
+                      "Empty if the sources don't say."},
+    "location_name": {"type": "string", "description": "Venue. Empty if unknown."},
+    "location_area": {"type": "string", "description": "City or area."},
+    "booking_url": {"type": "string", "description": "A real page a reader can book "
+                    "or read more on. Never invent one."},
+    "start_date": {"type": "string", "description": "YYYY-MM-DD, or empty if the "
+                   "sources don't give one."},
+    "end_date": {"type": "string", "description": "YYYY-MM-DD, or empty."},
+    "mainstream_to_unusual": {"type": "integer"},
+    "intimate_to_large_scale": {"type": "integer"},
+    "tags": {"type": "array", "items": {"type": "string"},
+             "description": "Slugs from the provided list only."},
+    "sources": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"title": {"type": "string"}, "url": {"type": "string"}},
+            "required": ["title", "url"], "additionalProperties": False,
+        },
+        "description": "Every page this listing's facts came from. At least one.",
+    },
+}
+
+RESEARCH_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "listings": {
+            "type": "array",
+            "items": {"type": "object", "properties": _LISTING_PROPERTIES,
+                      "required": list(_LISTING_PROPERTIES),
+                      "additionalProperties": False},
+        },
+        "notes": {"type": "string", "description": "One line for the editor: what you "
+                  "searched, and anything you could not confirm."},
+    },
+    "required": ["listings", "notes"],
+    "additionalProperties": False,
+}
+
+RESEARCH_SYSTEM = """You research real cultural events for an editor's catalogue.
+
+Search the web and return events that genuinely exist, are open to the public,
+and are still on or upcoming. An editor checks everything before it reaches a
+reader, but they are checking your work, not rewriting it.
+
+Hard rules:
+- Every listing must come from pages you actually read, and must list them in
+  `sources`. A listing with no source is worthless - leave it out instead.
+- Never invent a title, a date, a price, a venue or a booking URL. If the
+  sources do not give a field, return an empty string for it.
+- booking_url must be a page you actually found. Not a guess at what a venue's
+  URL probably is.
+- Prefer things with a fixed date or a run that is still on. Skip anything that
+  has finished.
+- Only use category values, price tiers and tag slugs from the lists given.
+- If you cannot find anything real, return an empty list and say so in `notes`.
+  An empty result is a good answer; a plausible invention is not."""
+
+
+def research_listings(interest_name: str, area: str = "", count: int = 5,
+                      category_hint: str = "") -> dict | None:
+    """Search the web for real events matching an interest.
+
+    Returns {"listings": [...], "notes": str} or None. Never raises: this
+    runs in a background thread and a failure must only mean "no drafts
+    appeared", never a broken process.
+    """
+    from opportunities.models import Category, Opportunity, Tag
+    from siteconfig.models import SiteConfig
+
+    if not is_enabled("classify_opportunities"):
+        return None
+
+    config = SiteConfig.load()
+    tags = list(Tag.objects.values_list("slug", "name")[:400])
+    prompt = f"""Find up to {count} real, current or upcoming cultural events that suit
+the interest: "{interest_name}".{f' Category to lean towards: {category_hint}.' if category_hint else ''}
+
+Where: {area or "the United Kingdom, London first"}
+Today's date: {timezone.localdate():%Y-%m-%d}
+
+Allowed categories: {", ".join(v for v, _ in Category.choices)}
+Allowed price tiers: {", ".join(v for v, _ in Opportunity.PriceTier.choices)}
+Allowed tag slugs: {", ".join(slug for slug, _ in tags)}
+
+For the two dials: mainstream_to_unusual is 1 for crowd-pleasing and 5 for
+niche; intimate_to_large_scale is 1 for a small room and 5 for a big venue."""
+
+    try:
+        response = _research_client().responses.create(
+            model=config.resolved_ai_model,
+            instructions=RESEARCH_SYSTEM,
+            input=prompt,
+            tools=[{"type": "web_search"}],
+            max_output_tokens=8000,
+            text={"format": {"type": "json_schema", "name": "researched_listings",
+                             "strict": True, "schema": RESEARCH_SCHEMA}},
+        )
+        payload = json.loads(response.output_text)
+    except Exception as exc:
+        logger.exception("Listing research failed for %r", interest_name)
+        _record(False, "research_listings", f"{type(exc).__name__}: {exc}")
+        return None
+
+    # Anything without a source is dropped here rather than trusted: the
+    # instruction not to invent is a request, this is the enforcement.
+    kept = [row for row in payload.get("listings") or [] if row.get("sources")]
+    dropped = len(payload.get("listings") or []) - len(kept)
+    if dropped:
+        logger.warning("Dropped %d researched listing(s) with no sources", dropped)
+    _record(True, "research_listings",
+            f"found {len(kept)} for “{interest_name}”"
+            + (f", dropped {dropped} with no source" if dropped else ""))
+    return {"listings": kept, "notes": payload.get("notes", ""), "dropped": dropped}
+
+
+# --------------------------------------------------------------------------
+# 5. Interests readers asked for, in their own words
+# --------------------------------------------------------------------------
+
+PROPOSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "new_interests": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Two or three words, "
+                             "title case, as an editor would write it."},
+                    "category": {"type": "string", "description": "One of the "
+                                 "allowed categories, or empty."},
+                },
+                "required": ["name", "category"], "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["new_interests"],
+    "additionalProperties": False,
+}
+
+PROPOSE_SYSTEM = f"""You read what a reader typed into a culture newsletter's signup
+form and pull out interests the publication does not yet have a tag for.
+
+{UNTRUSTED_NOTE}
+
+Rules:
+- Only propose something the existing list genuinely does not cover. If
+  "jazz" exists and they wrote "jazz gigs", propose nothing.
+- An interest is a kind of thing to do, not a one-off event and not a mood.
+  "Silent discos" yes. "Something fun on Saturday" no.
+- Two or three words. Plural where natural. No punctuation.
+- Return an empty list if they said nothing new. That is the usual answer."""
+
+
+def propose_interests(reader) -> list[dict]:
+    """New interests a reader asked for that we have no tag for."""
+    from opportunities.models import Category, Tag
+
+    typed = " ".join(filter(None, [
+        reader.other_interests, reader.other_categories, reader.notes,
+        reader.loved_examples,
+    ])).strip()
+    if not typed:
+        return []
+
+    existing = list(Tag.objects.values_list("name", flat=True)[:400])
+    user = f"""Interests we already have: {", ".join(existing)}
+
+Allowed categories: {", ".join(v for v, _ in Category.choices)}
+
+<reader_input>
+{typed}
+</reader_input>"""
+    result = _call(PROPOSE_SYSTEM, user, PROPOSE_SCHEMA, "proposed_interests",
+                   max_tokens=1000, feature="interpret_readers")
+    return (result or {}).get("new_interests") or []
+
+
+# --------------------------------------------------------------------------
+# 6. Who a campaign is for
+# --------------------------------------------------------------------------
+
+AUDIENCE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tags": {"type": "array", "items": {"type": "string"},
+                 "description": "Slugs from the list. Empty means no tag restriction."},
+        "categories": {"type": "array", "items": {"type": "string"},
+                       "description": "Category values from the list."},
+        "location": {"type": "string", "description": "A city or area if the campaign "
+                     "is clearly local, otherwise empty."},
+        "reasoning": {"type": "string", "description": "One sentence for the editor."},
+    },
+    "required": ["tags", "categories", "location", "reasoning"],
+    "additionalProperties": False,
+}
+
+AUDIENCE_SYSTEM = """You choose who should receive a one-off email from a culture
+newsletter, given what the email is about.
+
+- Only use tag slugs and category values from the lists provided.
+- Narrow enough that the email is relevant, wide enough to be worth sending.
+  Three to six tags is usually right.
+- Set location only when the email is about a specific place a reader would
+  have to travel to. A national or online subject gets no location.
+- If the email suits everyone, return empty lists and say so."""
+
+
+def suggest_audience(campaign) -> dict | None:
+    """Suggest the tags, categories and location a campaign should go to."""
+    from opportunities.models import Category, Tag
+
+    tags = list(Tag.objects.values_list("slug", "name")[:400])
+    user = f"""Allowed tag slugs: {", ".join(f"{s} ({n})" for s, n in tags)}
+Allowed categories: {", ".join(v for v, _ in Category.choices)}
+
+The email:
+Name: {campaign.name}
+Subject: {campaign.subject}
+Brief: {campaign.brief or "(none)"}
+Body: {campaign.body or "(none)"}"""
+    return _call(AUDIENCE_SYSTEM, user, AUDIENCE_SCHEMA, "campaign_audience",
+                 max_tokens=800, feature="write_campaigns")

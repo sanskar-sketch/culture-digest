@@ -3,6 +3,7 @@ from django.views.decorators.http import require_http_methods
 
 from recommendations.emailing import send_welcome
 
+from . import interests
 from .forms import ReaderOnboardingForm
 from .models import Reader
 
@@ -30,6 +31,9 @@ def onboarding_view(request):
             send_welcome(reader)
         else:
             reader = _merge_into(form, existing)
+        # What they typed into "anything we've missed" becomes a real
+        # interest, off the request - see readers.interests.
+        interests.start(reader)
         return render(
             request, "onboarding/thank_you.html",
             {"reader": reader, "returning": existing is not None},

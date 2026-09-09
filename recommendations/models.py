@@ -81,3 +81,42 @@ class Recommendation(models.Model):
     @property
     def fit_display(self) -> str:
         return "★" * self.fit_stars + "☆" * (5 - self.fit_stars)
+
+
+class LinkClick(models.Model):
+    """One reader following one link out of one email.
+
+    The feedback buttons already say what a reader thought. This says what
+    they actually did - which pick they opened, and which part of the email
+    they used - which is the difference between "they liked the idea" and
+    "they went".
+
+    Deliberately thin: who, what, where in the email, when. No IP, no user
+    agent, nothing that turns a newsletter into surveillance.
+    """
+
+    class Section(models.TextChoices):
+        BOOKING = "booking", "Booking link on a pick"
+        FEEDBACK = "feedback", "Feedback button"
+        CAMPAIGN = "campaign", "Campaign button"
+        OTHER = "other", "Something else"
+
+    reader = models.ForeignKey("readers.Reader", on_delete=models.CASCADE,
+                               related_name="link_clicks")
+    recommendation = models.ForeignKey(
+        "recommendations.Recommendation", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="link_clicks")
+    campaign = models.ForeignKey(
+        "campaigns.Campaign", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="link_clicks")
+    section = models.CharField(max_length=20, choices=Section.choices,
+                               default=Section.OTHER)
+    url = models.TextField()
+    clicked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-clicked_at"]
+        indexes = [models.Index(fields=["section", "clicked_at"])]
+
+    def __str__(self):
+        return f"{self.reader.email} → {self.get_section_display()}"

@@ -315,10 +315,13 @@ class GuideWalkthrough(TestCase):
     # -- Step 6: campaigns --------------------------------------------------
 
     def _add_campaign(self, **overrides):
+        # The schedule fields carry model defaults, so the real form arrives
+        # with these pre-filled; the test has to send what the browser would.
         data = {"name": "Frieze weekend", "subject": "This weekend",
                 "brief": "Frieze is on. Free entry on Sunday.", "body": "",
                 "personalise": "on", "link_label": "", "link_url": "",
-                "audience_location": "", "send_at": ""}
+                "audience_location": "", "send_at": "",
+                "frequency": "once", "starts_on": "", "ends_on": "", "send_hour": "9"}
         data.update(overrides)
         return follow(self.client, reverse("desk:campaigns_add"), data)
 

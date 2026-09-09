@@ -15,6 +15,7 @@
   {% if instance.status == "scheduled" or instance.status == "sending" %}
   <form method="post" action="{% url 'desk:campaigns_cancel' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Cancel</button></form>
   {% endif %}
+  <form method="post" action="{% url 'desk:campaigns_suggest_audience' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Pick the audience with AI</button></form>
   <a class="d-btn danger" href="{% url 'desk:delete' 'campaigns' instance.pk %}">Delete</a>
   {% endif %}
   </div>
@@ -38,7 +39,7 @@
   </div>
 
   <div class="d-fieldset" data-tab-panel="Audience">
-    <p class="d-fieldset-desc">Leave everything empty to email every active reader.</p>
+    <p class="d-fieldset-desc">Leave everything empty to email every active reader. Or press <strong>Pick the audience with AI</strong> above and it reads the brief and sets these for you - you can always change them.</p>
     {% if instance %}<p style="font-size:14px;margin:0 0 16px;"><strong>{{ audience_count }}</strong> reader{{ audience_count|pluralize }} right now. {{ audience_description }}.</p>{% else %}<p style="font-size:13px;color:var(--d-muted);margin:0 0 16px;">Save the campaign to see who it would reach.</p>{% endif %}
     {% include "desk/_field.html" with field=form.audience_categories %}
     {% include "desk/_field.html" with field=form.audience_tags %}
@@ -57,6 +58,14 @@
     </p>
     {% endif %}
     {% include "desk/_field.html" with field=form.send_at %}
+
+    <h3 style="font-size:14px;margin:20px 0 4px;">Or repeat it</h3>
+    <p class="d-fieldset-desc">A repeating campaign emails its whole audience again on every run, between the two dates.</p>
+    {% include "desk/_field.html" with field=form.frequency %}
+    {% include "desk/_field.html" with field=form.starts_on %}
+    {% include "desk/_field.html" with field=form.ends_on %}
+    {% include "desk/_field.html" with field=form.send_hour %}
+    {% if instance.last_run_on %}<p style="font-size:13px;color:var(--d-muted);">Last run {{ instance.last_run_on }}.</p>{% endif %}
     {% if instance %}<p style="font-size:13px;color:var(--d-muted);">Status: {{ instance.get_status_display }}</p>{% endif %}
   </div>
 

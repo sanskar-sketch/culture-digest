@@ -29,6 +29,10 @@ class Tag(models.Model):
     the core matching signals.
     """
 
+    class Origin(models.TextChoices):
+        EDITOR = "editor", "Added by an editor"
+        READER = "reader", "Asked for by readers"
+
     name = models.CharField(max_length=60, unique=True)
     slug = models.SlugField(max_length=70, unique=True, blank=True)
     category = models.CharField(
@@ -36,6 +40,16 @@ class Tag(models.Model):
         help_text="Which broad category this interest sits under. Drives which "
         "tags a reader is shown during onboarding. Blank = always shown.",
     )
+    # Readers can type an interest our list doesn't have. Those used to sit
+    # in a free-text field nobody read; now they become real interests,
+    # marked so an editor can tell what came from the public.
+    origin = models.CharField(
+        max_length=10, choices=Origin.choices, default=Origin.EDITOR,
+        help_text="Whether an editor added this or readers asked for it.")
+    times_requested = models.PositiveIntegerField(
+        default=0,
+        help_text="How many readers typed this in themselves. The queue of what "
+                  "to find listings for, in order.")
 
     class Meta:
         ordering = ["category", "name"]
@@ -130,6 +144,19 @@ class Opportunity(models.Model):
     )
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+
+    # Where the facts came from. A listing AI researched arrives as a draft
+    # carrying the pages it read, so an editor can check the date, the price
+    # and that the thing exists at all before a reader is sent to it.
+    found_by_ai = models.BooleanField(
+        default=False,
+        help_text="Researched by AI rather than written by an editor. Always a "
+                  "draft until someone has checked it.")
+    sources = models.JSONField(
+        default=list, blank=True,
+        help_text="Pages the research read, as {title, url}. Empty for a listing "
+                  "an editor wrote.")
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
     )

@@ -47,11 +47,30 @@ def due_campaigns(now=None):
     ).order_by("send_at", "pk")
 
 
+def start_repeats(now=None) -> list[str]:
+    """Requeue repeating campaigns whose next run has come round.
+
+    Done before the due list is read, so a campaign that becomes due on
+    this pass is sent on this pass rather than the next one.
+    """
+    lines = []
+    candidates = Campaign.objects.exclude(
+        frequency=Campaign.Frequency.ONCE
+    ).exclude(status__in=[Campaign.Status.DRAFT, Campaign.Status.CANCELLED])
+    for campaign in candidates:
+        due, why = campaign.due_for_a_run(now)
+        if due:
+            campaign.begin_repeat_run()
+            lines.append(f"Repeating '{campaign}': queued again ({why.lower()})")
+    return lines
+
+
 def run_due(budget_seconds: float, dry_run: bool = False) -> dict:
     """One pass. Returns a report with a line per thing it did or declined."""
     budget = TimeBudget(budget_seconds)
     report = {"started_at": timezone.now(), "campaigns": [], "newsletter": None, "lines": []}
 
+    report["lines"].extend(start_repeats())
     campaigns = list(due_campaigns())
     if not campaigns:
         report["lines"].append("Campaigns: nothing due.")

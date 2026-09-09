@@ -7,36 +7,85 @@
   </div>
 </div>
 <p class="d-page-blurb">{{ page_blurb }}</p>
-{% include "desk/_toolbar.html" %}
-<div class="d-table-wrap">
-  <div class="d-table-scroll">
-  <table class="d-table">
-    <thead><tr><th>Name</th><th>Category</th><th>Listings</th><th>Readers interested</th><th>Slug</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th></tr></thead>
-    <tbody>
-      {% for tag in page_obj %}
-      <tr>
-        <td><a class="d-row-link" href="{% url 'desk:interests_change' tag.pk %}">{{ tag.name }}</a></td>
-        <td>
-          <form method="post" class="d-inline">
-            {% csrf_token %}
-            <input type="hidden" name="tag_id" value="{{ tag.pk }}">
-            <select name="category_value" onchange="this.form.submit()" style="min-height:32px;font-size:12.5px;padding:4px 26px 4px 8px;">
-              <option value=""{% if not tag.category %} selected{% endif %}>—</option>
-              {% for value, label in categories %}<option value="{{ value }}"{% if tag.category == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-            </select>
-          </form>
-        </td>
-        <td>{% if tag.listings_count %}{{ tag.listings_count }}{% else %}<span style="color:var(--d-bad)">none yet</span>{% endif %}</td>
-        <td>{{ tag.readers_count|default:"—" }}</td>
-        <td><code>{{ tag.slug }}</code></td>
-        <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'interests' tag.pk %}" aria-label="Delete {{ tag.name }}">Delete</a></td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="6" class="d-empty">No interests match. <a href="{{ add_url }}">Add one</a>.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  </div>
+
+{% if wanted_count %}
+{% comment %}
+The whole point of absorbing what readers type: an interest several people
+asked for and we have nothing to send them for is the most valuable work
+on this page, so it says so rather than waiting to be noticed.
+{% endcomment %}
+<div class="d-msg warning" style="margin-bottom:16px;">
+  <span><strong>{{ wanted_count }}</strong> interest{{ wanted_count|pluralize }} readers asked for
+  {% if wanted_count == 1 %}has{% else %}have{% endif %} no listings yet.
+  <a href="?origin=reader&amp;coverage=empty">Show them</a>, tick them, and press
+  <strong>Find listings with AI</strong>.</span>
 </div>
+{% endif %}
+
+{% include "desk/_toolbar.html" %}
+
+<form method="post" data-bulk-form>
+  {% csrf_token %}
+  <div class="d-bulkbar">
+    <span class="d-bulk-count" data-selected-count>None selected</span>
+    <input type="text" name="area" placeholder="Where? e.g. London (optional)"
+           style="min-height:30px;font-size:12.5px;padding:4px 10px;max-width:200px;"
+           aria-label="Area to search in">
+    {% for action in bulk_actions %}
+    <button type="submit" name="action" value="{{ action.value }}" class="d-btn small"
+            data-bulk-action title="{{ action.title }}">{{ action.label }}</button>
+    {% endfor %}
+    {% if delete_kind %}
+    <button type="submit" name="bulk_delete" value="1" class="d-btn small danger"
+            formaction="{% url 'desk:delete_selected' delete_kind %}" formnovalidate
+            data-bulk-action title="Shows what else goes with them before anything is deleted"
+            >Delete&hellip;</button>
+    {% endif %}
+  </div>
+
+  <div class="d-table-wrap">
+    <div class="d-table-scroll">
+    <table class="d-table">
+      <thead><tr>
+        <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
+        <th>Name</th><th>Where from</th><th>Category</th><th>Listings</th>
+        <th>Readers interested</th><th>Slug</th>
+        <th class="d-col-act"><span class="d-sr-only">Actions</span></th>
+      </tr></thead>
+      <tbody>
+        {% for tag in page_obj %}
+        <tr>
+          <td><input type="checkbox" name="selected" value="{{ tag.pk }}"></td>
+          <td><a class="d-row-link" href="{% url 'desk:interests_change' tag.pk %}">{{ tag.name }}</a>
+            {% if tag.researching %}<span class="d-pill accent" style="margin-left:6px;">searching…</span>{% endif %}</td>
+          <td>
+            {% if tag.origin == "reader" %}
+              <span class="d-pill accent">Readers</span>
+              {% if tag.times_requested %}<span style="color:var(--d-muted);font-size:12px;"> ×{{ tag.times_requested }}</span>{% endif %}
+            {% else %}<span class="d-pill neutral">Editor</span>{% endif %}
+          </td>
+          <td>
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="tag_id" value="{{ tag.pk }}">
+              <select name="category_value" onchange="this.form.submit()" style="min-height:32px;font-size:12.5px;padding:4px 26px 4px 8px;">
+                <option value=""{% if not tag.category %} selected{% endif %}>—</option>
+                {% for value, label in categories %}<option value="{{ value }}"{% if tag.category == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </form>
+          </td>
+          <td>{% if tag.listings_count %}{{ tag.listings_count }}{% else %}<span style="color:var(--d-bad)">none yet</span>{% endif %}</td>
+          <td>{{ tag.readers_count|default:"—" }}</td>
+          <td><code>{{ tag.slug }}</code></td>
+          <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'interests' tag.pk %}" aria-label="Delete {{ tag.name }}">Delete</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="d-empty">No interests match. <a href="{{ add_url }}">Add one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</form>
 {% include "desk/_pagination.html" %}
 {% endblock %}

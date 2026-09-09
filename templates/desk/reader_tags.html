@@ -1,0 +1,31 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    <a class="d-btn" href="{% url 'desk:readers_change' reader.pk %}">Edit this reader</a>
+  </div>
+</div>
+<p class="d-page-blurb">Everything we believe about their taste, and where each belief came from.</p>
+
+<div class="d-card">
+  <h2>They picked these</h2>
+  <p style="font-size:12px;color:var(--d-muted);margin:0 0 8px;">Chosen at signup, or typed in and absorbed. Weighted highest.</p>
+  <p style="margin:0;">{% for t in picked %}<span class="d-pill accent" style="margin:0 4px 4px 0;display:inline-block;">{{ t.name }}</span>{% empty %}<span style="color:var(--d-muted);">Nothing picked.</span>{% endfor %}</p>
+</div>
+
+<div class="d-card">
+  <h2>AI inferred these from their words</h2>
+  <p style="font-size:12px;color:var(--d-muted);margin:0 0 8px;">Read out of their free text, not stated. Weighted below what they picked.</p>
+  <p style="margin:0;">{% for t in inferred %}<span class="d-pill good" style="margin:0 4px 4px 0;display:inline-block;">{{ t.name }}</span>{% empty %}<span style="color:var(--d-muted);">Nothing inferred yet — use “Interpret taste with AI” on their page.</span>{% endfor %}</p>
+</div>
+
+<div class="d-card">
+  <h2>They signalled avoiding these</h2>
+  <p style="margin:0;">{% for t in avoid %}<span class="d-pill bad" style="margin:0 4px 4px 0;display:inline-block;">{{ t.name }}</span>{% empty %}<span style="color:var(--d-muted);">Nothing.</span>{% endfor %}</p>
+</div>
+
+{% if reader.ai_taste_summary %}
+<div class="d-card"><h2>In summary</h2><p style="margin:0;font-size:14px;">{{ reader.ai_taste_summary }}</p></div>
+{% endif %}
+{% endblock %}

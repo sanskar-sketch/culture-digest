@@ -63,6 +63,11 @@ def listing_list(request):
     tag = request.GET.get("tag")
     if tag:
         qs = qs.filter(tags__slug=tag)
+    origin = request.GET.get("origin")
+    if origin == "ai":
+        qs = qs.filter(found_by_ai=True)
+    elif origin == "editor":
+        qs = qs.filter(found_by_ai=False)
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -98,6 +103,9 @@ def listing_list(request):
          "options": filter_options(request, "price_tier", Opportunity.PriceTier.choices)},
         {"title": "Online", "param": "online",
          "options": filter_options(request, "online", [("1", "Online"), ("0", "In person")])},
+        {"title": "Where it came from", "param": "origin",
+         "options": filter_options(request, "origin", [
+             ("ai", "Found by AI — needs checking"), ("editor", "Written by an editor")])},
         {"title": "Interests", "param": "tag",
          "options": filter_options(request, "tag", [(t.slug, t.name) for t in tags_in_use])},
     ]

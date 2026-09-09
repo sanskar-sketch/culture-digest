@@ -52,6 +52,18 @@
     {% include "desk/_field.html" with field=form.intimate_to_large_scale %}
   </div>
 
+  {% if instance.found_by_ai %}
+  <div class="d-fieldset" style="border-color:var(--d-warn);">
+    <h2 style="color:var(--d-warn);">Researched by AI — check before publishing</h2>
+    <p class="d-fieldset-desc">Every fact below came from the pages listed here. Open them and check the date, the price, and that it is still on. Nothing reaches a reader until you set Status to Published.</p>
+    <ul class="d-plain-list">
+      {% for source in instance.sources %}
+      <li><a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.title|default:source.url }}</a></li>
+      {% empty %}<li style="color:var(--d-bad);">No sources recorded — treat everything here as unverified.</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
   {% if performance %}
   <div class="d-fieldset">
     <h2>How it has performed</h2>

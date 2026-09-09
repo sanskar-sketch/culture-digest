@@ -23,6 +23,22 @@ def build_feedback_url(token, action: str) -> str:
     return settings.SITE_BASE_URL.rstrip("/") + path
 
 
+def build_booking_url(recommendation) -> str:
+    """The pick's link, routed through us so the click is recorded.
+
+    Same token as the feedback buttons: one unguessable id per
+    recommendation, and no address or reader id anywhere in a URL.
+    """
+    path = reverse("recommendations:booking-click",
+                   kwargs={"token": recommendation.feedback_token})
+    return settings.SITE_BASE_URL.rstrip("/") + path
+
+
+def build_campaign_link_url(delivery) -> str:
+    path = reverse("recommendations:campaign-click", kwargs={"token": delivery.token})
+    return settings.SITE_BASE_URL.rstrip("/") + path
+
+
 def build_unsubscribe_url(reader) -> str:
     path = reverse("readers:unsubscribe", kwargs={"token": reader.unsubscribe_token})
     return settings.SITE_BASE_URL.rstrip("/") + path
@@ -202,7 +218,7 @@ def render_newsletter(issue) -> tuple[str, str, str]:
                 "verdict": rec.verdict,
                 "fit_display": rec.fit_display,
                 "dates": _date_range(rec.opportunity),
-                "booking_url": rec.opportunity.booking_url,
+                "booking_url": build_booking_url(rec),
                 "more_like_this_url": build_feedback_url(rec.feedback_token, "more-like-this"),
                 "not_for_me_url": build_feedback_url(rec.feedback_token, "not-for-me"),
                 "save_url": build_feedback_url(rec.feedback_token, "save"),

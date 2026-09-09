@@ -18,7 +18,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from recommendations import ai
-from recommendations.emailing import _paragraphs, build_unsubscribe_url, deliver
+from recommendations.emailing import (_paragraphs, build_campaign_link_url,
+                                      build_unsubscribe_url, deliver)
 
 from .composing import compose
 from .models import Campaign, CampaignDelivery
@@ -57,7 +58,8 @@ class CampaignRun:
         return text
 
 
-def render_campaign(campaign, reader, subject: str, body_text: str) -> tuple[str, str, str]:
+def render_campaign(campaign, reader, subject: str, body_text: str,
+                    delivery=None) -> tuple[str, str, str]:
     """(subject, html, text) for one reader, via the editor's template if
     one is selected, else the built-in one."""
     from siteconfig.emails import EmailTemplate, render_email
@@ -72,6 +74,10 @@ def render_campaign(campaign, reader, subject: str, body_text: str) -> tuple[str
         "body_text": body_text,
         "body_html": _paragraphs(body_text),
         "unsubscribe_url": build_unsubscribe_url(reader),
+        # Tracked when this is a real send; the raw link for a preview or a
+        # test, which have no delivery row to attribute a click to.
+        "link_url": (build_campaign_link_url(delivery) if delivery and campaign.link_url
+                     else campaign.link_url),
     }
     html, text, subject_override = render_email(
         EmailTemplate.Kind.CAMPAIGN, context,
@@ -118,7 +124,8 @@ def _send_one(campaign, delivery, budget, run: CampaignRun) -> None:
     reader = delivery.reader
     try:
         subject, body_text, personalised = compose(campaign, reader, budget)
-        subject, html, text = render_campaign(campaign, reader, subject, body_text)
+        subject, html, text = render_campaign(campaign, reader, subject, body_text,
+                                              delivery=delivery)
         delivery.subject = subject
         delivery.body_text = body_text
         delivery.personalised = personalised

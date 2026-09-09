@@ -139,7 +139,20 @@ class ReaderForm(FriendlyChoices, forms.ModelForm):
         self.fields["interest_tags"].queryset = Tag.objects.all()
 
 
-class CampaignForm(FriendlyChoices, forms.ModelForm):
+class CampaignRepeatMixin:
+    """A repeating campaign has to end after it starts."""
+
+    def clean(self):
+        cleaned = super().clean()
+        starts, ends = cleaned.get("starts_on"), cleaned.get("ends_on")
+        if starts and ends and ends < starts:
+            self.add_error("ends_on", "The end date is before the start date.")
+        if cleaned.get("frequency") != Campaign.Frequency.ONCE and not starts:
+            self.add_error("starts_on", "A repeating campaign needs a start date.")
+        return cleaned
+
+
+class CampaignForm(CampaignRepeatMixin, FriendlyChoices, forms.ModelForm):
     audience_categories = forms.MultipleChoiceField(
         choices=Category.choices, required=False, widget=forms.CheckboxSelectMultiple,
         label="Categories they follow",
@@ -150,13 +163,16 @@ class CampaignForm(FriendlyChoices, forms.ModelForm):
         model = Campaign
         fields = (
             "name", "subject", "brief", "body", "personalise", "link_label", "link_url",
-            "audience_categories", "audience_tags", "audience_location", "send_at",
+            "audience_categories", "audience_tags", "audience_location",
+            "send_at", "frequency", "starts_on", "ends_on", "send_hour",
         )
         widgets = {
             "brief": forms.Textarea(attrs={"rows": 6}),
             "body": forms.Textarea(attrs={"rows": 10}),
             "audience_tags": forms.CheckboxSelectMultiple,
             "send_at": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+            "starts_on": forms.DateInput(attrs={"type": "date"}),
+            "ends_on": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):

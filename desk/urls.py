@@ -1,7 +1,7 @@
 from django.urls import path
 
-from .views import access, auth, campaigns, dashboard, deletion, interests, listings
-from .views import newsletters, readers
+from .views import access, auth, campaigns, dashboard, deletion, insights, interests
+from .views import listings, newsletters, outreach, readers
 from .views import settings as settings_views
 from .views import templates as template_views
 
@@ -25,6 +25,10 @@ urlpatterns = [
 
     path("readers/", readers.reader_list, name="readers_list"),
     path("readers/<int:pk>/", readers.reader_form, name="readers_change"),
+    path("readers/<int:pk>/tags/", outreach.reader_tags, name="reader_tags"),
+
+    path("send/", outreach.send_by_interest, name="send_by_interest"),
+    path("insights/", insights.insights, name="insights"),
 
     path("campaigns/", campaigns.campaign_list, name="campaigns_list"),
     path("campaigns/add/", campaigns.campaign_form, name="campaigns_add"),
@@ -34,6 +38,8 @@ urlpatterns = [
     path("campaigns/<int:pk>/schedule/", campaigns.campaign_schedule, name="campaigns_schedule"),
     path("campaigns/<int:pk>/send-now/", campaigns.campaign_send_now, name="campaigns_send_now"),
     path("campaigns/<int:pk>/cancel/", campaigns.campaign_cancel, name="campaigns_cancel"),
+    path("campaigns/<int:pk>/suggest-audience/", campaigns.campaign_suggest_audience,
+         name="campaigns_suggest_audience"),
 
     path("issues/", newsletters.issue_list, name="issues_list"),
     path("issues/<int:pk>/", newsletters.issue_detail, name="issues_change"),

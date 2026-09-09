@@ -276,6 +276,52 @@ def campaign_send_now(request, pk):
 
 
 @staff_required
+def campaign_suggest_audience(request, pk):
+    """Let AI read the campaign and propose who it's for.
+
+    Applied straight away rather than printed as advice: the audience is
+    visible on the page, saved with the campaign, and trivially undone -
+    unlike listing classification, where a wrong guess would be published.
+    Nothing is sent by this.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    campaign = get_object_or_404(Campaign, pk=pk)
+
+    from opportunities.models import Category, Tag
+    from recommendations import ai
+
+    if not ai.is_enabled("write_campaigns"):
+        messages.warning(request, "AI is not configured, or campaign writing is switched "
+                                  "off in Site configuration → AI assistance.")
+        return redirect("desk:campaigns_change", pk=pk)
+
+    suggestion = ai.suggest_audience(campaign)
+    if not suggestion:
+        messages.warning(request, "Could not suggest an audience - see the AI row on "
+                                  "the Overview page for why.")
+        return redirect("desk:campaigns_change", pk=pk)
+
+    allowed = {v for v, _ in Category.choices}
+    categories = [c for c in suggestion.get("categories") or [] if c in allowed]
+    tags = list(Tag.objects.filter(slug__in=suggestion.get("tags") or []))
+
+    campaign.audience_categories = categories
+    campaign.audience_location = (suggestion.get("location") or "")[:120]
+    campaign.save(update_fields=["audience_categories", "audience_location", "updated_at"])
+    campaign.audience_tags.set(tags)
+
+    reach = campaign.audience().count()
+    messages.success(
+        request,
+        f"Audience set to {reach} reader{'' if reach == 1 else 's'}: "
+        f"{', '.join(t.name for t in tags) or 'no interest restriction'}"
+        f"{', ' + campaign.audience_location if campaign.audience_location else ''}. "
+        f"{suggestion.get('reasoning', '')} Change it on the Audience tab if that's wrong.")
+    return redirect("desk:campaigns_change", pk=pk)
+
+
+@staff_required
 def campaign_cancel(request, pk):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])

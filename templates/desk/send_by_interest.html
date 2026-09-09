@@ -1,0 +1,106 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    <a class="d-btn" href="?auto=1">Auto-select interests</a>
+  </div>
+</div>
+<p class="d-page-blurb">{{ page_blurb }}</p>
+
+<form method="get" class="d-card" style="margin-bottom:16px;">
+  <h2 style="margin-top:0;">1 · Interests</h2>
+  <div class="d-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px;list-style:none;padding:0;">
+    {% for tag in all_tags %}
+    <label class="d-chip-check{% if tag.slug in selected_slugs %} is-on{% endif %}">
+      <input type="checkbox" name="tag" value="{{ tag.slug }}"{% if tag.slug in selected_slugs %} checked{% endif %}>
+      {{ tag.name }}
+      <span class="n">{{ tag.readers }}{% if not tag.live %} · nothing live{% endif %}</span>
+    </label>
+    {% endfor %}
+  </div>
+  <label style="font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+    <input type="checkbox" name="match" value="all"{% if match_all %} checked{% endif %}>
+    Readers must have <strong>every</strong> ticked interest, not just one
+  </label>
+  <div class="d-form-actions" style="margin-top:12px;">
+    <button type="submit" class="d-btn primary">Show readers</button>
+    {% if selected_slugs %}<a class="d-btn" href="{{ request.path }}">Clear</a>{% endif %}
+  </div>
+</form>
+
+{% if selected_tags %}
+<form method="post" data-bulk-form>
+  {% csrf_token %}
+  {% for slug in selected_slugs %}<input type="hidden" name="tag" value="{{ slug }}">{% endfor %}
+  {% if match_all %}<input type="hidden" name="match" value="all">{% endif %}
+
+  <div class="d-bulkbar">
+    <span class="d-bulk-count" data-selected-count>None selected</span>
+    <button type="submit" name="action" value="preview" class="d-btn small" data-bulk-action
+            title="Build and read what the first selected reader would get. Nothing is sent">Preview one</button>
+    <button type="submit" name="action" value="send" class="d-btn small danger" data-bulk-action
+            data-confirm="This really emails the selected readers. Send now?"
+            title="Send each selected reader their own newsletter now">Send newsletter</button>
+    <span style="margin-left:auto;font-size:12.5px;">
+      <strong>{{ audience_count }}</strong> reader{{ audience_count|pluralize }} match
+      {% if truncated %} · showing the first {{ readers|length }}{% endif %}
+    </span>
+  </div>
+
+  <div class="d-table-wrap">
+    <div class="d-table-scroll">
+    <table class="d-table">
+      <thead><tr>
+        <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
+        <th>Email</th><th>Name</th><th>Location</th><th>Their interests</th>
+        <th class="d-col-act"><span class="d-sr-only">Actions</span></th>
+      </tr></thead>
+      <tbody>
+        {% for reader in readers %}
+        <tr>
+          <td><input type="checkbox" name="selected" value="{{ reader.pk }}"></td>
+          <td><a class="d-row-link" href="{% url 'desk:readers_change' reader.pk %}">{{ reader.email }}</a></td>
+          <td>{{ reader.name|default:"—" }}</td>
+          <td>{{ reader.location|default:"—" }}</td>
+          <td class="wrap">{% for t in reader.interest_tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
+          <td class="d-col-act"><a class="d-del" style="color:var(--d-accent-ink);border-color:var(--d-accent);"
+             href="{% url 'desk:reader_tags' reader.pk %}">All tags</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="d-empty">No active reader has {% if match_all %}all of{% else %}any of{% endif %} those interests.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</form>
+{% else %}
+<div class="d-card"><p style="margin:0;color:var(--d-muted);">Pick an interest above to see who it reaches.</p></div>
+{% endif %}
+
+{% if preview_reader %}
+<h2 style="font-size:15px;margin:24px 0 10px;">3 · What {{ preview_reader.email }} would get</h2>
+{% if preview.ok %}
+<div class="d-card">
+  <p style="font-size:13px;margin:0 0 6px;"><strong>Subject:</strong> {{ preview.subject }}</p>
+  <p style="font-size:12px;color:var(--d-muted);margin:0;">Built exactly as a real send would, then rolled back. Nothing was sent, recorded, or put on cooldown.</p>
+</div>
+<div class="d-split">
+  <div class="d-card"><h2>The email</h2><iframe srcdoc="{{ preview.html|force_escape }}" class="d-preview-frame"></iframe></div>
+  <div class="d-card">
+    <h2>Why these picks</h2>
+    {% for pick in preview.picks %}
+    <p style="font-size:13px;margin:0 0 10px;"><strong>{{ pick.title }}</strong>
+      <span style="color:var(--d-muted);">· score {{ pick.score|floatformat:1 }}</span><br>
+      <span style="color:var(--d-ink-2);">{{ pick.rationale|truncatewords:40 }}</span></p>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="d-card" style="border-color:var(--d-warn);">
+  <p style="margin:0;font-size:14px;">{{ preview.message }}</p>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

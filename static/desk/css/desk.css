@@ -531,3 +531,20 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
 .d-combo-option[aria-selected="true"] { background: var(--d-accent-soft); color: var(--d-accent-ink); font-weight: 600; }
 
 .d-plain-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; }
+
+/* ---------- interest chips (Send by interest) --------------------------- */
+/* A checkbox that reads as a chip. The native box stays in the markup and
+   keeps working without JS or CSS - it is only visually replaced. */
+.d-chip-check {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border: 1px solid var(--d-line); border-radius: 999px;
+  background: var(--d-surface); font-size: 13px; cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.d-chip-check:hover { border-color: var(--d-accent); }
+.d-chip-check.is-on, .d-chip-check:has(input:checked) {
+  background: var(--d-accent-soft); border-color: var(--d-accent); color: var(--d-accent-ink);
+}
+.d-chip-check input { width: 14px; height: 14px; accent-color: var(--d-accent); }
+.d-chip-check .n { color: var(--d-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.d-chip-check.is-on .n, .d-chip-check:has(input:checked) .n { color: var(--d-accent-ink); }

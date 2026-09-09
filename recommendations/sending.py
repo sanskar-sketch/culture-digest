@@ -151,3 +151,58 @@ def send_issue_for_reader(
                 + (f" (message id {message_id})." if message_id else "."),
         issue=issue,
     )
+
+
+def preview_issue_for_reader(reader, min_recommendations: int | None = None) -> dict:
+    """What this reader's next newsletter would look like, rendered.
+
+    Same path as a real send - matching, rationales, the template - then
+    rolled back, so what you read is what they would get rather than an
+    approximation of it. Nothing is stored and nothing goes on cooldown.
+    """
+    from django.db import transaction
+
+    from siteconfig.models import SiteConfig
+
+    from .emailing import render_newsletter
+
+    config = SiteConfig.load()
+    if min_recommendations is None:
+        min_recommendations = config.min_recommendations
+
+    matches = matching.top_matches_for_reader(reader)
+    if len(matches) < min_recommendations:
+        return {
+            "ok": False, "match_count": len(matches),
+            "message": (f"Skipped: only {len(matches)} strong match"
+                        f"{'' if len(matches) == 1 else 'es'} "
+                        f"(needs {min_recommendations}). Add more published listings."),
+        }
+
+    budget = ai.TimeBudget(config.ai_send_budget_seconds)
+    rendered = {}
+    try:
+        with transaction.atomic():
+            issue = NewsletterIssue.objects.create(reader=reader)
+            for match in matches:
+                rationale, verdict = matching.build_rationale(match, reader, budget=budget)
+                Recommendation.objects.create(
+                    issue=issue, opportunity=match.opportunity, rationale=rationale,
+                    verdict=verdict, score=match.score)
+            subject, html, text = render_newsletter(issue)
+            rendered = {
+                "ok": True, "match_count": len(matches), "subject": subject,
+                "html": html, "text": text,
+                "picks": [
+                    {"title": rec.opportunity.title, "score": rec.score,
+                     "rationale": rec.rationale}
+                    for rec in issue.recommendations.select_related("opportunity")
+                ],
+                "message": f"Would send {len(matches)} recommendations.",
+            }
+            transaction.set_rollback(True)
+    except Exception as exc:
+        logger.exception("Preview failed for %s", reader.email)
+        return {"ok": False, "match_count": len(matches),
+                "message": f"Could not build a preview: {exc}"}
+    return rendered

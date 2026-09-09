@@ -36,6 +36,12 @@ SECTIONS = [
             {"key": "readers", "name": "Readers", "singular": "reader",
              "blurb": "Everyone subscribed: what they told us about their taste, "
                       "what they have been sent, and how they responded."},
+            {"key": "send_by_interest", "name": "Send by interest",
+             "singular": "send",
+             "blurb": "Pick interests, see who has them, read what one of them "
+                      "would get, then send."},
+            {"key": "insights", "name": "Insights", "singular": "insight",
+             "blurb": "What readers say they want, and what they actually open."},
         ],
     },
     {

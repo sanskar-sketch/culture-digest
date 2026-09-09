@@ -1,0 +1,124 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top"><h1>{{ page_title }}</h1></div>
+<p class="d-page-blurb">{{ page_blurb }}</p>
+
+<div class="d-grid">
+  <div class="d-stat accent">
+    <div class="d-label">Opened a pick</div>
+    <div class="d-value">{{ click_rate }}%</div>
+    <div class="d-sub">{{ clicks_total }} click{{ clicks_total|pluralize }} across {{ recs_total }} recommendation{{ recs_total|pluralize }}</div>
+  </div>
+  <div class="d-stat">
+    <div class="d-label">Pressed a button</div>
+    <div class="d-value">{{ response_rate }}%</div>
+    <div class="d-sub">{{ responded }} of {{ recs_total }} said something back</div>
+  </div>
+  <div class="d-stat">
+    <div class="d-label">Readers who clicked</div>
+    <div class="d-value">{{ reach }}%</div>
+    <div class="d-sub">{{ readers_who_clicked }} of {{ readers_total }} active readers</div>
+  </div>
+  <div class="d-stat">
+    <div class="d-label">Sent</div>
+    <div class="d-value">{{ issues_sent }}</div>
+    <div class="d-sub">newsletters · {{ campaigns_sent }} campaign{{ campaigns_sent|pluralize }}</div>
+  </div>
+</div>
+
+{% if unmet %}
+<div class="d-card" style="border-color:var(--d-warn);">
+  <h2 style="color:var(--d-warn);">Asked for, nothing to send</h2>
+  <p style="font-size:12.5px;color:var(--d-muted);margin:0 0 10px;">Interests readers typed in themselves that no listing carries. The most useful thing on this page.</p>
+  <table class="d-table">
+    <thead><tr><th>Interest</th><th>Readers who asked</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th></tr></thead>
+    <tbody>
+      {% for tag in unmet %}
+      <tr>
+        <td><a class="d-row-link" href="{% url 'desk:interests_change' tag.pk %}">{{ tag.name }}</a></td>
+        <td>{{ tag.times_requested }}</td>
+        <td class="d-col-act"><a class="d-del" style="color:var(--d-accent-ink);border-color:var(--d-accent);"
+           href="{% url 'desk:interests_list' %}?origin=reader&amp;coverage=empty">Find listings</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="d-split">
+  <div class="d-card">
+    <h2>What readers say they like</h2>
+    {% for tag in top_interests %}
+    <div class="d-row">
+      <span class="d-name">{{ tag.name }}</span>
+      <span class="d-bar"><span style="width: {{ tag.share }}%"></span></span>
+      <span class="d-num{% if not tag.live %} d-warn-text{% endif %}">{{ tag.picked }}</span>
+    </div>
+    {% empty %}<p style="color:var(--d-muted);font-size:13px;margin:0;">No interests picked yet.</p>{% endfor %}
+    <p style="font-size:12px;color:var(--d-muted);margin:12px 0 0;">Amber means nothing published carries that interest.</p>
+  </div>
+
+  <div class="d-card">
+    <h2>Categories they follow</h2>
+    {% for row in category_demand %}
+    <div class="d-row">
+      <span class="d-name">{{ row.label }}</span>
+      <span class="d-bar"><span style="width: {{ row.share }}%"></span></span>
+      <span class="d-num">{{ row.readers }}</span>
+    </div>
+    {% empty %}<p style="color:var(--d-muted);font-size:13px;margin:0;">Nobody has picked a category yet.</p>{% endfor %}
+  </div>
+</div>
+
+<div class="d-split">
+  <div class="d-card">
+    <h2>What they pressed</h2>
+    <div class="d-row"><span class="d-name">More like this</span><span class="d-bar"><span style="width: {% widthratio feedback.more responded|default:1 100 %}%"></span></span><span class="d-num">{{ feedback.more }}</span></div>
+    <div class="d-row"><span class="d-name">Booked</span><span class="d-bar"><span style="width: {% widthratio feedback.booked responded|default:1 100 %}%"></span></span><span class="d-num">{{ feedback.booked }}</span></div>
+    <div class="d-row"><span class="d-name">Saved</span><span class="d-bar"><span style="width: {% widthratio feedback.saved responded|default:1 100 %}%"></span></span><span class="d-num">{{ feedback.saved }}</span></div>
+    <div class="d-row"><span class="d-name">Not for me</span><span class="d-bar"><span style="width: {% widthratio feedback.nope responded|default:1 100 %}%"></span></span><span class="d-num">{{ feedback.nope }}</span></div>
+  </div>
+
+  <div class="d-card">
+    <h2>Which part of the email</h2>
+    {% for row in sections %}
+    <div class="d-row">
+      <span class="d-name">{{ row.label }}</span>
+      <span class="d-bar"><span style="width: {% widthratio row.clicks clicks_total|default:1 100 %}%"></span></span>
+      <span class="d-num">{{ row.clicks }}</span>
+    </div>
+    {% empty %}<p style="color:var(--d-muted);font-size:13px;margin:0;">No clicks recorded yet. They appear as readers open links in emails sent from now on.</p>{% endfor %}
+  </div>
+</div>
+
+<div class="d-card">
+  <h2>Most opened listings</h2>
+  <table class="d-table">
+    <thead><tr><th>Listing</th><th>Clicks</th><th>Readers</th></tr></thead>
+    <tbody>
+      {% for row in most_clicked %}
+      <tr>
+        <td class="wrap"><a class="d-row-link" href="{% url 'desk:listings_change' row.listing_id %}">{{ row.title }}</a></td>
+        <td>{{ row.clicks }}</td><td>{{ row.people }}</td>
+      </tr>
+      {% empty %}<tr><td colspan="3" class="d-empty">Nothing opened yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if ignored %}
+<div class="d-card">
+  <h2>Recommended, and ignored</h2>
+  <p style="font-size:12.5px;color:var(--d-muted);margin:0 0 10px;">Sent more than once, never opened, never rated. Worth rewriting or archiving.</p>
+  <table class="d-table">
+    <thead><tr><th>Listing</th><th>Times sent</th></tr></thead>
+    <tbody>
+      {% for row in ignored %}
+      <tr><td class="wrap"><a class="d-row-link" href="{% url 'desk:listings_change' row.listing_id %}">{{ row.title }}</a></td><td>{{ row.sent }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

@@ -26,6 +26,16 @@ INTENTIONALLY_ABSENT = {
     "opportunities.Opportunity": {
         # Set by the view from the logged-in user on first save.
         "created_by",
+        # Provenance, written by opportunities.research when AI finds a
+        # listing. Shown read-only on the form with the pages it read - an
+        # editor checks those sources, they don't retype them.
+        "found_by_ai", "sources",
+    },
+    "opportunities.Tag": {
+        # Both written by readers.interests when someone types an interest
+        # our list doesn't have. Shown on the Interests row, not editable:
+        # "readers asked for this 12 times" is a fact, not a setting.
+        "origin", "times_requested",
     },
     "readers.Reader": {
         # Shown as read-only text in reader_form.html (under "What AI read

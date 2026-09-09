@@ -14,6 +14,8 @@ to fit inside one web request.
 
 from __future__ import annotations
 
+import uuid
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -89,11 +91,36 @@ class Campaign(models.Model):
                   "means everywhere.")
 
     # --- Schedule and state ---------------------------------------------
+    class Frequency(models.TextChoices):
+        ONCE = "once", "Once"
+        DAILY = "daily", "Every day"
+        WEEKLY = "weekly", "Every week"
+        FORTNIGHTLY = "fortnightly", "Every two weeks"
+        MONTHLY = "monthly", "Every month"
+
     send_at = models.DateTimeField(
         null=True, blank=True,
         help_text="When to send. Leave blank to send as soon as it's scheduled. The "
                   "scheduler checks every few minutes, so a time is honoured to within "
                   "that.")
+    frequency = models.CharField(
+        max_length=20, choices=Frequency.choices, default=Frequency.ONCE,
+        help_text="Once, or on repeat between the start and end dates below. A "
+                  "repeating campaign emails its whole audience again on every run.")
+    starts_on = models.DateField(
+        null=True, blank=True,
+        help_text="First day a repeating campaign may run. Blank means it may run "
+                  "from now.")
+    ends_on = models.DateField(
+        null=True, blank=True,
+        help_text="Last day it may run. Blank means it repeats until you cancel it.")
+    send_hour = models.PositiveSmallIntegerField(
+        default=9,
+        help_text="Hour of the day a repeating campaign goes out, 0-23, in the "
+                  "site's time zone.")
+    last_run_on = models.DateField(
+        null=True, blank=True, editable=False,
+        help_text="Set after each run so one day never sends twice.")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -178,6 +205,74 @@ class Campaign(models.Model):
         return report
 
 
+    # --- repeating ------------------------------------------------------
+
+    def repeats(self) -> bool:
+        return self.frequency != self.Frequency.ONCE
+
+    def due_for_a_run(self, now=None) -> tuple[bool, str]:
+        """Should a repeating campaign go out again? (yes/no, why).
+
+        The day rules live here rather than in cron syntax, for the same
+        reason the newsletter's do: an editor can see and change them.
+        """
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        if not self.repeats():
+            return False, "Not a repeating campaign."
+        if self.status in (self.Status.CANCELLED, self.Status.DRAFT):
+            return False, f"{self.get_status_display()}."
+
+        now = timezone.localtime(now or timezone.now())
+        today = now.date()
+        if self.starts_on and today < self.starts_on:
+            return False, f"Starts on {self.starts_on}."
+        if self.ends_on and today > self.ends_on:
+            return False, f"Finished on {self.ends_on}."
+        if self.last_run_on == today:
+            return False, "Already run today."
+        if now.hour < self.send_hour:
+            return False, f"Due today, but not until {self.send_hour:02d}:00."
+
+        anchor = self.last_run_on or self.starts_on
+        if self.frequency == self.Frequency.DAILY:
+            return True, "Daily."
+        if self.frequency == self.Frequency.WEEKLY:
+            if anchor and (today - anchor) < timedelta(days=7):
+                return False, f"Last run {anchor}; not a week yet."
+            return True, "Weekly."
+        if self.frequency == self.Frequency.FORTNIGHTLY:
+            if anchor and (today - anchor) < timedelta(days=13):
+                return False, f"Last run {anchor}; not two weeks yet."
+            return True, "Fortnightly."
+        if self.frequency == self.Frequency.MONTHLY:
+            if anchor and (today - anchor) < timedelta(days=27):
+                return False, f"Last run {anchor}; not a month yet."
+            return True, "Monthly."
+        return False, "Unrecognised frequency."
+
+    def begin_repeat_run(self):
+        """Put a finished repeating campaign back in the queue.
+
+        Every reader in the audience gets it again - that is what a
+        repeating campaign is - so the existing delivery rows are reset
+        rather than duplicated. The Results tab therefore shows the
+        current run, which is the one anybody asks about.
+        """
+        from django.utils import timezone
+
+        self.deliveries.update(status=CampaignDelivery.Status.PENDING,
+                               error="", sent_at=None, provider_message_id="")
+        self.status = self.Status.SCHEDULED
+        self.last_run_on = timezone.localdate()
+        self.started_at = None
+        self.finished_at = None
+        self.save(update_fields=["status", "last_run_on", "started_at",
+                                 "finished_at", "updated_at"])
+
+
 class CampaignDelivery(models.Model):
     """One reader's copy of one campaign: what they were sent, and whether."""
 
@@ -191,6 +286,9 @@ class CampaignDelivery(models.Model):
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="deliveries")
     reader = models.ForeignKey(Reader, on_delete=models.CASCADE,
                                related_name="campaign_deliveries")
+    # Identifies this reader's copy in a link, so a click on the button can
+    # be attributed without putting an email address in a URL.
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     personalised = models.BooleanField(
         default=False, help_text="Whether AI wrote this reader's version.")

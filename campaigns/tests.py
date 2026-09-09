@@ -176,7 +176,29 @@ class SendCampaignTests(TestCase):
         _, subject, text, html = deliver.call_args_list[0].args
         self.assertIn(str(self.ada.unsubscribe_token), html)
         self.assertIn(str(self.ada.unsubscribe_token), text)
-        self.assertIn("https://example.com/frieze", html)
+
+    @patch("campaigns.sending.deliver", return_value="msg-1")
+    def test_the_button_goes_through_us_and_lands_on_the_real_link(self, deliver):
+        """The click is recorded, and the reader still gets where they were
+        going. The destination comes from the campaign, never the URL, so
+        this can't be turned into an open redirect."""
+        from recommendations.models import LinkClick
+
+        c = campaign(link_url="https://example.com/frieze")
+        send_campaign(c, budget_seconds=30)
+        delivery = c.deliveries.get(reader=self.ada)
+        _, subject, text, html = deliver.call_args_list[0].args
+        self.assertNotIn("https://example.com/frieze", html)
+        self.assertIn(str(delivery.token), html)
+
+        response = self.client.get(
+            reverse("recommendations:campaign-click", args=[delivery.token]))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "https://example.com/frieze")
+        click = LinkClick.objects.get()
+        self.assertEqual(click.reader, self.ada)
+        self.assertEqual(click.campaign, c)
+        self.assertEqual(click.section, LinkClick.Section.CAMPAIGN)
 
 
 class ScheduledRunTests(TestCase):
