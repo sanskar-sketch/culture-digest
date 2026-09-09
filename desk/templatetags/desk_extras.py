@@ -18,7 +18,11 @@ def qs_with(context, **overrides):
         else:
             params[key] = value
     encoded = params.urlencode()
-    return f"?{encoded}" if encoded else ""
+    # With nothing left, the link must still go somewhere. An empty href
+    # means "this page as it is" - query string included - so the "All"
+    # chip on a page with one filter reloaded that same filter and looked
+    # dead. The bare path is the page with nothing applied.
+    return f"?{encoded}" if encoded else request.path
 
 
 @register.simple_tag(takes_context=True)

@@ -769,3 +769,31 @@ class StickyHeaderTests(LoggedInTestCase):
         top = re.split(r"</div>\s*(?=<p|<nav)", after, 1)[0]
         self.assertNotIn("d-page-blurb", top)
         self.assertIn('class="d-page-blurb"', html)
+
+
+class FilterClearTests(LoggedInTestCase):
+    """The "All" chip has to take a filter off, not reload it."""
+
+    def test_all_on_the_only_active_filter_links_to_the_bare_page(self):
+        opportunity(status="draft")
+        html = self.client.get(reverse("desk:listings_list") + "?status=draft").content.decode()
+        status_group = html.split('data-title="Status"', 1)[1].split("</details>", 1)[0]
+        all_link = status_group.split('is-default"', 1)[1].split("</li>", 1)[0]
+        self.assertIn(f'href="{reverse("desk:listings_list")}"', all_link)
+        self.assertNotIn('href=""', all_link)
+
+    def test_all_keeps_the_other_filters(self):
+        opportunity(status="draft")
+        html = self.client.get(reverse("desk:listings_list")
+                               + "?status=draft&category=music").content.decode()
+        status_group = html.split('data-title="Status"', 1)[1].split("</details>", 1)[0]
+        all_link = status_group.split('is-default"', 1)[1].split("</li>", 1)[0]
+        self.assertIn('href="?category=music"', all_link)
+
+    def test_clicking_all_really_shows_everything(self):
+        opportunity(title="A draft", status="draft")
+        opportunity(title="A live one", status="published")
+        filtered = self.client.get(reverse("desk:listings_list") + "?status=draft")
+        self.assertEqual(filtered.context["result_count"], 1)
+        cleared = self.client.get(reverse("desk:listings_list"))
+        self.assertEqual(cleared.context["result_count"], 2)
