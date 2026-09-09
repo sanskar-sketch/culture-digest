@@ -1,6 +1,7 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
-from .views import access, auth, campaigns, catalogue, dashboard, deletion, insights, interests
+from .views import access, auth, campaigns, dashboard, deletion, insights, interests
 from .views import listings, newsletters, outreach, readers, saved_templates
 from .views import settings as settings_views
 from .views import templates as template_views
@@ -15,11 +16,16 @@ urlpatterns = [
 
     path("", dashboard.dashboard_view, name="dashboard"),
 
-    path("listings/", catalogue.catalogue, name="listings_list"),
-    path("listings/add/", listings.listing_form, name="listings_add"),
-    path("listings/<int:pk>/", listings.listing_form, name="listings_change"),
+    # Events. The URL *names* keep their old "listings" prefix so nothing
+    # that links to them has to change; only the path and the wording do.
+    path("events/", listings.listing_list, name="listings_list"),
+    path("events/add/", listings.listing_form, name="listings_add"),
+    path("events/<int:pk>/", listings.listing_form, name="listings_change"),
+    path("events/<int:pk>/who/", listings.listing_suggest_audience, name="listings_who"),
+    path("events/<int:pk>/campaign/", campaigns.campaign_from_event, name="campaigns_from_event"),
+    path("listings/", RedirectView.as_view(pattern_name="desk:listings_list", query_string=True)),
 
-    path("interests/", catalogue.interests_redirect, name="interests_list"),
+    path("interests/", interests.interest_list, name="interests_list"),
     path("interests/add/", interests.interest_form, name="interests_add"),
     path("interests/<int:pk>/", interests.interest_form, name="interests_change"),
 

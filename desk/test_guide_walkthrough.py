@@ -71,13 +71,13 @@ class GuideWalkthrough(TestCase):
         response = follow(self.client, reverse("desk:interests_add"),
                           {"name": "Late-night jazz", "slug": "", "category": "music"})
         self.assertIn("Saved “Late-night jazz”.", messages_in(response))
-        self.assertContains(self.client.get(reverse("desk:listings_list")), "Late-night jazz")
+        self.assertContains(self.client.get(reverse("desk:interests_list")), "Late-night jazz")
         # The guide says leaving the slug blank fills it in for you.
         self.assertEqual(Tag.objects.get(name="Late-night jazz").slug, "late-night-jazz")
 
     def test_04_an_unused_interest_is_flagged_on_its_row(self):
         Tag.objects.create(name="Late-night jazz", slug="late-night-jazz", category="music")
-        self.assertContains(self.client.get(reverse("desk:listings_list")), "nothing to send yet")
+        self.assertContains(self.client.get(reverse("desk:interests_list")), "none yet")
 
     # -- Step 3: a listing ------------------------------------------------
 
@@ -126,7 +126,7 @@ class GuideWalkthrough(TestCase):
         listing = Opportunity.objects.get(title="Trio residency")
         response = follow(self.client, reverse("desk:listings_list"),
                           {"action": "publish", "selected": [listing.pk]})
-        self.assertIn("1 listing marked published.", messages_in(response))
+        self.assertIn("1 event marked published.", messages_in(response))
         self.assertContains(response, "Live")
 
     def test_08_the_overview_count_moves_as_soon_as_you_publish(self):

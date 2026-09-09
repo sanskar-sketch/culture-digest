@@ -70,6 +70,11 @@ def run_due(budget_seconds: float, dry_run: bool = False) -> dict:
     budget = TimeBudget(budget_seconds)
     report = {"started_at": timezone.now(), "campaigns": [], "newsletter": None, "lines": []}
 
+    from opportunities.models import Opportunity
+
+    ended = Opportunity.archive_ended()
+    if ended:
+        report["lines"].append(f"Events: archived {ended} that had ended.")
     report["lines"].extend(start_repeats())
     if not dry_run:
         from . import templates_runner

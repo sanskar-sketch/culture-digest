@@ -76,6 +76,13 @@ class Campaign(models.Model):
         help_text="Text on the button under the email, if there is a link.")
     link_url = models.URLField(blank=True, help_text="Optional button under the text.")
 
+    # The event this is about, if it is about one. Several campaigns can
+    # point at the same event - a different angle for a different crowd.
+    event = models.ForeignKey(
+        "opportunities.Opportunity", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="campaigns",
+        help_text="The event this campaign is about, if any. Its facts are the brief.")
+
     # --- Audience -------------------------------------------------------
     audience_categories = models.JSONField(
         default=list, blank=True,

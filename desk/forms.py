@@ -153,6 +153,8 @@ class CampaignRepeatMixin:
 
 
 class CampaignForm(CampaignRepeatMixin, FriendlyChoices, forms.ModelForm):
+    EMPTY_LABELS = {"event": "Not about a particular event"}
+
     audience_categories = forms.MultipleChoiceField(
         choices=Category.choices, required=False, widget=forms.CheckboxSelectMultiple,
         label="Categories they follow",
@@ -162,7 +164,7 @@ class CampaignForm(CampaignRepeatMixin, FriendlyChoices, forms.ModelForm):
     class Meta:
         model = Campaign
         fields = (
-            "name", "subject", "brief", "body", "personalise", "link_label", "link_url",
+            "name", "event", "subject", "brief", "body", "personalise", "link_label", "link_url",
             "audience_categories", "audience_tags", "audience_location",
             "send_at", "frequency", "starts_on", "ends_on", "send_hour",
         )
@@ -179,6 +181,10 @@ class CampaignForm(CampaignRepeatMixin, FriendlyChoices, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["audience_tags"].queryset = Tag.objects.all()
         self.fields["send_at"].input_formats = ["%Y-%m-%dT%H:%M"]
+        # Only events that could still be gone to. An archived one is over.
+        self.fields["event"].queryset = Opportunity.objects.exclude(
+            status=Opportunity.Status.ARCHIVED).order_by("-created_at")
+        self.fields["event"].label = "About which event"
         if self.instance.pk:
             self.fields["audience_categories"].initial = self.instance.audience_categories
 

@@ -165,6 +165,21 @@ class Opportunity(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    @classmethod
+    def archive_ended(cls, today=None) -> int:
+        """Archive every published event whose end date has passed.
+
+        An event is kept only until it ends. Archiving rather than deleting
+        keeps who was sent it and what they said, which the matching learns
+        from; it just can never be recommended again. Run by the scheduler.
+        """
+        from django.utils import timezone
+
+        today = today or timezone.localdate()
+        return cls.objects.filter(
+            status=cls.Status.PUBLISHED, end_date__lt=today,
+        ).update(status=cls.Status.ARCHIVED)
         verbose_name = "listing"
         verbose_name_plural = "listings"
 

@@ -95,7 +95,7 @@ class PageRenderTests(LoggedInTestCase):
     def test_every_list_and_add_page_renders_empty(self):
         urls = [
             reverse("desk:dashboard"), reverse("desk:listings_list"), reverse("desk:listings_add"),
-            reverse("desk:interests_add"),
+            reverse("desk:interests_list"), reverse("desk:interests_add"),
             reverse("desk:readers_list"), reverse("desk:campaigns_list"), reverse("desk:campaigns_add"),
             reverse("desk:issues_list"), reverse("desk:recommendations_list"),
             reverse("desk:templates_list"), reverse("desk:templates_add"), reverse("desk:siteconfig"),
@@ -103,9 +103,6 @@ class PageRenderTests(LoggedInTestCase):
         for url in urls:
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200, url)
-        # Interests are a band on the Listings page now; the old URL forwards.
-        self.assertRedirects(self.client.get(reverse("desk:interests_list")),
-                             reverse("desk:listings_list"))
 
     def test_change_pages_render_with_data(self):
         opp = opportunity()
@@ -589,9 +586,9 @@ class SidebarAddLinkTests(LoggedInTestCase):
 
     def test_the_add_link_names_one_thing_not_many(self):
         html = self.client.get(reverse("desk:dashboard")).content.decode()
-        self.assertIn('data-tip="Add listing"', html)
-        self.assertIn('data-tip="Add template"', html)
-        self.assertNotIn('data-tip="Add listings"', html)
+        self.assertIn('data-tip="Add event"', html)
+        self.assertIn('data-tip="Add interest"', html)
+        self.assertNotIn('data-tip="Add events"', html)
 
 
 class DeleteTests(LoggedInTestCase):
@@ -663,7 +660,7 @@ class DeleteTests(LoggedInTestCase):
         opp = opportunity()
         for list_url, kind, pk in [
             (reverse("desk:listings_list"), "listings", opp.pk),
-            (reverse("desk:listings_list"), "interests", tag.pk),
+            (reverse("desk:interests_list"), "interests", tag.pk),
             (reverse("desk:readers_list"), "readers", reader.pk),
             (reverse("desk:campaigns_list"), "campaigns", campaign.pk),
             (reverse("desk:templates_list"), "templates", template.pk),
@@ -687,7 +684,7 @@ class BulkDeleteTests(LoggedInTestCase):
         a, b = opportunity(title="One"), opportunity(title="Two")
         response = self.client.post(reverse("desk:delete_selected", args=["listings"]),
                                     {"selected": [a.pk, b.pk]})
-        self.assertContains(response, "2 listings")
+        self.assertContains(response, "2 events")
         self.assertContains(response, "One")
         self.assertContains(response, "Two")
         self.assertEqual(Opportunity.objects.count(), 2)
@@ -746,7 +743,7 @@ class StickyHeaderTests(LoggedInTestCase):
         top = html.split('class="d-page-top"', 1)[1].split("</div>\n<p", 1)[0]
         self.assertIn("<h1>", top)
         self.assertIn("d-page-actions", top)
-        self.assertIn("Add listing", top)
+        self.assertIn("Add event", top)
 
     def test_the_bulk_actions_pin_under_the_title(self):
         """Tick a row at the bottom of a long list and the button you need

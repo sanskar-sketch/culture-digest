@@ -1,0 +1,60 @@
+{% extends "desk/base.html" %}
+{% load desk_extras %}
+{% block content %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="load_sample_catalogue" value="1" class="d-btn">Load sample events</button></form>
+    <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="action" value="suggest_for_readers" class="d-btn" title="AI searches the web for events matching the interests your {{ readers_total }} readers have most and you have fewest events for">Suggest events for my readers</button></form>
+  <a href="{{ add_url }}" class="d-btn primary">Add event</a>
+  </div>
+</div>
+<p class="d-page-blurb">{{ page_blurb }}</p>
+
+{% include "desk/_toolbar.html" %}
+
+<form method="post" data-bulk-form>
+  {% csrf_token %}
+  {% include "desk/_bulk_bar.html" %}
+  <div class="d-table-wrap">
+    <div class="d-table-scroll">
+    <table class="d-table">
+      <thead><tr>
+        <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
+        <th>Title</th><th>Category</th><th>Status</th><th>Price</th><th>Area</th><th>Taste</th><th>Interests</th><th>Recommended</th><th>End date</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th>
+      </tr></thead>
+      <tbody>
+        {% for opp in page_obj %}
+        <tr>
+          <td><input type="checkbox" name="selected" value="{{ opp.pk }}"></td>
+          <td class="wrap"><a class="d-row-link" href="{% url 'desk:listings_change' opp.pk %}">{{ opp.title }}</a>{% if opp.found_by_ai %}<span class="d-pill warn" style="margin-left:6px;">AI · check</span>{% endif %}</td>
+          <td>{{ opp.get_category_display }}</td>
+          <td>
+            {% if opp.state_key == "live" %}<span class="d-pill good">Live</span>
+            {% elif opp.state_key == "draft" %}<span class="d-pill neutral">Draft</span>
+            {% elif opp.state_key == "ended" %}<span class="d-pill warn">Ended</span>
+            {% else %}<span class="d-pill bad">Archived</span>{% endif %}
+          </td>
+          <td>{{ opp.get_price_tier_display }}</td>
+          <td>{{ opp.location_area|default:"—" }}</td>
+          <td style="font-variant-numeric:tabular-nums">{{ opp.mainstream_to_unusual }}·{{ opp.intimate_to_large_scale }}</td>
+          <td class="wrap">
+            {% with tags=opp.tags.all %}
+              {% if tags %}{% for t in tags|slice:":3" %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if tags|length > 3 %} +{{ tags|length|add:"-3" }}{% endif %}
+              {% else %}<span style="color:var(--d-bad)">untagged</span>{% endif %}
+            {% endwith %}
+          </td>
+          <td>{{ opp.recs_count|default:"—" }}</td>
+          <td>{{ opp.end_date|default:"—" }}</td>
+          <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'listings' opp.pk %}" aria-label="Delete {{ opp.title }}">Delete</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="11" class="d-empty">No events match. <a href="{{ request.path }}">Clear filters</a>, <a href="{{ add_url }}">add one</a>, or press <em>Suggest events for my readers</em>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</form>
+{% include "desk/_pagination.html" %}
+{% endblock %}

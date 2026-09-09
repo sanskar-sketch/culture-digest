@@ -43,12 +43,12 @@ class DeskCase(TestCase):
 class SidebarTests(DeskCase):
     """Five entries, in the order the user asked for, and nothing else."""
 
-    def test_the_sidebar_has_exactly_the_five_sections(self):
+    def test_the_sidebar_has_exactly_the_six_sections(self):
         html = self.client.get(reverse("desk:dashboard")).content.decode()
         nav = html.split('<div class="d-nav">', 1)[1].split('<div class="d-side-foot">', 1)[0]
-        for name in ("Listings", "Users", "Templates", "Campaigns", "Insights"):
+        for name in ("Events", "Interests", "Users", "Templates", "Campaigns", "Insights"):
             self.assertIn(f">{name}</a>", nav)
-        for gone in ("Interests", "Send by interest", "Newsletter issues",
+        for gone in ("Listings", "Send by interest", "Newsletter issues",
                      "Recommendations", "Email templates", "Site configuration", "Groups"):
             self.assertNotIn(f">{gone}</a>", nav)
 
@@ -66,10 +66,10 @@ class SidebarTests(DeskCase):
         self.assertIn(">Settings</a>", html)
         self.assertNotIn(">Editor accounts</a>", html)
 
-    def test_interests_live_on_the_listings_page(self):
-        page = self.client.get(reverse("desk:listings_list"))
-        self.assertContains(page, reverse("desk:interests_add"))
-        self.assertEqual(self.client.get(reverse("desk:interests_list")).status_code, 302)
+    def test_the_old_listings_path_forwards_to_events(self):
+        response = self.client.get("/desk/listings/?status=draft")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/desk/events/?status=draft")
 
     def test_the_health_panel_moved_to_settings(self):
         overview = self.client.get(reverse("desk:dashboard"))

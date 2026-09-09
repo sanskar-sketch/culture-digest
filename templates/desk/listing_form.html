@@ -4,8 +4,10 @@
   <h1>{{ page_title }}</h1>
   <div class="d-page-actions">
     {% if instance %}
+    <form method="post" action="{% url 'desk:listings_who' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn">Who would like this?</button></form>
+    <form method="post" action="{% url 'desk:campaigns_from_event' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="d-btn primary">Campaign for this event</button></form>
     <a class="d-btn" href="{% url 'desk:listings_add' %}">Add another</a>
-    {% if instance %}<a class="d-btn danger" href="{% url 'desk:delete' 'listings' instance.pk %}">Delete</a>{% endif %}
+    <a class="d-btn danger" href="{% url 'desk:delete' 'listings' instance.pk %}">Delete</a>
     {% endif %}
   </div>
 </div>
@@ -61,6 +63,33 @@
       <li><a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.title|default:source.url }}</a></li>
       {% empty %}<li style="color:var(--d-bad);">No sources recorded — treat everything here as unverified.</li>{% endfor %}
     </ul>
+  </div>
+  {% endif %}
+
+  {% if instance %}
+  <div class="d-fieldset">
+    <h2>Who it reaches</h2>
+    {% if suits.tags %}
+    <p style="margin:0 0 6px;font-size:14px;"><strong>{{ suits.count }}</strong> reader{{ suits.count|pluralize }} picked or were inferred to like {% for t in suits.tags %}<span class="d-pill accent">{{ t.name }}</span>{% if not forloop.last %} {% endif %}{% endfor %}.</p>
+    <p style="margin:0;font-size:13px;"><a href="{{ suits.url }}">See them on Users</a> · or press <strong>Campaign for this event</strong> above and AI drafts an email to them.</p>
+    {% else %}
+    <p style="margin:0;font-size:14px;color:var(--d-muted);">No interests on this event yet, so no reader can be matched to it. Tick some above, or press <strong>Who would like this?</strong> and AI will tag it.</p>
+    {% endif %}
+  </div>
+
+  <div class="d-fieldset">
+    <h2>Campaigns about this event</h2>
+    {% for c in campaigns %}
+    <p style="margin:0 0 6px;font-size:14px;"><a class="d-row-link" href="{% url 'desk:campaigns_change' c.pk %}">{{ c.name }}</a>
+      <span style="color:var(--d-muted);font-size:12.5px;"> · {{ c.get_status_display }} · {{ c.audience_description }}</span></p>
+    {% empty %}
+    <p style="margin:0;font-size:14px;color:var(--d-muted);">None yet. Several can point at one event - a different angle for a different crowd.</p>
+    {% endfor %}
+    <form method="post" action="{% url 'desk:campaigns_from_event' instance.pk %}" style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+      {% csrf_token %}
+      <input type="text" name="angle" placeholder="An angle, e.g. 'for people who like small rooms' (optional)" style="flex:1;min-height:34px;font-size:13px;padding:4px 10px;" aria-label="Angle for the campaign">
+      <button type="submit" class="d-btn small">Draft a campaign</button>
+    </form>
   </div>
   {% endif %}
 

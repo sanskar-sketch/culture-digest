@@ -398,3 +398,66 @@ def campaign_cancel(request, pk):
     campaign.save(update_fields=["status", "updated_at"])
     messages.success(request, f"{campaign}: cancelled. Anyone not yet emailed won't be.")
     return redirect("desk:campaigns_change", pk=pk)
+
+
+@staff_required
+def campaign_from_event(request, pk):
+    """A campaign about one event, drafted from the event's own record.
+
+    The event is the brief: title, description, where, when, price, link.
+    AI writes the email and picks the audience from that and nothing else,
+    so the facts in the email are the facts on the event. Several campaigns
+    can point at one event - a different angle for a different crowd.
+    """
+    from opportunities.models import Category, Opportunity, Tag
+    from recommendations import ai
+
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    event = get_object_or_404(Opportunity, pk=pk)
+    angle = (request.POST.get("angle") or "").strip()
+
+    facts = "\n".join(filter(None, [
+        f"Event: {event.title}",
+        f"What: {event.description}",
+        f"Editor's note: {event.editorial_note}" if event.editorial_note else "",
+        f"Where: {event.location_name or ''} {event.location_area or ''}".strip(),
+        f"When: {event.start_date or 'ongoing'} to {event.end_date or 'no fixed end'}",
+        f"Price: {event.price_display or event.get_price_tier_display()}",
+        f"Booking: {event.booking_url}",
+        f"Interests it suits: {', '.join(t.name for t in event.tags.all()) or 'none set'}",
+        f"Angle for this campaign: {angle}" if angle else "",
+    ]))
+
+    draft = ai.draft_campaign(facts) if ai.is_enabled("write_campaigns") else None
+    allowed = {v for v, _ in Category.choices}
+    if draft:
+        campaign = Campaign.objects.create(
+            event=event,
+            name=(draft.get("name") or event.title)[:120],
+            subject=(draft.get("subject") or event.title)[:200],
+            brief=draft.get("brief") or facts, body=draft.get("body") or "",
+            link_label=(draft.get("link_label") or "")[:60] or "Book / learn more",
+            link_url=event.booking_url,
+            audience_categories=[c for c in draft.get("categories") or [] if c in allowed],
+            audience_location=(draft.get("location") or event.location_area or "")[:120],
+            created_by=request.user)
+        tags = list(Tag.objects.filter(slug__in=draft.get("tags") or [])) or list(event.tags.all())
+        campaign.audience_tags.set(tags)
+        reach = campaign.audience().count()
+        messages.success(
+            request,
+            f"Drafted “{campaign.name}” about {event.title} for {reach} "
+            f"reader{'' if reach == 1 else 's'}. Read it, change anything, then Preview "
+            "and Send. Nothing has gone out.")
+    else:
+        campaign = Campaign.objects.create(
+            event=event, name=event.title[:120], subject=event.title[:200], brief=facts,
+            link_url=event.booking_url, audience_location=event.location_area or "",
+            audience_categories=[event.category] if event.category in allowed else [],
+            created_by=request.user)
+        campaign.audience_tags.set(event.tags.all())
+        messages.warning(request, "AI didn't draft this one - the event's facts are saved as "
+                                  "the brief and its interests as the audience. Fill in the "
+                                  "body, or try again once AI is working (Settings → Health).")
+    return redirect("desk:campaigns_change", pk=campaign.pk)

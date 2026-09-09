@@ -165,3 +165,35 @@ def start(interest: Tag, area: str = "", count: int = 5) -> bool:
 def is_running(interest: Tag) -> bool:
     with _lock:
         return interest.pk in _running
+
+
+def for_readers(readers=None, limit: int = 5, count: int = 4) -> list[str]:
+    """Research the interests these readers have most and you have least for.
+
+    With no readers given, every active reader counts. The area searched is
+    where most of them are. Returns the interest names research started for.
+    """
+    from collections import Counter
+
+    from django.db.models import Count, Q
+
+    from readers.models import Reader
+
+    readers = readers if readers is not None else Reader.objects.filter(is_active=True)
+    reader_ids = list(readers.values_list("pk", flat=True))
+    if not reader_ids:
+        return []
+
+    wanted = (Tag.objects
+              .annotate(readers=Count("interested_readers", distinct=True,
+                                      filter=Q(interested_readers__in=reader_ids)),
+                        live=Count("opportunities", distinct=True,
+                                   filter=Q(opportunities__status=Opportunity.Status.PUBLISHED)))
+              .filter(readers__gt=0)
+              .order_by("live", "-readers", "name")[:limit])
+
+    areas = Counter(a for a in Reader.objects.filter(pk__in=reader_ids)
+                    .values_list("location", flat=True) if a)
+    area = areas.most_common(1)[0][0] if areas else ""
+
+    return [tag.name for tag in wanted if start(tag, area=area, count=count)]

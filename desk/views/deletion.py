@@ -31,13 +31,13 @@ from siteconfig.emails import EmailTemplate
 # kind -> how to find it, what to call it, and where to go afterwards.
 DELETABLE = {
     "listings": {
-        "model": Opportunity, "label": "listing", "list_url": "desk:listings_list",
+        "model": Opportunity, "label": "event", "list_url": "desk:listings_list",
         "name": lambda o: o.title,
-        "instead": "Archiving keeps everything a listing was part of, but takes it "
+        "instead": "Archiving keeps everything an event was part of, but takes it "
                    "out of matching so it is never recommended again.",
     },
     "interests": {
-        "model": Tag, "label": "interest", "list_url": "desk:listings_list",
+        "model": Tag, "label": "interest", "list_url": "desk:interests_list",
         "name": lambda o: o.name,
         "instead": None,
     },
@@ -80,7 +80,7 @@ DELETABLE = {
 
 # Said in the editor's words, not the database's.
 MODEL_WORDING = {
-    "opportunity": ("listing", "listings"),
+    "opportunity": ("event", "events"),
     "tag": ("interest", "interests"),
     "reader": ("reader", "readers"),
     "newsletterissue": ("newsletter issue", "newsletter issues"),

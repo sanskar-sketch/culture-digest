@@ -15,6 +15,9 @@ from recommendations.sending import send_issue_for_reader
 from readers.models import Reader
 
 BULK_ACTIONS = (
+    {"value": "suggest_events", "label": "Suggest events for these",
+     "title": "AI searches the web for events matching the interests these users have "
+              "most and you have fewest events for, in the area most of them are in"},
     {"value": "save_template", "label": "Save as template",
      "title": "Keep this selection as a template you can run again or put on a "
               "schedule. Nothing is sent"},
@@ -104,6 +107,24 @@ def reader_list(request):
         selected = list(Reader.objects.filter(pk__in=ids))
         if not ids:
             messages.warning(request, "Nothing selected.")
+        elif action == "suggest_events":
+            from opportunities import research
+            from recommendations import ai
+
+            if not ai.is_enabled("classify_opportunities"):
+                messages.warning(request, "AI is not configured, or event research is "
+                                          "switched off in Settings → AI assistance.")
+            else:
+                started = research.for_readers(Reader.objects.filter(pk__in=ids))
+                if started:
+                    messages.success(
+                        request,
+                        f"Searching for events for {', '.join(started)}. This takes a "
+                        "minute or two - they arrive under Events as drafts, with the "
+                        "pages they came from. Nothing is published until you say so.")
+                else:
+                    messages.info(request, "These users' interests all have live events "
+                                           "already, or research is already running.")
         elif action == "save_template":
             template = SavedTemplate.objects.create(
                 name=f"{len(selected)} user{'' if len(selected) == 1 else 's'} - "

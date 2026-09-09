@@ -30,6 +30,7 @@
   <div class="d-fieldset" data-tab-panel="The email">
     <p class="d-fieldset-desc">Write a brief (the facts, why it matters, what to do) and let AI write each reader's version - or write the body yourself. Use Preview above to read it as a reader would.</p>
     {% include "desk/_field.html" with field=form.name %}
+    {% include "desk/_field.html" with field=form.event %}
     {% include "desk/_field.html" with field=form.subject %}
     {% include "desk/_field.html" with field=form.brief %}
     {% include "desk/_field.html" with field=form.body %}

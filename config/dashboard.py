@@ -17,9 +17,12 @@ SECTIONS = [
         "key": "catalogue",
         "title": "What you can send",
         "rows": [
-            {"key": "listings", "name": "Listings", "singular": "listing",
-             "blurb": "Everything the newsletter can recommend, and the interests "
-                      "readers ask for. A listing is invisible until you publish it."},
+            {"key": "listings", "name": "Events", "singular": "event",
+             "blurb": "Everything the newsletter can recommend. An event is invisible "
+                      "until you publish it, and archives itself once it has ended."},
+            {"key": "interests", "name": "Interests", "singular": "interest",
+             "blurb": "What readers pick at signup and what you tag events with. Where "
+                      "the two overlap is how an event finds its reader."},
         ],
     },
     {
