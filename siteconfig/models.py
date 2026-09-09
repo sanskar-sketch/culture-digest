@@ -57,9 +57,11 @@ class SiteConfig(models.Model):
                   "small number with high confidence, not volume.",
     )
     min_recommendations = models.PositiveSmallIntegerField(
-        default=2, validators=[MinValueValidator(1)],
+        default=1, validators=[MinValueValidator(1)],
         help_text="Below this many strong matches, a reader is skipped entirely "
-                  "rather than sent a padded-out issue.",
+                  "rather than sent a padded-out issue. One means a single good "
+                  "match is worth sending - right while the catalogue is small; "
+                  "raise it once there is more to choose from.",
     )
     cooldown_days = models.PositiveSmallIntegerField(
         default=60,

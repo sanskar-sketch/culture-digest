@@ -21,8 +21,10 @@ from .models import NewsletterIssue, Recommendation
 logger = logging.getLogger(__name__)
 
 # Below this many strong matches, a reader is skipped rather than sent a
-# padded-out issue. Quality over volume is the whole premise.
-DEFAULT_MIN_RECOMMENDATIONS = 2
+# padded-out issue. Quality over volume is the whole premise - but one
+# genuinely good match is still quality, and while the catalogue is small
+# it is often all there is. The editable setting overrides this.
+DEFAULT_MIN_RECOMMENDATIONS = 1
 
 
 @dataclasses.dataclass

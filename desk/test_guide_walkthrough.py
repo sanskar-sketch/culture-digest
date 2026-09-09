@@ -200,6 +200,12 @@ class GuideWalkthrough(TestCase):
         self._published_listing("Only one")
         reader = Reader.objects.create(email="ada@example.com", location="London",
                                        interest_categories=["music"])
+        # One match is enough out of the box; only a raised minimum skips.
+        response = follow(self.client, reverse("desk:readers_list"),
+                          {"action": "preview", "selected": [reader.pk]})
+        self.assertIn("Dry run: would send 1 recommendations",
+                      " ".join(messages_in(response)))
+        self._save_config(min_recommendations=2)
         response = follow(self.client, reverse("desk:readers_list"),
                           {"action": "preview", "selected": [reader.pk]})
         said = " ".join(messages_in(response))
