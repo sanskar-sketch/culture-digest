@@ -136,10 +136,7 @@ def configuration() -> list[dict]:
         {"name": "Link base URL", "ok": settings.SITE_BASE_URL.startswith("https://"),
          "detail": f"{settings.SITE_BASE_URL} - used for feedback and unsubscribe "
                    "links in emails"},
-        {"name": "AI assistance", "ok": bool(settings.OPENAI_API_KEY),
-         "detail": (f"Key set · model {settings.OPENAI_MODEL}"
-                    if settings.OPENAI_API_KEY
-                    else "No OPENAI_API_KEY - rationales use the template")},
+        _ai_row(),
         scheduler_row,
         {"name": "Debug mode", "ok": not settings.DEBUG,
          "detail": "Off (correct for production)" if not settings.DEBUG
@@ -149,6 +146,46 @@ def configuration() -> list[dict]:
                    if not settings.SECRET_KEY.startswith("django-insecure-")
                    else "Using the insecure development default"},
     ]
+
+
+def _ai_row() -> dict:
+    """Whether AI is actually working, not just whether a key is present.
+
+    A key can be set and every call still fail - wrong key, no credit, a
+    model name the account can't use. Those failures are swallowed by
+    design so a send never breaks, which used to mean the only symptom
+    was rationales quietly coming out of the template. The last call's
+    outcome is recorded, so this row can say which it is.
+    """
+    from django.conf import settings
+    from django.utils.timesince import timesince
+
+    from recommendations import ai
+    from siteconfig.models import SiteConfig
+
+    if not settings.OPENAI_API_KEY:
+        return {"name": "AI assistance", "ok": False,
+                "detail": "No OPENAI_API_KEY - rationales use the template"}
+
+    config = SiteConfig.load()
+    if not config.ai_enabled:
+        return {"name": "AI assistance", "ok": False,
+                "detail": "Key set, but AI is switched off in Site configuration → "
+                          "AI assistance. Everything uses the template."}
+
+    where = f"Key set · model {config.resolved_ai_model}"
+    last = ai.last_call()
+    if not last:
+        return {"name": "AI assistance", "ok": True,
+                "detail": f"{where} · no calls yet since the last restart. To check "
+                          "it works, run Suggest tags with AI on a listing."}
+    when = timesince(last["at"])
+    if last["ok"]:
+        return {"name": "AI assistance", "ok": True,
+                "detail": f"{where} · last call succeeded {when} ago"}
+    return {"name": "AI assistance", "ok": False,
+            "detail": f"{where} · last call FAILED {when} ago ({last['feature']}): "
+                      f"{last['detail']}"}
 
 
 def stats() -> dict:

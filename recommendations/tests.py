@@ -1,6 +1,7 @@
 from datetime import timedelta
 from unittest import mock
 
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -9,6 +10,7 @@ from readers.models import Reader
 from recommendations import ai, emailing, matching
 from recommendations.sending import send_issue_for_reader
 from recommendations.models import NewsletterIssue, Recommendation
+from siteconfig.models import SiteConfig
 
 
 def make_opportunity(**overrides):
@@ -829,3 +831,103 @@ class WildcardTests(TestCase):
 
         titles = [m.opportunity.title for m in matches]
         self.assertNotIn("Pottery class", titles)
+
+
+class AIHealthReportingTests(TestCase):
+    """"Is AI working?" has to be answerable without reading the logs.
+
+    Every AI failure is swallowed so a send can't break, which used to
+    mean a wrong key looked exactly like a working one: the dashboard
+    reported the key's presence, and rationales quietly came out of the
+    template. The last call's outcome is recorded so the row can tell
+    them apart.
+    """
+
+    def setUp(self):
+        cache.clear()
+
+    def _row(self):
+        from config import dashboard
+
+        return next(r for r in dashboard.configuration() if r["name"] == "AI assistance")
+
+    @override_settings(OPENAI_API_KEY="")
+    def test_no_key_says_so(self):
+        row = self._row()
+        self.assertFalse(row["ok"])
+        self.assertIn("No OPENAI_API_KEY", row["detail"])
+
+    @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
+    def test_a_key_with_no_calls_yet_says_how_to_check(self):
+        row = self._row()
+        self.assertTrue(row["ok"])
+        self.assertIn("no calls yet", row["detail"])
+        self.assertIn("Suggest tags with AI", row["detail"])
+
+    @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
+    def test_the_master_switch_being_off_is_reported_as_the_cause(self):
+        config = SiteConfig.load()
+        config.ai_enabled = False
+        config.save()
+        row = self._row()
+        self.assertFalse(row["ok"])
+        self.assertIn("switched off in Site configuration", row["detail"])
+
+    @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
+    def test_a_successful_call_is_reported_as_working(self):
+        with mock.patch.object(ai, "_client") as client:
+            client.return_value.chat.completions.create.return_value = fake_sdk_response(
+                '{"rationale": "Small room, short set.", "verdict": "GO."}')
+            ai.write_rationale(make_reader(), make_opportunity(), [])
+        row = self._row()
+        self.assertTrue(row["ok"])
+        self.assertIn("last call succeeded", row["detail"])
+
+    @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
+    def test_a_failing_call_turns_the_row_red_and_names_the_reason(self):
+        """The case that was previously invisible: key present, calls failing."""
+        with mock.patch.object(ai, "_client") as client:
+            client.return_value.chat.completions.create.side_effect = RuntimeError(
+                "Incorrect API key provided")
+            self.assertIsNone(ai.write_rationale(make_reader(), make_opportunity(), []))
+        row = self._row()
+        self.assertFalse(row["ok"])
+        self.assertIn("last call FAILED", row["detail"])
+        self.assertIn("Incorrect API key provided", row["detail"])
+        self.assertIn("write_rationales", row["detail"])
+
+    @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
+    def test_the_reported_reason_never_carries_a_key(self):
+        with mock.patch.object(ai, "_client") as client:
+            client.return_value.chat.completions.create.side_effect = RuntimeError(
+                "Incorrect API key provided: sk-proj-AbCdEf123456. Check your key.")
+            ai.write_rationale(make_reader(), make_opportunity(), [])
+        detail = self._row()["detail"]
+        self.assertNotIn("sk-proj-AbCdEf123456", detail)
+        self.assertIn("[redacted]", detail)
+
+    @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
+    def test_a_refusal_and_bad_json_are_reported_distinctly(self):
+        reader, opportunity = make_reader(), make_opportunity()
+        with mock.patch.object(ai, "_client") as client:
+            client.return_value.chat.completions.create.return_value = fake_sdk_response(
+                None, refusal="I can't help with that.")
+            ai.write_rationale(reader, opportunity, [])
+        self.assertIn("the model declined", self._row()["detail"])
+
+        with mock.patch.object(ai, "_client") as client:
+            client.return_value.chat.completions.create.return_value = fake_sdk_response(
+                "not json{")
+            ai.write_rationale(reader, opportunity, [])
+        self.assertIn("not valid JSON", self._row()["detail"])
+
+    @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
+    def test_a_failure_still_does_not_break_the_send(self):
+        """The reporting must not have cost the fallback."""
+        opportunity = make_opportunity(editorial_note="Editorial pitch.")
+        match = matching.Match(opportunity=opportunity, score=1.0, reasons=[])
+        with mock.patch.object(ai, "_client") as client:
+            client.return_value.chat.completions.create.side_effect = RuntimeError("down")
+            rationale, _ = matching.build_rationale(match, make_reader())
+        self.assertIn("Editorial pitch.", rationale)
+        self.assertFalse(self._row()["ok"])

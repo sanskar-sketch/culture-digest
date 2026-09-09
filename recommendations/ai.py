@@ -31,11 +31,49 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# What the last AI call did, so the dashboard can say whether this is
+# working rather than only whether a key is present. Kept beside the
+# scheduler's last-run record, in the cache: it describes this process,
+# it is worth nothing once the process is gone, and it must never be the
+# reason a page fails.
+LAST_CALL_KEY = "ai:last_call"
+LAST_CALL_TTL = 60 * 60 * 24
+
+_SECRETISH = re.compile(r"(sk-[A-Za-z0-9_\-]{6,}|Bearer\s+\S+)")
+
+
+def _safe(detail: str) -> str:
+    """An error message is going on a page. Never let a key ride along."""
+    return _SECRETISH.sub("[redacted]", str(detail))[:200]
+
+
+def _record(ok: bool, feature: str, detail: str = "") -> None:
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    try:
+        cache.set(LAST_CALL_KEY, {"at": timezone.now(), "ok": ok,
+                                  "feature": feature, "detail": _safe(detail)},
+                  LAST_CALL_TTL)
+    except Exception:  # a broken cache must not break a send
+        logger.debug("Could not record the AI call outcome", exc_info=True)
+
+
+def last_call() -> dict | None:
+    """The most recent AI outcome, or None if none since this process started."""
+    from django.core.cache import cache
+
+    try:
+        return cache.get(LAST_CALL_KEY)
+    except Exception:
+        return None
 
 # Reader free text is untrusted input - someone can type anything into the
 # onboarding form. It's fenced and labelled as data so that instructions
@@ -115,15 +153,26 @@ def _call(
         message = completion.choices[0].message
         if message.refusal:
             logger.warning("AI declined the request: %s", message.refusal)
+            _record(False, feature, f"the model declined: {message.refusal}")
             return None
         if not message.content:
-            logger.warning("AI returned empty content (finish_reason=%s)",
-                           completion.choices[0].finish_reason)
+            reason = completion.choices[0].finish_reason
+            logger.warning("AI returned empty content (finish_reason=%s)", reason)
+            _record(False, feature, f"empty response (finish_reason={reason})")
             return None
-        return json.loads(message.content)
-    except Exception:
-        # Never let an AI failure break a send, a save, or a page render.
+        try:
+            parsed = json.loads(message.content)
+        except ValueError as exc:
+            logger.warning("AI returned unparseable JSON: %s", exc)
+            _record(False, feature, "the response was not valid JSON")
+            return None
+        _record(True, feature)
+        return parsed
+    except Exception as exc:
+        # Never let an AI failure break a send, a save, or a page render -
+        # but do leave a trace, or "AI isn't working" has no answer.
         logger.exception("AI call failed; falling back to the deterministic path")
+        _record(False, feature, f"{type(exc).__name__}: {exc}")
         return None
 
 
