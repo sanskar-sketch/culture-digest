@@ -41,6 +41,24 @@ def _ids(raw) -> list[int]:
     return out
 
 
+SESSION_KEY = "send_edits"
+
+
+def _edits(request) -> dict:
+    """Per-user edits to AI's lines, kept until the send goes out.
+
+    Keyed by reader id, then by event id. In the session rather than the
+    database: they belong to this editor's sitting, and a send that never
+    happens should leave nothing behind.
+    """
+    return request.session.get(SESSION_KEY, {})
+
+
+def _save_edits(request, edits: dict) -> None:
+    request.session[SESSION_KEY] = edits
+    request.session.modified = True
+
+
 def _readers(request):
     raw = request.GET.get("r") or request.POST.get("r") or ""
     ids = _ids(raw)
@@ -89,6 +107,7 @@ def send(request):
         "preview": None,
         "preview_reader": None,
         "chosen": {r["event"].pk for r in rows if r["preticked"]},
+        "edited_readers": [r for r in readers if _edits(request).get(str(r.pk))],
     })
 
 
@@ -117,10 +136,40 @@ def _act(request, readers, raw):
         messages.warning(request, "Tick at least one event.")
         return redirect(back)
 
+    edits = _edits(request)
+    wanted = request.POST.get("preview_reader")
+    reader = next((r for r in readers if str(r.pk) == wanted), readers[0])
+
+    if action in ("save_edits", "discard_edits"):
+        if action == "discard_edits":
+            edits.pop(str(reader.pk), None)
+            messages.info(request, f"Back to AI's words for {reader.email}.")
+        else:
+            # A browser posts every box, edited or not. A line becomes an
+            # edit only when it differs from what was shown; once edited it
+            # stays an edit whatever is posted, because AI's original words
+            # are gone. An emptied box hands that one line back to AI.
+            mine = dict(edits.get(str(reader.pk), {}))
+            for key, value in request.POST.items():
+                if not (key.startswith("rationale_") and key[10:].isdigit()):
+                    continue
+                event_id = key[10:]
+                rationale = value.strip()
+                verdict = (request.POST.get(f"verdict_{event_id}") or "").strip()
+                original = (request.POST.get(f"original_{event_id}") or "").strip()
+                original_verdict = (request.POST.get(f"original_verdict_{event_id}") or "").strip()
+                if not rationale:
+                    mine.pop(event_id, None)
+                elif event_id in mine or rationale != original or verdict != original_verdict:
+                    mine[event_id] = {"rationale": rationale, "verdict": verdict}
+            edits[str(reader.pk)] = mine
+            messages.success(request, f"Edits kept for {reader.email} - this is what they'll get. "
+                                      "They're used when you press Write & send.")
+        _save_edits(request, edits)
+        action = "preview"
+
     if action == "preview":
-        wanted = request.POST.get("preview_reader")
-        reader = next((r for r in readers if str(r.pk) == wanted), readers[0])
-        preview = preview_issue_for_reader(reader, pool=pool)
+        preview = preview_issue_for_reader(reader, pool=pool, overrides=edits.get(str(reader.pk)))
         rows = suggestions(readers)
         return render(request, "desk/send.html", {
             "page_title": f"Send to {len(readers)} user{'' if len(readers) == 1 else 's'}",
@@ -128,22 +177,26 @@ def _act(request, readers, raw):
             "readers": readers, "raw": raw, "rows": rows,
             "per_send": SiteConfig.load().recommendations_per_send,
             "preview": preview, "preview_reader": reader, "chosen": set(pool),
+            "edited_readers": [r for r in readers if edits.get(str(r.pk))],
         })
 
     if action == "send":
         sent = skipped = failed = 0
         for reader in readers:
             try:
-                result = send_issue_for_reader(reader, pool=pool)
+                result = send_issue_for_reader(reader, pool=pool,
+                                               overrides=edits.get(str(reader.pk)))
             except Exception as exc:
                 failed += 1
                 messages.error(request, f"{reader.email}: send failed — {exc}")
                 continue
             if result.sent:
                 sent += 1
+                edits.pop(str(reader.pk), None)  # spent
             else:
                 skipped += 1
                 messages.warning(request, f"{reader.email}: {result.message}")
+        _save_edits(request, edits)
         if sent:
             messages.success(request, f"Sent to {sent} user{'' if sent == 1 else 's'}, each "
                                       "their own email from the events you chose.")

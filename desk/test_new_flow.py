@@ -144,6 +144,23 @@ class TypedInterestTests(TestCase):
         self.assertEqual(tag.origin, Tag.Origin.EDITOR)
         self.assertEqual(tag.times_requested, 1)
 
+    def test_signing_up_also_reads_their_taste_when_ai_is_on(self):
+        """The Interpret button is gone; signup does it."""
+        with mock.patch("recommendations.ai.propose_interests", return_value=[]), \
+             mock.patch("recommendations.ai.is_enabled", return_value=True), \
+             mock.patch("recommendations.ai.apply_interpretation", return_value=True) as interp:
+            result = reader_interests.run(self.reader)
+        interp.assert_called_once_with(self.reader)
+        self.assertTrue(result["interpreted"])
+
+    def test_signing_up_does_not_call_ai_when_it_is_off(self):
+        with mock.patch("recommendations.ai.propose_interests", return_value=[]), \
+             mock.patch("recommendations.ai.is_enabled", return_value=False), \
+             mock.patch("recommendations.ai.apply_interpretation") as interp:
+            result = reader_interests.run(self.reader)
+        interp.assert_not_called()
+        self.assertFalse(result["interpreted"])
+
     def test_a_made_up_category_is_refused(self):
         with mock.patch("recommendations.ai.propose_interests", return_value=[
                 {"name": "Silent discos", "category": "not-a-category"}]):

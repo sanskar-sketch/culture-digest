@@ -89,6 +89,7 @@ def send_issue_for_reader(
     dry_run: bool = False,
     min_recommendations: int | None = None,
     pool=None,
+    overrides=None,
 ) -> SendResult:
     """Match, build the issue, and send it.
 
@@ -122,7 +123,7 @@ def send_issue_for_reader(
     with transaction.atomic():
         issue = NewsletterIssue.objects.create(reader=reader)
         for match in matches:
-            rationale, verdict = matching.build_rationale(match, reader, budget=budget)
+            rationale, verdict = _line_for(match, reader, budget, overrides)
             Recommendation.objects.create(
                 issue=issue,
                 opportunity=match.opportunity,
@@ -156,8 +157,20 @@ def send_issue_for_reader(
     )
 
 
+def _line_for(match, reader, budget, overrides):
+    """The words under a pick: the editor's if they edited them, else AI's.
+
+    An edited line is final - AI is not asked again for that pick, so the
+    preview the editor approved is what goes out, and it costs nothing.
+    """
+    edit = (overrides or {}).get(str(match.opportunity.pk)) or {}
+    if (edit.get("rationale") or "").strip():
+        return edit["rationale"].strip(), (edit.get("verdict") or "").strip()
+    return matching.build_rationale(match, reader, budget=budget)
+
+
 def preview_issue_for_reader(reader, min_recommendations: int | None = None,
-                             pool=None) -> dict:
+                             pool=None, overrides=None) -> dict:
     """What this reader's next newsletter would look like, rendered.
 
     Same path as a real send - matching, rationales, the template - then
@@ -189,17 +202,20 @@ def preview_issue_for_reader(reader, min_recommendations: int | None = None,
         with transaction.atomic():
             issue = NewsletterIssue.objects.create(reader=reader)
             for match in matches:
-                rationale, verdict = matching.build_rationale(match, reader, budget=budget)
+                rationale, verdict = _line_for(match, reader, budget, overrides)
                 Recommendation.objects.create(
                     issue=issue, opportunity=match.opportunity, rationale=rationale,
                     verdict=verdict, score=match.score)
             subject, html, text = render_newsletter(issue)
+            edited = set((overrides or {}).keys())
             rendered = {
                 "ok": True, "match_count": len(matches), "subject": subject,
                 "html": html, "text": text,
                 "picks": [
                     {"title": rec.opportunity.title, "score": rec.score,
-                     "rationale": rec.rationale}
+                     "event_id": rec.opportunity_id, "rationale": rec.rationale,
+                     "verdict": rec.verdict,
+                     "edited": str(rec.opportunity_id) in edited}
                     for rec in issue.recommendations.select_related("opportunity")
                 ],
                 "message": f"Would send {len(matches)} recommendations.",

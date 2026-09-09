@@ -24,9 +24,6 @@ BULK_ACTIONS = (
      "title": "Skip choosing: each selected user gets their own picks from every "
               "published event, immediately",
      "confirm": "This really emails the selected users now. Send?"},
-    {"value": "interpret", "label": "Interpret taste with AI",
-     "title": "Re-read the selected users' own words and refresh what AI infers "
-              "about their taste"},
 )
 
 
@@ -117,18 +114,6 @@ def reader_list(request):
                     continue
                 level = messages.success if (result.sent or dry_run) else messages.warning
                 level(request, f"{reader.email}: {result.message}")
-        elif action == "interpret":
-            from recommendations import ai
-
-            if not ai.is_enabled():
-                messages.warning(request, "AI is not configured - set OPENAI_API_KEY to enable this.")
-            else:
-                done = sum(1 for reader in selected if ai.apply_interpretation(reader))
-                failed = len(selected) - done
-                messages.success(
-                    request,
-                    f"Interpreted {done} reader profile{'' if done == 1 else 's'}."
-                    + (f" {failed} could not be interpreted - see the logs." if failed else ""))
         return redirect(f"{request.path}?{request.GET.urlencode()}")
 
     page_obj = paginate(request, qs.order_by("-created_at"))
@@ -176,23 +161,13 @@ def reader_form(request, pk):
     instance = get_object_or_404(Reader, pk=pk)
     if request.method == "POST":
         action = request.POST.get("action")
-        if action in ("preview", "send", "interpret"):
-            if action in ("preview", "send"):
-                try:
-                    result = send_issue_for_reader(instance, dry_run=(action == "preview"))
-                    level = messages.success if (result.sent or action == "preview") else messages.warning
-                    level(request, result.message)
-                except Exception as exc:
-                    messages.error(request, f"Send failed — {exc}")
-            else:
-                from recommendations import ai
-
-                if not ai.is_enabled():
-                    messages.warning(request, "AI is not configured - set OPENAI_API_KEY to enable this.")
-                elif ai.apply_interpretation(instance):
-                    messages.success(request, "Taste re-interpreted from their free text.")
-                else:
-                    messages.warning(request, "Could not interpret - see the logs.")
+        if action in ("preview", "send"):
+            try:
+                result = send_issue_for_reader(instance, dry_run=(action == "preview"))
+                level = messages.success if (result.sent or action == "preview") else messages.warning
+                level(request, result.message)
+            except Exception as exc:
+                messages.error(request, f"Send failed — {exc}")
             return redirect("desk:readers_change", pk=pk)
 
         form = ReaderForm(request.POST, instance=instance)

@@ -10,6 +10,9 @@ from the public and counting how many people have asked for it. That
 count is the queue: the interest ten readers typed and no listing carries
 is the most valuable thing an editor can go and find.
 
+Their taste is read into signals in the same pass - the summary and the
+inferred interests an editor sees on the user's row.
+
 Runs off the request. Someone signing up waits for a page, not for a
 model, and a failure here must never cost us the signup.
 """
@@ -71,17 +74,32 @@ def absorb(reader) -> list[Tag]:
     return touched
 
 
+def run(reader) -> dict:
+    """Everything AI does with a new signup: absorb what they typed, then
+    read their taste into signals. Synchronous; `start` puts it on a thread.
+
+    There is no button for the second part any more. It is part of signing
+    up, and an editor sees the result on the user's row.
+    """
+    from recommendations import ai
+
+    absorbed = absorb(reader)
+    if absorbed:
+        logger.info("Absorbed %d typed interest(s) from %s", len(absorbed), reader.email)
+    interpreted = bool(ai.is_enabled("interpret_readers") and ai.apply_interpretation(reader))
+    if interpreted:
+        logger.info("Interpreted %s's taste at signup", reader.email)
+    return {"absorbed": absorbed, "interpreted": interpreted}
+
+
 def start(reader) -> None:
-    """Absorb on a background thread. Never raises into the signup."""
+    """Run on a background thread. Never raises into the signup."""
 
     def work():
         try:
-            absorbed = absorb(reader)
-            if absorbed:
-                logger.info("Absorbed %d typed interest(s) from %s",
-                            len(absorbed), reader.email)
+            run(reader)
         except Exception:
-            logger.exception("Could not absorb typed interests for %s", reader.email)
+            logger.exception("Could not read the signup for %s", reader.email)
         finally:
             close_old_connections()
 

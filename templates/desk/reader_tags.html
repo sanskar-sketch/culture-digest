@@ -17,7 +17,7 @@
 <div class="d-card">
   <h2>AI inferred these from their words</h2>
   <p style="font-size:12px;color:var(--d-muted);margin:0 0 8px;">Read out of their free text, not stated. Weighted below what they picked.</p>
-  <p style="margin:0;">{% for t in inferred %}<span class="d-pill good" style="margin:0 4px 4px 0;display:inline-block;">{{ t.name }}</span>{% empty %}<span style="color:var(--d-muted);">Nothing inferred yet — use “Interpret taste with AI” on their page.</span>{% endfor %}</p>
+  <p style="margin:0;">{% for t in inferred %}<span class="d-pill good" style="margin:0 4px 4px 0;display:inline-block;">{{ t.name }}</span>{% empty %}<span style="color:var(--d-muted);">Nothing inferred — they wrote nothing AI could read, or AI wasn't available when they signed up.</span>{% endfor %}</p>
 </div>
 
 <div class="d-card">

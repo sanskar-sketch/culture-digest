@@ -5,7 +5,6 @@
   <div class="d-page-actions">
     <form method="post" class="d-inline"><input type="hidden" name="action" value="preview">{% csrf_token %}<button type="submit" class="d-btn">Preview newsletter</button></form>
   <form method="post" class="d-inline" data-confirm="Really email {{ instance.email }} now?"><input type="hidden" name="action" value="send">{% csrf_token %}<button type="submit" class="d-btn danger">Send newsletter now</button></form>
-  <form method="post" class="d-inline"><input type="hidden" name="action" value="interpret">{% csrf_token %}<button type="submit" class="d-btn">Interpret taste with AI</button></form>
     <a class="d-btn danger" href="{% url 'desk:delete' 'readers' instance.pk %}">Delete</a>
   </div>
 </div>
@@ -56,7 +55,7 @@
 
   <div class="d-fieldset">
     <h2>What AI read into their free text</h2>
-    <p class="d-fieldset-desc">Inferred, not stated by the reader - weighted below their own picks when matching. Use "Interpret taste with AI" above to refresh.</p>
+    <p class="d-fieldset-desc">Inferred, not stated by the reader - read from their own words when they signed up, and weighted below the interests they picked themselves.</p>
     <p style="font-size:14px;margin:0 0 10px;">{{ instance.ai_taste_summary|default:"Nothing yet." }}</p>
     {% if instance.ai_inferred_tags.exists %}<p style="font-size:13px;color:var(--d-muted);margin:0 0 6px;">Inferred interests: {{ instance.ai_inferred_tags.all|join:", " }}</p>{% endif %}
     {% if instance.ai_avoid_tags.exists %}<p style="font-size:13px;color:var(--d-muted);margin:0;">Signalled avoiding: {{ instance.ai_avoid_tags.all|join:", " }}</p>{% endif %}

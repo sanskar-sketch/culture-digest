@@ -64,6 +64,10 @@
   <p style="font-size:12.5px;color:var(--d-muted);margin:8px 0 0;">Each user gets up to {{ per_send }} of the ticked events - the ones that suit them best, soonest first when scores tie. Someone the ticked events don't suit strongly enough is skipped rather than sent filler.</p>
 </form>
 
+{% if edited_readers and not preview_reader %}
+<p style="font-size:13px;color:var(--d-accent-ink);margin:8px 0 0;">Edits waiting for {% for r in edited_readers %}{{ r.email }}{% if not forloop.last %}, {% endif %}{% endfor %} - they're used when you press Write &amp; send.</p>
+{% endif %}
+
 {% if preview_reader %}
 <h2 style="font-size:15px;margin:24px 0 10px;">What {{ preview_reader.email }} would get</h2>
 {% if preview.ok %}
@@ -74,10 +78,28 @@
 <div class="d-split">
   <div class="d-card"><h2>The email</h2><iframe srcdoc="{{ preview.html|force_escape }}" class="d-preview-frame"></iframe></div>
   <div class="d-card">
-    <h2>Why these, in this order</h2>
-    {% for pick in preview.picks %}
-    <p style="font-size:13px;margin:0 0 10px;"><strong>{{ pick.title }}</strong> <span style="color:var(--d-muted);">· score {{ pick.score|floatformat:1 }}</span><br><span style="color:var(--d-ink-2);">{{ pick.rationale|truncatewords:40 }}</span></p>
-    {% endfor %}
+    <h2>Edit what AI wrote</h2>
+    <p style="font-size:12.5px;color:var(--d-muted);margin:0 0 10px;">The line under each pick, in your words if you prefer. Kept for {{ preview_reader.email }} until you send; an edited line is used as written and AI isn't asked again for it. Empty a box to let AI write that one again.</p>
+    {% comment %}Its own form, after the bulk form, so nothing nests.{% endcomment %}
+    <form method="post" id="edit-lines">
+      {% csrf_token %}
+      <input type="hidden" name="r" value="{{ raw }}">
+      <input type="hidden" name="preview_reader" value="{{ preview_reader.pk }}">
+      {% for pk in chosen %}<input type="hidden" name="event" value="{{ pk }}">{% endfor %}
+      {% for pick in preview.picks %}
+      <div style="margin:0 0 12px;">
+        <label for="rationale_{{ pick.event_id }}" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">{{ pick.title }} <span style="color:var(--d-muted);font-weight:400;">· score {{ pick.score|floatformat:1 }}</span>{% if pick.edited %} <span class="d-pill accent">edited</span>{% endif %}</label>
+        <textarea id="rationale_{{ pick.event_id }}" name="rationale_{{ pick.event_id }}" rows="4" style="width:100%;font-size:13px;">{{ pick.rationale }}</textarea>
+        <input type="text" name="verdict_{{ pick.event_id }}" value="{{ pick.verdict }}" placeholder="Verdict, e.g. GO." aria-label="Verdict for {{ pick.title }}" style="width:100%;margin-top:4px;font-size:12.5px;">
+        <input type="hidden" name="original_{{ pick.event_id }}" value="{{ pick.rationale }}">
+        <input type="hidden" name="original_verdict_{{ pick.event_id }}" value="{{ pick.verdict }}">
+      </div>
+      {% endfor %}
+      <div class="d-form-actions" style="margin-top:6px;">
+        <button type="submit" name="action" value="save_edits" class="d-btn primary">Apply edits &amp; re-preview</button>
+        <button type="submit" name="action" value="discard_edits" class="d-btn">Back to AI's words</button>
+      </div>
+    </form>
   </div>
 </div>
 {% else %}
