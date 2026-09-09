@@ -51,7 +51,7 @@ def reader_list(request):
         replied_count=Count("issues__recommendations",
                        filter=~Q(issues__recommendations__feedback=Recommendation.Feedback.NONE),
                        distinct=True),
-    ).prefetch_related("interest_tags")
+    ).prefetch_related("interest_tags", "ai_inferred_tags", "ai_avoid_tags")
     qs = search(qs, request, ["email", "name", "location", "travel_destinations",
                               "loved_examples", "disliked_examples", "notes",
                               "other_categories", "other_interests"])
@@ -132,8 +132,11 @@ def reader_list(request):
         return redirect(f"{request.path}?{request.GET.urlencode()}")
 
     page_obj = paginate(request, qs.order_by("-created_at"))
+    availability = dict(Reader.Availability.choices)
     for reader in page_obj:
         reader.completeness = _profile_completeness(reader)
+        # Their own words on when: stored as values, shown as labels.
+        reader.availability_labels = [availability.get(v, v) for v in (reader.availability or [])]
 
     filter_groups = [
         {"title": "Active", "param": "active", "options": filter_options(request, "active", [("1", "Active"), ("0", "Inactive")])},

@@ -9,7 +9,9 @@
   </summary>
   <form method="get" style="margin-top:10px;">
     {% for key, value in request.GET.items %}{% if key != "tag" and key != "match" and key != "page" %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px;">
+    <input type="search" data-narrow="#interest-chips .d-chip-check" placeholder="Type to find an interest…" aria-label="Find an interest"
+           style="min-height:34px;font-size:13px;padding:4px 10px;margin:0 0 10px;max-width:320px;">
+    <div id="interest-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px;">
       {% for tag in all_tags %}
       <label class="d-chip-check{% if tag.slug in chosen_slugs %} is-on{% endif %}">
         <input type="checkbox" name="tag" value="{{ tag.slug }}"{% if tag.slug in chosen_slugs %} checked{% endif %}>
@@ -35,27 +37,59 @@
     <table class="d-table">
       <thead><tr>
         <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
-        <th>Email</th><th>Name</th><th>Age</th><th>Location</th><th>Follows</th><th>Budget</th><th>Travel</th><th>Sent / replied</th><th>Profile</th><th>Active</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th>
+        <th>Email</th><th>Name</th><th>Location</th><th>Sent / replied</th><th>Profile</th><th>Active</th>
+        <th class="d-col-act"><span class="d-sr-only">Actions</span></th>
       </tr></thead>
       <tbody>
         {% for reader in page_obj %}
         <tr>
           <td><input type="checkbox" name="selected" value="{{ reader.pk }}"></td>
-          <td><a class="d-row-link" href="{% url 'desk:readers_change' reader.pk %}">{{ reader.email }}</a></td>
+          {% comment %}
+          The name opens a panel under the row with what they like, how far
+          they'll go and what they'll pay. Without the script it is an
+          ordinary link to their page, which shows the same and more.
+          {% endcomment %}
+          <td><a class="d-row-link" href="{% url 'desk:readers_change' reader.pk %}" data-expand="user-{{ reader.pk }}">{{ reader.email }}</a></td>
           <td>{{ reader.name|default:"—" }}</td>
-          <td>{{ reader.age|default:"—" }}</td>
           <td>{{ reader.location|default:"—" }}</td>
-          <td>{% if reader.interest_categories %}{{ reader.interest_categories|join:", " }}{% else %}<span style="color:var(--d-muted)">anything</span>{% endif %}</td>
-          <td>{{ reader.get_budget_display|default:"—" }}</td>
-          <td>{{ reader.get_travel_radius_display|default:"—" }}</td>
           <td>{% if reader.recs_count %}{{ reader.recs_count }} sent · <strong>{{ reader.replied_count }}</strong> replied{% else %}—{% endif %}</td>
           <td style="font-variant-numeric:tabular-nums">{{ reader.completeness }}%</td>
-          <td>{% if reader.is_active %}<span class="d-pill good">Active</span>{% else %}<span class="d-pill neutral">Inactive</span>{% endif %}
-            <a href="{% url 'desk:reader_tags' reader.pk %}" style="font-size:12px;margin-left:6px;">tags</a></td>
+          <td>{% if reader.is_active %}<span class="d-pill good">Active</span>{% else %}<span class="d-pill neutral">Inactive</span>{% endif %}</td>
           <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'readers' reader.pk %}" aria-label="Delete {{ reader.email }}">Delete</a></td>
         </tr>
+        <tr class="d-detail" id="user-{{ reader.pk }}" hidden>
+          <td colspan="8">
+            <div class="d-detail-grid">
+              <div>
+                <h3>Interests</h3>
+                <p>{% for t in reader.interest_tags.all %}<span class="d-pill accent">{{ t.name }}</span>{% empty %}<span class="own">nothing picked</span>{% endfor %}</p>
+                {% if reader.ai_inferred_tags.all %}<p>{% for t in reader.ai_inferred_tags.all %}<span class="d-pill good" title="Inferred by AI from their own words">{{ t.name }}</span>{% endfor %}</p>{% endif %}
+                {% if reader.ai_avoid_tags.all %}<p>Avoids: {% for t in reader.ai_avoid_tags.all %}<span class="d-pill bad">{{ t.name }}</span>{% endfor %}</p>{% endif %}
+                {% if reader.interest_categories %}<p>Follows {{ reader.interest_categories|join:", " }}</p>{% endif %}
+                {% if reader.other_interests %}<p class="own">“{{ reader.other_interests }}”</p>{% endif %}
+              </div>
+              <div>
+                <h3>Will travel</h3>
+                <p>{{ reader.get_travel_radius_display|default:"not said" }}{% if reader.location %} · from {{ reader.location }}{% endif %}</p>
+                {% if reader.travel_destinations %}<p>Likes going to: {{ reader.travel_destinations }}</p>{% endif %}
+                {% if reader.other_travel %}<p class="own">“{{ reader.other_travel }}”</p>{% endif %}
+              </div>
+              <div>
+                <h3>Will pay</h3>
+                <p>{{ reader.get_budget_display|default:"not said" }}</p>
+                {% if reader.other_budget %}<p class="own">“{{ reader.other_budget }}”</p>{% endif %}
+              </div>
+              <div>
+                <h3>When they're free</h3>
+                <p>{{ reader.availability_labels|join:", "|default:"not said" }}</p>
+                {% if reader.other_availability %}<p class="own">“{{ reader.other_availability }}”</p>{% endif %}
+                <p style="margin-top:8px;"><a href="{% url 'desk:readers_change' reader.pk %}">Edit everything →</a></p>
+              </div>
+            </div>
+          </td>
+        </tr>
         {% empty %}
-        <tr><td colspan="12" class="d-empty">No readers match. <a href="{{ request.path }}">Clear filters</a>.</td></tr>
+        <tr><td colspan="8" class="d-empty">No users match. <a href="{{ request.path }}">Clear filters</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

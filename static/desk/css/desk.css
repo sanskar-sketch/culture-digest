@@ -588,3 +588,20 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
 .d-group.is-empty > summary .d-group-meta { color: var(--d-bad); }
 .d-bulk-group { display: inline-flex; align-items: center; gap: 6px; padding-left: 10px; border-left: 1px solid var(--d-line); }
 .d-bulk-label { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--d-muted); margin-right: 2px; }
+
+
+/* ---------- a row that opens (the Users table) ------------------------- */
+.d-table a[data-expand] { cursor: pointer; }
+.d-table a[data-expand]::after {
+  content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 7px;
+  border-right: 1.5px solid var(--d-muted); border-bottom: 1.5px solid var(--d-muted);
+  transform: rotate(45deg) translateY(-2px); transition: transform .15s;
+}
+.d-table tr.is-open a[data-expand]::after { transform: rotate(-135deg) translateY(2px); }
+.d-table tr.is-open td { background: var(--d-surface-2); }
+.d-table tr.d-detail td { background: var(--d-surface-2); padding: 12px 14px 16px 44px; white-space: normal; }
+.d-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 24px; font-size: 13px; }
+.d-detail-grid h3 { margin: 0 0 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--d-muted); }
+.d-detail-grid p { margin: 0 0 4px; color: var(--d-ink-2); }
+.d-detail-grid .own { font-style: italic; color: var(--d-muted); }
+.d-detail-grid .d-pill { margin: 0 4px 4px 0; display: inline-block; }

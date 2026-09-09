@@ -405,7 +405,43 @@
     });
   }
 
+  // A link that opens a panel instead of leaving the page. Without this
+  // script the link still works - it goes to the full page - so the
+  // panel is a shortcut, never the only way.
+  function initExpanders() {
+    document.querySelectorAll("[data-expand]").forEach(function (link) {
+      var panel = document.getElementById(link.getAttribute("data-expand"));
+      if (!panel) return;
+      link.setAttribute("aria-expanded", "false");
+      link.setAttribute("aria-controls", panel.id);
+      link.addEventListener("click", function (e) {
+        e.preventDefault();
+        var open = panel.hidden;
+        panel.hidden = !open;
+        link.setAttribute("aria-expanded", open ? "true" : "false");
+        link.closest("tr").classList.toggle("is-open", open);
+      });
+    });
+  }
+
+  // A search box over a set of chips: type, and the ones that don't match
+  // go away. Ticked chips always stay, so what you chose can't vanish.
+  function initNarrow() {
+    document.querySelectorAll("input[data-narrow]").forEach(function (box) {
+      var chips = document.querySelectorAll(box.getAttribute("data-narrow"));
+      box.addEventListener("input", function () {
+        var q = box.value.trim().toLowerCase();
+        chips.forEach(function (chip) {
+          var ticked = chip.querySelector("input") && chip.querySelector("input").checked;
+          chip.hidden = !!q && !ticked && chip.textContent.toLowerCase().indexOf(q) === -1;
+        });
+      });
+    });
+  }
+
   initFilters();
+  initExpanders();
+  initNarrow();
   initSidebar();
   initTabs();
   initBulkSelect();

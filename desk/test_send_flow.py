@@ -126,3 +126,47 @@ class SendFlowTests(TestCase):
         from recommendations import matching
         picks = matching.top_matches_for_reader(self.bo, pool=[g.pk for g in self.gigs] + [self.supper.pk])
         self.assertEqual(picks[0].opportunity, self.supper)
+
+
+@plain_static
+class UserRowPanelTests(TestCase):
+    """Click a user's name and see what they like, how far, how much."""
+
+    def setUp(self):
+        cache.clear()
+        get_user_model().objects.create_superuser("boss", "b@example.com", "pw")
+        self.client.login(username="boss", password="pw")
+        self.jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        self.rooms = Tag.objects.create(name="Basement rooms", slug="basement-rooms")
+        self.arena = Tag.objects.create(name="Arena shows", slug="arena-shows")
+        self.ada = Reader.objects.create(
+            email="ada@example.com", name="Ada", location="London",
+            travel_radius=Reader.TravelRadius.WITHIN_CITY, budget=Reader.Budget.MODERATE,
+            other_budget="more for something special", other_travel="Brighton at a push",
+            availability=["weekends", "weekday_evenings"])
+        self.ada.interest_tags.add(self.jazz)
+        self.ada.ai_inferred_tags.add(self.rooms)
+        self.ada.ai_avoid_tags.add(self.arena)
+
+    def test_the_panel_carries_interests_travel_and_pay(self):
+        page = self.client.get(reverse("desk:readers_list"))
+        self.assertContains(page, f'data-expand="user-{self.ada.pk}"')
+        self.assertContains(page, f'id="user-{self.ada.pk}"')
+        for text in ("Jazz nights", "Basement rooms", "Arena shows",
+                     "Anywhere in my city", "Brighton at a push",
+                     "more for something special", "Weekends, Weekday evenings"):
+            self.assertContains(page, text)
+
+    def test_the_three_columns_the_panel_replaces_are_gone(self):
+        page = self.client.get(reverse("desk:readers_list")).content.decode()
+        head = page.split("<thead>", 1)[1].split("</thead>", 1)[0]
+        for gone in ("Follows", "Budget", "Travel"):
+            self.assertNotIn(f"<th>{gone}</th>", head)
+
+    def test_the_name_still_links_to_the_page_without_the_script(self):
+        page = self.client.get(reverse("desk:readers_list"))
+        self.assertContains(page, f'href="{reverse("desk:readers_change", args=[self.ada.pk])}" data-expand')
+
+    def test_the_interest_picker_has_a_search_box(self):
+        page = self.client.get(reverse("desk:readers_list"))
+        self.assertContains(page, 'data-narrow="#interest-chips .d-chip-check"')
