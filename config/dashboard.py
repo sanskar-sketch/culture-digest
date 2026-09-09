@@ -1,9 +1,8 @@
 """Editorial dashboard data: what's wired up, and today's numbers.
 
-Shared by the desk (the editors' real working surface) and by the old
-Django admin, which stays reachable at /admin/ for Users and Groups.
-Registry-only where possible, so it costs nothing to compute on every
-request; the heavier query-based stats are cached separately by the caller.
+`configuration()` reads the registry and the settings, so it costs no
+queries at all. `stats()` costs six, and is deliberately not cached - see
+its docstring for why a stale number is worse than a sixth of a second.
 """
 
 from datetime import timedelta
@@ -152,19 +151,19 @@ def configuration() -> list[dict]:
     ]
 
 
-def stats(use_cache: bool = True) -> dict:
-    from django.core.cache import cache
+def stats() -> dict:
+    """Today's numbers, computed now.
 
-    if use_cache:
-        cached = cache.get("digest_dashboard_stats")
-        if cached is not None:
-            return cached
-    computed = _compute_stats()
-    cache.set("digest_dashboard_stats", computed, 60)
-    return computed
+    These were cached for a minute, which made the Overview quietly wrong:
+    publish a listing and the live count kept the old value until the
+    minute was up, so the obvious way to check your own change - look at
+    the number - failed. Invalidating on write would not have fixed it
+    either, because the bulk Publish action goes through
+    `queryset.update()`, which fires no signals at all.
 
-
-def _compute_stats() -> dict:
+    So it is computed every time. Six aggregate queries on a page nobody
+    hits in a loop is worth paying to have a number that is never a lie.
+    """
     from opportunities.models import Category, Opportunity, Tag
     from readers.models import Reader
     from recommendations.models import NewsletterIssue, Recommendation
@@ -209,14 +208,25 @@ def _compute_stats() -> dict:
     ]
     coverage.sort(key=lambda row: row["count"])
 
+    # One query each rather than two: distinct because the left join to
+    # opportunities repeats a tag once per listing it is on.
+    tags = Tag.objects.aggregate(
+        total=Count("id", distinct=True),
+        unused=Count("id", distinct=True, filter=Q(opportunities__isnull=True)),
+    )
+    issues = NewsletterIssue.objects.aggregate(
+        total=Count("id"),
+        unsent=Count("id", filter=Q(sent_at__isnull=True)),
+    )
+
     return {
         "readers": readers,
         "opportunities": opportunities,
         "feedback": feedback,
         "coverage": coverage,
         "empty_categories": [row for row in coverage if not row["count"]],
-        "tags_total": Tag.objects.count(),
-        "tags_unused": Tag.objects.filter(opportunities__isnull=True).count(),
-        "issues_total": NewsletterIssue.objects.count(),
-        "issues_unsent": NewsletterIssue.objects.filter(sent_at__isnull=True).count(),
+        "tags_total": tags["total"],
+        "tags_unused": tags["unused"],
+        "issues_total": issues["total"],
+        "issues_unsent": issues["unsent"],
     }
