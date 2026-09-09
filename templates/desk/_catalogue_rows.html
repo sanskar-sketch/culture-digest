@@ -1,0 +1,34 @@
+{% comment %}One interest's listings. `listings` already carry state_key/state_label.{% endcomment %}
+<div class="d-table-wrap d-group-table">
+  <div class="d-table-scroll">
+  <table class="d-table">
+    <thead><tr>
+      <th style="width:1%"><span class="d-sr-only">Select</span></th>
+      <th>Title</th><th>Category</th><th>Status</th><th>Price</th><th>Area</th><th>Taste</th><th>Recommended</th><th>End date</th>
+      <th class="d-col-act"><span class="d-sr-only">Actions</span></th>
+    </tr></thead>
+    <tbody>
+      {% for opp in listings %}
+      <tr>
+        <td><input type="checkbox" name="selected" value="{{ opp.pk }}" aria-label="Select {{ opp.title }}"></td>
+        <td class="wrap"><a class="d-row-link" href="{% url 'desk:listings_change' opp.pk %}">{{ opp.title }}</a>
+          {% if opp.found_by_ai %}<span class="d-pill warn" style="margin-left:6px;">AI · check</span>{% endif %}</td>
+        <td>{{ opp.get_category_display }}</td>
+        <td>
+          {% if opp.state_key == "live" %}<span class="d-pill good">Live</span>
+          {% elif opp.state_key == "draft" %}<span class="d-pill neutral">Draft</span>
+          {% elif opp.state_key == "ended" %}<span class="d-pill warn">Ended</span>
+          {% else %}<span class="d-pill bad">Archived</span>{% endif %}
+        </td>
+        <td>{{ opp.get_price_tier_display }}</td>
+        <td>{{ opp.location_area|default:"—" }}</td>
+        <td style="font-variant-numeric:tabular-nums">{{ opp.mainstream_to_unusual }}·{{ opp.intimate_to_large_scale }}</td>
+        <td>{{ opp.recs_count|default:"—" }}</td>
+        <td>{{ opp.end_date|default:"—" }}</td>
+        <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'listings' opp.pk %}" aria-label="Delete {{ opp.title }}">Delete</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>

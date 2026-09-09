@@ -1,0 +1,103 @@
+{% extends "desk/base.html" %}
+{% block content %}
+<div class="d-page-top">
+  <h1>{{ page_title }}</h1>
+  <div class="d-page-actions">
+    <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="load_sample_catalogue" value="1" class="d-btn">Load sample catalogue</button></form>
+    <a href="{{ add_interest_url }}" class="d-btn">Add interest</a>
+    <a href="{{ add_url }}" class="d-btn primary">Add listing</a>
+  </div>
+</div>
+<p class="d-page-blurb">{{ page_blurb }}</p>
+
+{% if wanted_count %}
+<div class="d-msg warning" style="margin-bottom:16px;">
+  <span><strong>{{ wanted_count }}</strong> interest{{ wanted_count|pluralize }} readers asked for
+  {% if wanted_count == 1 %}has{% else %}have{% endif %} nothing to send.
+  {% if not has_active_filters %}They're at the top.{% else %}<a href="{{ request.path }}?interest_origin=reader&amp;coverage=empty">Show them</a>.{% endif %}
+  Tick the box beside the name and press <strong>Find listings with AI</strong>.</span>
+</div>
+{% endif %}
+
+{% include "desk/_toolbar.html" %}
+
+<form method="post" data-bulk-form>
+  {% csrf_token %}
+  <div class="d-bulkbar">
+    <span class="d-bulk-count" data-selected-count>None selected</span>
+    <span class="d-bulk-group">
+      <span class="d-bulk-label">Listings</span>
+      {% for action in listing_actions %}
+      <button type="submit" name="action" value="{{ action.value }}" class="d-btn small"
+              data-bulk-action="selected" title="{{ action.title }}">{{ action.label }}</button>
+      {% endfor %}
+      <button type="submit" name="bulk_delete" value="1" class="d-btn small danger"
+              formaction="{% url 'desk:delete_selected' 'listings' %}" formnovalidate
+              data-bulk-action="selected" title="Shows what else goes with them before anything is deleted">Delete&hellip;</button>
+    </span>
+    <span class="d-bulk-group">
+      <span class="d-bulk-label">Interests</span>
+      <input type="text" name="area" placeholder="Where? e.g. London" aria-label="Area to search in"
+             style="min-height:30px;font-size:12.5px;padding:4px 10px;max-width:160px;">
+      {% for action in interest_actions %}
+      <button type="submit" name="action" value="{{ action.value }}" class="d-btn small"
+              data-bulk-action="selected_interest" title="{{ action.title }}">{{ action.label }}</button>
+      {% endfor %}
+    </span>
+  </div>
+
+  {% if untagged %}
+  <details class="d-group is-warn" open>
+    <summary>
+      <span class="d-group-name" style="color:var(--d-bad);">Untagged — no reader can be matched to these</span>
+      <span class="d-group-meta">{{ untagged|length }} listing{{ untagged|length|pluralize }}</span>
+    </summary>
+    {% include "desk/_catalogue_rows.html" with listings=untagged %}
+  </details>
+  {% endif %}
+
+  {% for group in groups %}
+  {% with tag=group.tag %}
+  <details class="d-group{% if not group.listings %} is-empty{% endif %}"{% if forloop.counter <= 6 or has_active_filters %} open{% endif %}>
+    <summary>
+      <input type="checkbox" name="selected_interest" value="{{ tag.pk }}" aria-label="Select {{ tag.name }}" onclick="event.stopPropagation()">
+      <a class="d-group-name" href="{% url 'desk:interests_change' tag.pk %}" onclick="event.stopPropagation()">{{ tag.name }}</a>
+      {% if tag.origin == "reader" %}<span class="d-pill accent">Readers{% if tag.times_requested %} ×{{ tag.times_requested }}{% endif %}</span>{% endif %}
+      {% if tag.researching %}<span class="d-pill accent">searching…</span>{% endif %}
+      <span class="d-group-meta">
+        {% if tag.listings_total %}{{ tag.listings_total }} listing{{ tag.listings_total|pluralize }}{% if group.listings|length != tag.listings_total %} · {{ group.listings|length }} shown{% endif %}{% else %}<span style="color:var(--d-bad);">nothing to send yet</span>{% endif %}
+        · {{ tag.readers_count }} reader{{ tag.readers_count|pluralize }}
+      </span>
+      <span class="d-group-tools" onclick="event.stopPropagation()">
+        <select name="category_value" form="cat-{{ tag.pk }}" onchange="this.form.submit()" aria-label="Category for {{ tag.name }}" style="min-height:28px;font-size:12px;padding:2px 24px 2px 8px;">
+          <option value=""{% if not tag.category %} selected{% endif %}>no category</option>
+          {% for value, label in categories %}<option value="{{ value }}"{% if tag.category == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <a class="d-del" href="{% url 'desk:delete' 'interests' tag.pk %}" aria-label="Delete {{ tag.name }}">Delete</a>
+      </span>
+    </summary>
+    {% if group.listings %}
+    {% include "desk/_catalogue_rows.html" with listings=group.listings %}
+    {% else %}
+    <p class="d-group-empty">No listings carry this interest{% if has_active_filters %} that match your filters{% endif %}. Tick it and press <strong>Find listings with AI</strong>, or <a href="{{ add_url }}">add one</a> and tag it.</p>
+    {% endif %}
+  </details>
+  {% endwith %}
+  {% empty %}
+  {% if not untagged %}
+  <div class="d-card"><p class="d-empty" style="padding:24px;">Nothing matches. <a href="{{ request.path }}">Clear filters</a>, <a href="{{ add_url }}">add a listing</a>, or <a href="{{ add_interest_url }}">add an interest</a>.</p></div>
+  {% endif %}
+  {% endfor %}
+</form>
+
+{% comment %}
+The category dropdowns sit inside the bulk form but must post on their own;
+each points at one of these tiny forms via form="cat-N", so a change saves
+without also submitting the tick boxes.
+{% endcomment %}
+{% for group in groups %}
+<form method="post" id="cat-{{ group.tag.pk }}" hidden>{% csrf_token %}<input type="hidden" name="tag_id" value="{{ group.tag.pk }}"></form>
+{% endfor %}
+
+{% include "desk/_pagination.html" %}
+{% endblock %}

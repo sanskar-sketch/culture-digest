@@ -155,29 +155,95 @@ class InterestQueueTests(DeskTestCase):
     def test_the_page_names_what_readers_want_and_we_cannot_send(self):
         Tag.objects.create(name="Silent discos", slug="silent-discos",
                            origin=Tag.Origin.READER, times_requested=3)
-        page = self.client.get(reverse("desk:interests_list"))
+        page = self.client.get(reverse("desk:listings_list"))
         self.assertContains(page, "readers asked for")
         self.assertContains(page, "Silent discos")
+
+    def test_the_order_is_asked_for_then_fullest_then_the_empty_tail(self):
+        empty = Tag.objects.create(name="Editor's empty", slug="editors-empty")
+        full = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        Opportunity.objects.create(
+            title="Trio", category="music", description="x", price_tier="budget",
+            location_area="London", booking_url="https://example.com",
+            mainstream_to_unusual=3, intimate_to_large_scale=2).tags.add(full)
+        asked = Tag.objects.create(name="Silent discos", slug="silent-discos",
+                                   origin=Tag.Origin.READER, times_requested=3)
+        page = self.client.get(reverse("desk:listings_list"))
+        order = [g["tag"].slug for g in page.context["groups"]]
+        self.assertLess(order.index(asked.slug), order.index(full.slug))
+        self.assertLess(order.index(full.slug), order.index(empty.slug))
+
+    def test_the_old_interests_url_lands_on_the_catalogue_with_its_filter(self):
+        response = self.client.get(reverse("desk:interests_list") + "?origin=reader")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("desk:listings_list") + "?interest_origin=reader")
 
     def test_research_is_started_off_the_request_not_during_it(self):
         tag = Tag.objects.create(name="Silent discos", slug="silent-discos")
         with mock.patch("recommendations.ai.is_enabled", return_value=True), \
              mock.patch("opportunities.research.start", return_value=True) as start:
-            response = self.client.post(reverse("desk:interests_list"),
-                                        {"action": "research", "selected": [tag.pk],
+            response = self.client.post(reverse("desk:listings_list"),
+                                        {"action": "research", "selected_interest": [tag.pk],
                                          "area": "London"}, follow=True)
         start.assert_called_once()
         self.assertEqual(start.call_args.kwargs["area"], "London")
         self.assertIn("Searching for Silent discos",
                       " ".join(m.message for m in response.context["messages"]))
 
+    def test_ticking_a_listing_is_not_ticking_an_interest(self):
+        """The two kinds of tick box must not be confused for each other."""
+        tag = Tag.objects.create(name="Silent discos", slug="silent-discos")
+        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
+             mock.patch("opportunities.research.start", return_value=True) as start:
+            response = self.client.post(reverse("desk:listings_list"),
+                                        {"action": "research", "selected": [tag.pk]},
+                                        follow=True)
+        start.assert_not_called()
+        self.assertIn("Tick an interest first",
+                      " ".join(m.message for m in response.context["messages"]))
+
     def test_without_ai_it_says_so_rather_than_doing_nothing(self):
         tag = Tag.objects.create(name="Silent discos", slug="silent-discos")
-        response = self.client.post(reverse("desk:interests_list"),
-                                    {"action": "research", "selected": [tag.pk]},
+        response = self.client.post(reverse("desk:listings_list"),
+                                    {"action": "research", "selected_interest": [tag.pk]},
                                     follow=True)
         self.assertIn("AI is not configured",
                       " ".join(m.message for m in response.context["messages"]))
+
+    def test_a_listing_appears_under_each_of_its_interests(self):
+        a = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        b = Tag.objects.create(name="Basement rooms", slug="basement-rooms")
+        listing = Opportunity.objects.create(
+            title="Trio", category="music", description="x", price_tier="budget",
+            location_area="London", booking_url="https://example.com",
+            mainstream_to_unusual=3, intimate_to_large_scale=2)
+        listing.tags.add(a, b)
+        page = self.client.get(reverse("desk:listings_list"))
+        under = {g["tag"].slug: [o.pk for o in g["listings"]] for g in page.context["groups"]}
+        self.assertEqual(under["jazz-nights"], [listing.pk])
+        self.assertEqual(under["basement-rooms"], [listing.pk])
+
+    def test_an_untagged_listing_is_called_out_at_the_top(self):
+        Opportunity.objects.create(
+            title="Nobody can reach this", category="music", description="x",
+            price_tier="budget", location_area="London", booking_url="https://example.com",
+            mainstream_to_unusual=3, intimate_to_large_scale=2)
+        page = self.client.get(reverse("desk:listings_list"))
+        self.assertEqual([o.title for o in page.context["untagged"]], ["Nobody can reach this"])
+        self.assertContains(page, "no reader can be matched")
+
+    def test_search_keeps_an_interest_only_with_the_listings_that_match(self):
+        tag = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        for title in ("Trio residency", "Big band"):
+            listing = Opportunity.objects.create(
+                title=title, category="music", description="x", price_tier="budget",
+                location_area="London", booking_url="https://example.com",
+                mainstream_to_unusual=3, intimate_to_large_scale=2)
+            listing.tags.add(tag)
+        page = self.client.get(reverse("desk:listings_list") + "?q=trio")
+        groups = page.context["groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual([o.title for o in groups[0]["listings"]], ["Trio residency"])
 
 
 class PickByInterestTests(DeskTestCase):

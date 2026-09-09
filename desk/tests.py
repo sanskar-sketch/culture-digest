@@ -95,7 +95,7 @@ class PageRenderTests(LoggedInTestCase):
     def test_every_list_and_add_page_renders_empty(self):
         urls = [
             reverse("desk:dashboard"), reverse("desk:listings_list"), reverse("desk:listings_add"),
-            reverse("desk:interests_list"), reverse("desk:interests_add"),
+            reverse("desk:interests_add"),
             reverse("desk:readers_list"), reverse("desk:campaigns_list"), reverse("desk:campaigns_add"),
             reverse("desk:issues_list"), reverse("desk:recommendations_list"),
             reverse("desk:templates_list"), reverse("desk:templates_add"), reverse("desk:siteconfig"),
@@ -103,6 +103,9 @@ class PageRenderTests(LoggedInTestCase):
         for url in urls:
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200, url)
+        # Interests are a band on the Listings page now; the old URL forwards.
+        self.assertRedirects(self.client.get(reverse("desk:interests_list")),
+                             reverse("desk:listings_list"))
 
     def test_change_pages_render_with_data(self):
         opp = opportunity()
@@ -660,7 +663,7 @@ class DeleteTests(LoggedInTestCase):
         opp = opportunity()
         for list_url, kind, pk in [
             (reverse("desk:listings_list"), "listings", opp.pk),
-            (reverse("desk:interests_list"), "interests", tag.pk),
+            (reverse("desk:listings_list"), "interests", tag.pk),
             (reverse("desk:readers_list"), "readers", reader.pk),
             (reverse("desk:campaigns_list"), "campaigns", campaign.pk),
             (reverse("desk:templates_list"), "templates", template.pk),

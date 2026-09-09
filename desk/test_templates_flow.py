@@ -66,11 +66,10 @@ class SidebarTests(DeskCase):
         self.assertIn(">Settings</a>", html)
         self.assertNotIn(">Editor accounts</a>", html)
 
-    def test_interests_are_still_reachable_from_listings(self):
+    def test_interests_live_on_the_listings_page(self):
         page = self.client.get(reverse("desk:listings_list"))
-        self.assertContains(page, reverse("desk:interests_list"))
-        page = self.client.get(reverse("desk:interests_list"))
-        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, reverse("desk:interests_add"))
+        self.assertEqual(self.client.get(reverse("desk:interests_list")).status_code, 302)
 
     def test_the_health_panel_moved_to_settings(self):
         overview = self.client.get(reverse("desk:dashboard"))

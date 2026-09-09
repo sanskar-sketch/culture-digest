@@ -559,3 +559,32 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
 .d-subnav a:hover { color: var(--d-ink); }
 .d-subnav a.is-active { color: var(--d-accent-ink); border-bottom-color: var(--d-accent); }
 .d-subnav .n { font-weight: 400; color: var(--d-muted); margin-left: 4px; font-size: 12px; }
+
+
+/* ---------- the catalogue: listings grouped under interests -------------- */
+.d-group {
+  border: 1px solid var(--d-line); border-radius: var(--d-radius); background: var(--d-surface);
+  margin: 0 0 10px; box-shadow: var(--d-shadow);
+}
+.d-group.is-warn { border-color: var(--d-bad); }
+.d-group > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap; padding: 11px 14px; font-size: 14px;
+}
+.d-group > summary::-webkit-details-marker { display: none; }
+.d-group > summary::before {
+  content: ""; width: 7px; height: 7px; border-right: 2px solid var(--d-muted);
+  border-bottom: 2px solid var(--d-muted); transform: rotate(-45deg); transition: transform .15s;
+  flex: 0 0 auto;
+}
+.d-group[open] > summary::before { transform: rotate(45deg); }
+.d-group > summary input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--d-accent); }
+.d-group-name, .d-group-name:link, .d-group-name:visited { font-weight: 700; color: var(--d-ink); text-decoration: none; }
+.d-group-name:hover { color: var(--d-accent-ink); }
+.d-group-meta { color: var(--d-muted); font-size: 12.5px; }
+.d-group-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.d-group-table { border: 0; border-top: 1px solid var(--d-line-soft); border-radius: 0 0 var(--d-radius) var(--d-radius); box-shadow: none; }
+.d-group-empty { margin: 0; padding: 10px 14px 14px; font-size: 13px; color: var(--d-muted); border-top: 1px solid var(--d-line-soft); }
+.d-group.is-empty > summary .d-group-meta { color: var(--d-bad); }
+.d-bulk-group { display: inline-flex; align-items: center; gap: 6px; padding-left: 10px; border-left: 1px solid var(--d-line); }
+.d-bulk-label { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--d-muted); margin-right: 2px; }

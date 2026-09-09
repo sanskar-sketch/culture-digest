@@ -141,17 +141,34 @@
   function initBulkSelect() {
     document.querySelectorAll("form[data-bulk-form]").forEach(function (form) {
       var selectAll = form.querySelector("[data-select-all]");
-      var rowChecks = Array.prototype.slice.call(form.querySelectorAll("input[name=selected]"));
+      // A form may carry two kinds of tick box (listings and interests on
+      // the catalogue). A button names the kind it acts on in its
+      // data-bulk-action value; an empty value means the plain "selected".
+      var rowChecks = Array.prototype.slice.call(
+        form.querySelectorAll("input[name=selected], input[name=selected_interest]"));
       var counter = form.querySelector("[data-selected-count]");
       var actions = Array.prototype.slice.call(form.querySelectorAll("[data-bulk-action]"));
 
+      function countOf(name) {
+        return rowChecks.filter(function (c) { return c.checked && c.name === name; }).length;
+      }
+
       function refresh() {
         var n = rowChecks.filter(function (c) { return c.checked; }).length;
-        if (counter) counter.textContent = n ? n + " selected" : "None selected";
+        var listings = countOf("selected"), interests = countOf("selected_interest");
+        if (counter) {
+          var parts = [];
+          if (listings) parts.push(listings + " listing" + (listings === 1 ? "" : "s"));
+          if (interests) parts.push(interests + " interest" + (interests === 1 ? "" : "s"));
+          counter.textContent = parts.length ? parts.join(", ") + " selected" : "None selected";
+        }
         if (selectAll) selectAll.checked = n > 0 && n === rowChecks.length;
-        // Greyed out until something is ticked - pressing an action with an
-        // empty selection is never what anyone meant.
-        actions.forEach(function (button) { button.disabled = n === 0; });
+        // Greyed out until something it acts on is ticked - pressing an
+        // action with an empty selection is never what anyone meant.
+        actions.forEach(function (button) {
+          var wants = button.getAttribute("data-bulk-action") || "selected";
+          button.disabled = countOf(wants) === 0;
+        });
         rowChecks.forEach(function (c) {
           var tr = c.closest("tr");
           if (tr) tr.classList.toggle("is-selected", c.checked);

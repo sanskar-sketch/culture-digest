@@ -37,7 +37,7 @@ DELETABLE = {
                    "out of matching so it is never recommended again.",
     },
     "interests": {
-        "model": Tag, "label": "interest", "list_url": "desk:interests_list",
+        "model": Tag, "label": "interest", "list_url": "desk:listings_list",
         "name": lambda o: o.name,
         "instead": None,
     },

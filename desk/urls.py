@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import access, auth, campaigns, dashboard, deletion, insights, interests
+from .views import access, auth, campaigns, catalogue, dashboard, deletion, insights, interests
 from .views import listings, newsletters, outreach, readers, saved_templates
 from .views import settings as settings_views
 from .views import templates as template_views
@@ -15,11 +15,11 @@ urlpatterns = [
 
     path("", dashboard.dashboard_view, name="dashboard"),
 
-    path("listings/", listings.listing_list, name="listings_list"),
+    path("listings/", catalogue.catalogue, name="listings_list"),
     path("listings/add/", listings.listing_form, name="listings_add"),
     path("listings/<int:pk>/", listings.listing_form, name="listings_change"),
 
-    path("interests/", interests.interest_list, name="interests_list"),
+    path("interests/", catalogue.interests_redirect, name="interests_list"),
     path("interests/add/", interests.interest_form, name="interests_add"),
     path("interests/<int:pk>/", interests.interest_form, name="interests_change"),
 
