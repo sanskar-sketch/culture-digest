@@ -432,10 +432,14 @@ select:not([multiple]) {
 .d-checkbox-row label { font-size: 14px; font-weight: 500; }
 
 .d-check-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-/* Django's CheckboxSelectMultiple renders <ul><li><label>...; contents
-   removes those boxes from layout so the labels become the flex items. */
+/* Django's CheckboxSelectMultiple wraps every choice: <ul><li><label> on
+   older renderers, nested <div>s on this one. Either way the wrappers are
+   taken out of the layout so the labels themselves become the flex items
+   and the interests read as chips in rows, not as a column. */
 .d-check-grid ul { list-style: none; margin: 0; padding: 0; display: contents; }
-.d-check-grid li { display: contents; }
+.d-check-grid li,
+.d-check-grid > div,
+.d-check-grid > div > div { display: contents; }
 .d-check-grid label {
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 999px;
   border: 1px solid var(--d-line); font-size: 13px; cursor: pointer; background: var(--d-surface);
@@ -621,9 +625,20 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
 .d-review { display: grid; gap: 14px; }
 .d-review-card { padding: 16px 18px; }
 .d-review-head { display: flex; align-items: flex-start; gap: 12px; }
-.d-review-head h2 { margin: 0 0 3px; font-size: 15px; }
-.d-review-tick { padding-top: 3px; }
-.d-review-meta { margin: 0; font-size: 12.5px; color: var(--d-muted); display: flex; align-items: center; gap: 8px; }
+.d-review-head input[type=checkbox] { width: 16px; height: 16px; margin-top: 3px; accent-color: var(--d-accent); flex: none; }
+.d-review-title { min-width: 0; }
+.d-review-title .d-row-link { font-size: 15px; font-weight: 600; }
+.d-review-meta { margin: 3px 0 0; font-size: 12.5px; color: var(--d-muted); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.d-review-panel { margin-top: 14px; border-top: 1px solid var(--d-line-soft); padding-top: 12px; }
+.d-review-all { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; margin: 0 0 12px; }
+.d-review-all input { width: 16px; height: 16px; accent-color: var(--d-accent); }
+/* The interests block spans the card, so the chips read as chips. */
+.d-review-tags { margin-top: 4px; }
+.d-tags-picker input[type=search] { width: 100%; }
+.d-tags-picker .d-check-grid { max-height: 210px; overflow-y: auto; padding: 12px; }
+/* A chip the search box has filtered out. The author rule above beats the
+   browser's own [hidden] styling, so hiding one has to be said here. */
+.d-check-grid label[hidden] { display: none; }
 .d-review-sources { margin: 10px 0 0; font-size: 12.5px; color: var(--d-muted); }
 .d-review-sources a { color: var(--d-accent-ink); }
 .d-review-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 20px; margin-top: 12px; }

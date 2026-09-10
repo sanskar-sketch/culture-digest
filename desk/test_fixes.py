@@ -488,6 +488,55 @@ class ReviewWhatAIFoundTests(DeskTestCase):
         self.assertContains(response, "can&#x27;t reach anyone yet")
 
 
+class TheReviewQueueReadsWellTests(DeskTestCase):
+    """Ten open cards with fifty interests down the side of each is a page
+    nobody reviews."""
+
+    def setUp(self):
+        super().setUp()
+        for i in range(3):
+            event(f"Found {i}", status=Opportunity.Status.DRAFT, found_by_ai=True)
+        # The seeded taxonomy already supplies the interests to pick from.
+
+    def test_each_card_starts_collapsed_and_its_title_opens_it(self):
+        page = self.client.get(reverse("desk:listings_review"))
+        first = Opportunity.objects.filter(status=Opportunity.Status.DRAFT).first()
+        self.assertContains(page, f'data-expand="card-{first.pk}"')
+        self.assertContains(page, f'id="card-{first.pk}" hidden')
+
+    def test_the_title_still_goes_somewhere_without_the_script(self):
+        first = Opportunity.objects.filter(status=Opportunity.Status.DRAFT).first()
+        self.assertContains(self.client.get(reverse("desk:listings_review")),
+                            reverse("desk:listings_change", args=[first.pk]))
+
+    def test_the_header_says_enough_to_judge_without_opening_it(self):
+        page = self.client.get(reverse("desk:listings_review"))
+        self.assertContains(page, "Found by AI")
+        self.assertContains(page, "London")  # the area, from the fixture
+
+    def test_interests_get_their_own_full_width_block_with_a_search_box(self):
+        first = Opportunity.objects.filter(status=Opportunity.Status.DRAFT).first()
+        page = self.client.get(reverse("desk:listings_review"))
+        self.assertContains(page, "d-review-tags")
+        self.assertContains(page, f'data-narrow="#tags-{first.pk} label"')
+        # and not repeated inside the narrow column grid
+        self.assertNotContains(page, f'id="id_{first.pk}-tags" class="d-check-grid"')
+
+    def test_there_is_a_select_all(self):
+        page = self.client.get(reverse("desk:listings_review"))
+        self.assertContains(page, "data-select-all")
+        self.assertContains(page, "Select all 3 on this page")
+
+    def test_find_events_with_ai_is_not_on_this_page(self):
+        page = self.client.get(reverse("desk:listings_review"))
+        self.assertNotContains(page, 'value="suggest_for_readers"')
+
+    def test_the_events_page_offers_a_button_not_a_sentence_with_a_link(self):
+        page = self.client.get(reverse("desk:listings_list"))
+        self.assertContains(page, 'class="d-btn small primary" href="%s"'
+                            % reverse("desk:listings_review"))
+
+
 class SavingAnEventRunsItTests(DeskTestCase):
     """There is no draft to forget about any more. What you save is live,
     and it is tagged as it is created so it can reach someone."""

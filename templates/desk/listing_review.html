@@ -3,7 +3,6 @@
 <div class="d-page-top">
   <h1>{{ page_title }}</h1>
   <div class="d-page-actions">
-    <form method="post" action="{% url 'desk:listings_list' %}" class="d-inline">{% csrf_token %}<button type="submit" name="action" value="suggest_for_readers" class="d-btn">Find events with AI</button></form>
     <a class="d-btn" href="{% url 'desk:listings_list' %}">Back to events</a>
   </div>
 </div>
@@ -12,46 +11,73 @@
 {% if cards %}
 {% comment %}
 The bulk form is for accepting or rejecting a batch as it stands. Each
-card carries its own separate form, so correcting one and accepting it
-cannot be tangled up with the batch, and no form is nested in another.
+card's fields belong to that card's own form by id, set in the view, so
+correcting one and accepting it cannot be tangled up with the batch and
+no form is nested inside another.
 {% endcomment %}
 <form method="post" data-bulk-form>
   {% csrf_token %}
   {% include "desk/_bulk_bar.html" %}
+  <label class="d-review-all">
+    <input type="checkbox" data-select-all> Select all {{ page_obj|length }} on this page
+  </label>
+
   <div class="d-review">
     {% for card in cards %}
     <div class="d-card d-review-card">
       <div class="d-review-head">
-        <label class="d-review-tick">
-          <input type="checkbox" name="selected" value="{{ card.event.pk }}" aria-label="Select {{ card.event.title }}">
-        </label>
-        <div>
-          <h2>{{ card.event.title }}</h2>
+        <input type="checkbox" name="selected" value="{{ card.event.pk }}" aria-label="Select {{ card.event.title }}">
+        <div class="d-review-title">
+          {% comment %}
+          Collapsed to start: ten open cards is a page nobody reads. The
+          title opens this one. Without the script it is an ordinary link
+          to the full form, which can do everything this card can.
+          {% endcomment %}
+          <a class="d-row-link" href="{% url 'desk:listings_change' card.event.pk %}" data-expand="card-{{ card.event.pk }}">{{ card.event.title }}</a>
           <p class="d-review-meta">
             {% if card.event.found_by_ai %}<span class="d-pill warn">Found by AI</span>{% else %}<span class="d-pill neutral">Not yet in circulation</span>{% endif %}
-            added {{ card.event.created_at|date:"j M Y" }}
+            <span>{{ card.event.get_category_display }}</span>
+            <span>{{ card.event.location_area|default:"no area" }}</span>
+            <span>{% if card.event.start_date %}{{ card.event.start_date }}{% else %}no date{% endif %}</span>
+            <span>{{ card.event.price_display|default:card.event.get_price_tier_display }}</span>
           </p>
         </div>
       </div>
 
-      {% if card.sources %}
-      <p class="d-review-sources">Read from
-        {% for src in card.sources %}<a href="{{ src.url }}" target="_blank" rel="noopener">{{ src.title|default:src.url }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.
-        Check the date and the price against these before accepting.</p>
-      {% else %}
-      <p class="d-review-sources">No pages recorded for this one, so every field is worth checking.</p>
-      {% endif %}
+      <div class="d-review-panel" id="card-{{ card.event.pk }}" hidden>
+        {% if card.sources %}
+        <p class="d-review-sources">Read from
+          {% for src in card.sources %}<a href="{{ src.url }}" target="_blank" rel="noopener">{{ src.title|default:src.url }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.
+          Check the date and the price against these before accepting.</p>
+        {% else %}
+        <p class="d-review-sources">No pages recorded for this one, so every field is worth checking.</p>
+        {% endif %}
 
-      <div class="d-review-body">
-        {% for field in card.form %}
-        {% include "desk/_field.html" with field=field %}
-        {% endfor %}
-      </div>
+        <div class="d-review-body">
+          {% for field in card.form %}{% if field.name != "tags" %}
+          {% include "desk/_field.html" with field=field %}
+          {% endif %}{% endfor %}
+        </div>
 
-      <div class="d-form-actions">
-        <button type="submit" form="accept-{{ card.event.pk }}" name="accept_one" value="{{ card.event.pk }}" class="d-btn primary">Accept with my edits</button>
-        <a class="d-btn" href="{% url 'desk:listings_change' card.event.pk %}">Open the full form</a>
-        <a class="d-del" href="{% url 'desk:delete' 'listings' card.event.pk %}">Reject</a>
+        {% comment %}
+        Interests get the full width of the card and a box to search them,
+        because there are dozens and a column 240px wide turns them into a
+        list you scroll past rather than chips you scan.
+        {% endcomment %}
+        <div class="d-field d-review-tags">
+          <label class="d-label">Interests</label>
+          <div class="d-tags-picker">
+            <input type="search" data-narrow="#tags-{{ card.event.pk }} label"
+                   placeholder="Type to find an interest&hellip;" aria-label="Find an interest for {{ card.event.title }}">
+            <div class="d-check-grid" id="tags-{{ card.event.pk }}">{{ card.form.tags }}</div>
+          </div>
+        </div>
+
+        <div class="d-form-actions">
+          <button type="submit" form="accept-{{ card.event.pk }}" name="accept_one" value="{{ card.event.pk }}" class="d-btn primary">Accept with my edits</button>
+          <a class="d-btn" href="{% url 'desk:listings_change' card.event.pk %}">Open the full form</a>
+          <a class="d-del" href="{% url 'desk:delete' 'listings' card.event.pk %}">Reject</a>
+        </div>
       </div>
     </div>
     {% endfor %}
@@ -69,7 +95,7 @@ is dropped by every browser, so the button above points at these by id.
 
 {% else %}
 <div class="d-card">
-  <p style="margin:0;font-size:14px;">Nothing is waiting. Everything you have is either in circulation or archived. Press <strong>Find events with AI</strong> to go looking for more.</p>
+  <p style="margin:0;font-size:14px;">Nothing is waiting. Everything you have is either in circulation or archived. Press <strong>Find events with AI</strong> on the events page to go looking for more.</p>
 </div>
 {% endif %}
 {% endblock %}

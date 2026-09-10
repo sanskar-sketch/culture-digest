@@ -12,8 +12,8 @@
 <p class="d-page-blurb">{{ page_blurb }}</p>
 {% if waiting %}
 <div class="d-msg info" style="margin-bottom:16px;">
-  <span><strong>{{ waiting }}</strong> event{{ waiting|pluralize }} {{ waiting|pluralize:"is,are" }} waiting for you to accept or reject.
-  <a href="{% url 'desk:listings_review' %}">Review {{ waiting|pluralize:"it,them" }}</a>. Nothing there can reach a reader until you accept it.</span>
+  <span><strong>{{ waiting }}</strong> event{{ waiting|pluralize }} {{ waiting|pluralize:"is,are" }} waiting for you to accept or reject. Nothing there can reach a reader until you do.</span>
+  <a class="d-btn small primary" href="{% url 'desk:listings_review' %}">Review {{ waiting|pluralize:"it,them" }}</a>
 </div>
 {% endif %}
 {% if wanted %}
