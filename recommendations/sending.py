@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from . import ai, matching
@@ -112,7 +114,7 @@ def send_issue_for_reader(
             message=(
                 f"Skipped: only {len(matches)} strong match"
                 f"{'' if len(matches) == 1 else 'es'} "
-                f"(needs {min_recommendations}). Add more published opportunities."
+                f"(needs {min_recommendations}). " + _why_thin(reader, pool)
             ),
         )
 
@@ -155,6 +157,41 @@ def send_issue_for_reader(
                 + (f" (message id {message_id})." if message_id else "."),
         issue=issue,
     )
+
+
+def _why_thin(reader, pool=None) -> str:
+    """Why this reader has too little to send, in the words of the real cause.
+
+    "Add more events" is the right advice only sometimes. Just as often
+    everything that suits them went out recently and the cooldown is
+    holding it back, or they never told us what they like. Saying the
+    wrong one sends an editor off to fix something that isn't broken.
+    """
+    from opportunities.models import Opportunity
+    from siteconfig.models import SiteConfig
+
+    today = timezone.localdate()
+    live = Opportunity.objects.filter(status=Opportunity.Status.PUBLISHED).filter(
+        Q(end_date__isnull=True) | Q(end_date__gte=today))
+    if pool is not None:
+        live = live.filter(id__in=list(pool))
+    if not live.exists():
+        return ("Nothing is published and still on"
+                + (" among the events you ticked." if pool is not None else "."))
+
+    config = SiteConfig.load()
+    cutoff = timezone.now() - timedelta(days=config.cooldown_days)
+    on_cooldown = Recommendation.objects.filter(
+        issue__reader=reader, created_at__gte=cutoff,
+        opportunity__in=live).values("opportunity_id").distinct().count()
+    if on_cooldown >= live.count():
+        return (f"Everything that suits them went out in the last "
+                f"{config.cooldown_days} days, so the cooldown is holding it back. "
+                "Add events, or wait.")
+    if not reader.interest_tags.exists() and not reader.ai_inferred_tags.exists():
+        return "They have no interests recorded yet, so nothing can score for them."
+    return ("Nothing published is close enough on their interests, area, budget "
+            "and dates. Add events, or widen theirs.")
 
 
 def _line_for(match, reader, budget, overrides):

@@ -131,7 +131,7 @@ def _ai_row() -> dict:
     config = SiteConfig.load()
     if not config.ai_enabled:
         return {"name": "AI assistance", "ok": False,
-                "detail": "Key set, but AI is switched off in Site configuration → "
+                "detail": "Key set, but AI is switched off in Settings → "
                           "AI assistance. Everything uses the template."}
 
     where = f"Key set · model {config.resolved_ai_model}"

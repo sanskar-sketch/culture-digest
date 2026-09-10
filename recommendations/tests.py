@@ -871,7 +871,7 @@ class AIHealthReportingTests(TestCase):
         config.save()
         row = self._row()
         self.assertFalse(row["ok"])
-        self.assertIn("switched off in Site configuration", row["detail"])
+        self.assertIn("switched off in Settings", row["detail"])
 
     @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
     def test_a_successful_call_is_reported_as_working(self):

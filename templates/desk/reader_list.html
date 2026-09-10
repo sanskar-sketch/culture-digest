@@ -63,7 +63,7 @@
               <div>
                 <h3>Interests</h3>
                 <p>{% for t in reader.interest_tags.all %}<span class="d-pill accent">{{ t.name }}</span>{% empty %}<span class="own">nothing picked</span>{% endfor %}</p>
-                {% if reader.ai_inferred_tags.all %}<p>{% for t in reader.ai_inferred_tags.all %}<span class="d-pill good" title="Inferred by AI from their own words">{{ t.name }}</span>{% endfor %}</p>{% endif %}
+                {% if reader.inferred_only %}<p>{% for t in reader.inferred_only %}<span class="d-pill good" title="Inferred by AI from their own words">{{ t.name }}</span>{% endfor %}</p>{% endif %}
                 {% if reader.ai_avoid_tags.all %}<p>Avoids: {% for t in reader.ai_avoid_tags.all %}<span class="d-pill bad">{{ t.name }}</span>{% endfor %}</p>{% endif %}
                 {% if reader.ai_taste_summary %}<p title="What AI read into their own words">{{ reader.ai_taste_summary }}</p>{% endif %}
                 {% if reader.interest_categories %}<p>Follows {{ reader.interest_categories|join:", " }}</p>{% endif %}
@@ -85,6 +85,7 @@
                 <p>{{ reader.availability_labels|join:", "|default:"not said" }}</p>
                 {% if reader.other_availability %}<p class="own">“{{ reader.other_availability }}”</p>{% endif %}
                 <p style="margin-top:8px;"><a href="{% url 'desk:readers_change' reader.pk %}">Edit everything →</a></p>
+                <p><a href="{% url 'desk:reader_tags' reader.pk %}">Where each belief came from →</a></p>
               </div>
             </div>
           </td>

@@ -10,3 +10,4 @@ staticfiles/
 # Data exported during the database region migration: contains real
 # subscriber emails, unsubscribe tokens and a password hash. Never commit.
 .migration/
+*.env

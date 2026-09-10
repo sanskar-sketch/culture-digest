@@ -5,9 +5,24 @@
   <div class="d-page-actions">
     <form method="post" class="d-inline"><input type="hidden" name="action" value="preview">{% csrf_token %}<button type="submit" class="d-btn">Preview newsletter</button></form>
   <form method="post" class="d-inline" data-confirm="Really email {{ instance.email }} now?"><input type="hidden" name="action" value="send">{% csrf_token %}<button type="submit" class="d-btn danger">Send newsletter now</button></form>
+    <a class="d-btn" href="{% url 'desk:reader_tags' instance.pk %}">What we believe about them</a>
     <a class="d-btn danger" href="{% url 'desk:delete' 'readers' instance.pk %}">Delete</a>
   </div>
 </div>
+
+{% if preview %}
+{% comment %}
+Preview used to answer with a sentence. It shows the email now - built
+exactly as the send would build it, then thrown away.
+{% endcomment %}
+<div class="d-card" style="margin-bottom:14px;">
+  <p style="font-size:13px;margin:0 0 6px;"><strong>Subject:</strong> {{ preview.subject }}</p>
+  <p style="font-size:12px;color:var(--d-muted);margin:0;">What {{ instance.email }} would get right now. Nothing was sent or recorded. To change the words before sending, use <a href="{% url 'desk:send' %}?r={{ instance.pk }}">Suggest events &amp; send</a>.</p>
+</div>
+<div class="d-card" style="margin-bottom:18px;">
+  <iframe srcdoc="{{ preview.html|force_escape }}" class="d-preview-frame"></iframe>
+</div>
+{% endif %}
 
 <form method="post" class="d-form">
   {% csrf_token %}

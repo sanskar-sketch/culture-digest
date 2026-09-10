@@ -20,8 +20,8 @@ def siteconfig_form(request):
         form = SiteConfigForm(instance=config)
 
     context = {
-        "page_title": "Site configuration",
-        "breadcrumbs": [("Site configuration", None)],
+        "page_title": "Settings",
+        "breadcrumbs": [("Settings", None)],
         "form": form,
         "config": config,
         "drift": config.drift_from_defaults(),

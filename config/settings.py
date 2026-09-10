@@ -3,6 +3,7 @@ Django settings for the The Ether project.
 """
 
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -158,6 +159,15 @@ EMAIL_FROM = os.environ.get("EMAIL_FROM", "The Ether <digest@example.com>")
 # fine without it - see recommendations/ai.py.
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
+
+# A test run must never spend money or send an email. With a real .env on
+# the machine - which is how anyone checks the AI or the sending works -
+# the suite would otherwise call OpenAI for every rationale it renders and
+# hand real messages to SendGrid. Tests that mean to exercise those paths
+# mock them; nothing legitimate needs the live keys.
+if "test" in sys.argv[1:2] or os.environ.get("PYTEST_VERSION"):
+    SENDGRID_API_KEY = ""
+    OPENAI_API_KEY = ""
 
 # Per-call ceiling, and a total allowance for one newsletter send. Sends can
 # be triggered from the admin, i.e. inside a web request, and a request that

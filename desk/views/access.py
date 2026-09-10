@@ -40,10 +40,10 @@ def user_list(request):
         qs = qs.filter(is_active=(active == "1"))
 
     context = {
-        "page_title": "Users",
+        "page_title": "Editor accounts",
         "page_blurb": "Editor accounts: who can sign in, and what they're allowed to "
                       "do once they're here.",
-        "breadcrumbs": [("Users", None)],
+        "breadcrumbs": [("Editor accounts", None)],
         "page_obj": paginate(request, qs.order_by("username")),
         "result_count": qs.count(),
         "search_placeholder": "Search users…",
@@ -76,7 +76,7 @@ def user_form(request, pk=None):
 
     context = {
         "page_title": "Add user" if not instance else instance.username,
-        "breadcrumbs": [("Users", reverse("desk:users_list")),
+        "breadcrumbs": [("Editor accounts", reverse("desk:users_list")),
                         ("Add" if not instance else instance.username, None)],
         "form": form,
         "instance": instance,
@@ -103,7 +103,7 @@ def user_password(request, pk):
 
     context = {
         "page_title": f"Set password for {user.username}",
-        "breadcrumbs": [("Users", reverse("desk:users_list")),
+        "breadcrumbs": [("Editor accounts", reverse("desk:users_list")),
                         (user.username, reverse("desk:users_change", args=[user.pk])),
                         ("Password", None)],
         "form": form,

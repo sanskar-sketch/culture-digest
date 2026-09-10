@@ -10,7 +10,7 @@ from desk.permissions import staff_required
 from desk.utils import filter_options, paginate, search
 from opportunities.models import Category
 from recommendations.models import Recommendation
-from recommendations.sending import send_issue_for_reader
+from recommendations.sending import preview_issue_for_reader, send_issue_for_reader
 from readers.models import Reader
 
 BULK_ACTIONS = (
@@ -120,6 +120,8 @@ def reader_list(request):
     availability = dict(Reader.Availability.choices)
     for reader in page_obj:
         reader.completeness = _profile_completeness(reader)
+        picked = {t.pk for t in reader.interest_tags.all()}
+        reader.inferred_only = [t for t in reader.ai_inferred_tags.all() if t.pk not in picked]
         # Their own words on when: stored as values, shown as labels.
         reader.availability_labels = [availability.get(v, v) for v in (reader.availability or [])]
 
@@ -159,22 +161,33 @@ def reader_list(request):
 @staff_required
 def reader_form(request, pk):
     instance = get_object_or_404(Reader, pk=pk)
+    preview = None
     if request.method == "POST":
         action = request.POST.get("action")
-        if action in ("preview", "send"):
+        if action == "preview":
             try:
-                result = send_issue_for_reader(instance, dry_run=(action == "preview"))
-                level = messages.success if (result.sent or action == "preview") else messages.warning
+                preview = preview_issue_for_reader(instance)
+            except Exception as exc:
+                messages.error(request, f"Preview failed — {exc}")
+                return redirect("desk:readers_change", pk=pk)
+            if not preview.get("ok"):
+                messages.warning(request, preview.get("message") or "Nothing to preview.")
+                return redirect("desk:readers_change", pk=pk)
+            form = ReaderForm(instance=instance)
+        elif action == "send":
+            try:
+                result = send_issue_for_reader(instance, dry_run=False)
+                level = messages.success if result.sent else messages.warning
                 level(request, result.message)
             except Exception as exc:
                 messages.error(request, f"Send failed — {exc}")
             return redirect("desk:readers_change", pk=pk)
-
-        form = ReaderForm(request.POST, instance=instance)
-        if form.is_valid():
-            form.save()
-            messages.success(request, f"Saved {instance.email}.")
-            return redirect("desk:readers_change", pk=pk)
+        else:
+            form = ReaderForm(request.POST, instance=instance)
+            if form.is_valid():
+                form.save()
+                messages.success(request, f"Saved {instance.email}.")
+                return redirect("desk:readers_change", pk=pk)
     else:
         form = ReaderForm(instance=instance)
 
@@ -189,7 +202,8 @@ def reader_form(request, pk):
 
     context = {
         "page_title": instance.name or instance.email,
-        "breadcrumbs": [("Readers", reverse("desk:readers_list")), (instance.email, None)],
+        "breadcrumbs": [("Users", reverse("desk:readers_list")), (instance.email, None)],
+        "preview": preview,
         "form": form,
         "instance": instance,
         "completeness": _profile_completeness(instance),

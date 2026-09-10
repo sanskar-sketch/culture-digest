@@ -41,19 +41,22 @@ DELETABLE = {
         "instead": None,
     },
     "readers": {
-        "model": Reader, "label": "reader", "list_url": "desk:readers_list",
+        "model": Reader, "label": "reader", "section": "Users",
+        "list_url": "desk:readers_list",
         "name": lambda o: o.email,
         "instead": "Unticking “Is active” stops every email without erasing what "
                    "they were sent or what they told you. Delete is for an actual "
                    "erasure request.",
     },
     "templates": {
-        "model": EmailTemplate, "label": "email design", "list_url": "desk:templates_list",
+        "model": EmailTemplate, "label": "email design", "section": "Email designs",
+        "list_url": "desk:templates_list",
         "name": lambda o: o.name,
         "instead": None,
     },
     "users": {
-        "model": User, "label": "user", "list_url": "desk:users_list",
+        "model": User, "label": "user", "section": "Editor accounts",
+        "list_url": "desk:users_list",
         "name": lambda o: o.username, "superuser_only": True,
         "instead": "Unticking “Active” blocks sign-in without deleting the account "
                    "or anything they made.",
@@ -138,7 +141,8 @@ def _confirm_page(request, kind, spec, objects, selected_ids=None):
     n = len(objects)
     return render(request, "desk/confirm_delete.html", {
         "page_title": f"Delete {_plural(spec, n)}?",
-        "breadcrumbs": [(spec["label"].title() + "s", reverse(spec["list_url"])),
+        "breadcrumbs": [(spec.get("section") or spec["label"].title() + "s",
+                         reverse(spec["list_url"])),
                         ("Delete", None)],
         "object_name": names[0] if n == 1 else f"{n} {_plural(spec, n)}",
         "object_names": names if n > 1 else [],

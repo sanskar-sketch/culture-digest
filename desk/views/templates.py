@@ -47,7 +47,7 @@ def template_from_builtin(request, kind):
         html_body=html, text_body=text,
         notes="Started from the built-in version. Edit freely - the original is untouched.")
     messages.success(request, "Copied the built-in version. Edit it below, then select it "
-                              "in Site configuration to start using it.")
+                              "in Settings to start using it.")
     return redirect("desk:templates_change", pk=template.pk)
 
 

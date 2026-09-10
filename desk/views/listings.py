@@ -146,6 +146,8 @@ def listing_list(request):
         qs = qs.filter(found_by_ai=False)
 
     if request.method == "POST":
+        if request.POST.get("load_sample_catalogue") is not None:
+            return _load_sample_catalogue(request)  # its button is on this page
         action = request.POST.get("action")
         if action == "suggest_for_readers":
             return _suggest_for_readers(request)  # acts on readers, not a selection
@@ -242,7 +244,8 @@ def _suggest_classification(request, queryset):
     from recommendations import ai
 
     if not ai.is_enabled():
-        messages.warning(request, "AI is not configured - set OPENAI_API_KEY to enable this.")
+        messages.warning(request, "AI is not configured, or event classification is "
+                                  "switched off in Settings → AI assistance.")
         return
     for opportunity in queryset[:10]:
         suggestion = ai.classify_opportunity(opportunity)
@@ -361,6 +364,9 @@ def _fill_with_ai(request):
     row = rows[0]
     from opportunities.research import _choice, _date, _dial
 
+    urls = [str(s.get("url", "")) for s in row.get("sources") or []
+            if isinstance(s, dict) and str(s.get("url", "")).startswith("http")]
+
     initial = {
         "title": row.get("title") or what,
         "description": row.get("description", ""),
@@ -375,11 +381,15 @@ def _fill_with_ai(request):
         "mainstream_to_unusual": _dial(row.get("mainstream_to_unusual")),
         "intimate_to_large_scale": _dial(row.get("intimate_to_large_scale")),
         "tags": list(Tag.objects.filter(slug__in=row.get("tags") or []).values_list("pk", flat=True)),
-        "editorial_note": "Filled in by AI from: " + "; ".join(
-            s.get("url", "") for s in row.get("sources") or []),
+        "editorial_note": ("Filled in by AI from: " + "; ".join(urls)) if urls else
+                          "Filled in by AI, which did not name the pages it read - "
+                          "check every field before saving.",
     }
-    messages.success(request, f"Filled in from {len(row.get('sources') or [])} page(s) - "
-                              "check the date and price, then save. Nothing is saved yet.")
+    messages.success(request, (
+        f"Filled in from {len(urls)} page(s) - check the date and price, then save. "
+        "Nothing is saved yet." if urls else
+        "Filled it in, but AI didn't say which pages it read - check every field "
+        "against the venue before saving. Nothing is saved yet."))
     return initial
 
 

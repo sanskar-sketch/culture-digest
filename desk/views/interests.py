@@ -10,7 +10,7 @@ from opportunities import research
 from opportunities.models import Category, Opportunity, Tag
 
 BULK_ACTIONS = (
-    {"value": "research", "label": "Find listings with AI",
+    {"value": "research", "label": "Find events with AI",
      "title": "Search the web for real events matching the selected interests. "
               "Everything found arrives as a draft event with its sources"},
 )
@@ -100,8 +100,8 @@ def _research(request):
     if not tags:
         messages.warning(request, "Nothing selected.")
     elif not ai.is_enabled("classify_opportunities"):
-        messages.warning(request, "AI is not configured, or listing research is "
-                                  "switched off in Site configuration → AI assistance.")
+        messages.warning(request, "AI is not configured, or event research is "
+                                  "switched off in Settings → AI assistance.")
     else:
         area = (request.POST.get("area") or "").strip()
         started = [tag.name for tag in tags if research.start(tag, area=area)]

@@ -2,27 +2,31 @@
 {% block content %}
 <div class="d-page-top"><h1>Editorial desk</h1></div>
 
+{% comment %}
+Each figure goes to the screen it counts. A number you can't follow is a
+dead end, and three of these screens had no link anywhere else.
+{% endcomment %}
 <div class="d-grid">
-  <div class="d-stat accent">
+  <a class="d-stat accent" href="{% url 'desk:listings_list' %}?status=published&amp;live=live">
     <div class="d-label">Live catalogue</div>
     <div class="d-value">{{ stats.opportunities.live }}</div>
     <div class="d-sub">{{ stats.opportunities.published }} published · {{ stats.opportunities.draft }} draft</div>
-  </div>
-  <div class="d-stat">
+  </a>
+  <a class="d-stat" href="{% url 'desk:readers_list' %}">
     <div class="d-label">Readers</div>
     <div class="d-value">{{ stats.readers.active }}</div>
     <div class="d-sub">{{ stats.readers.new_this_week }} new this week · {{ stats.readers.open_to_surprise }} up for a wildcard</div>
-  </div>
-  <div class="d-stat">
+  </a>
+  <a class="d-stat" href="{% url 'desk:recommendations_list' %}">
     <div class="d-label">Recommendations</div>
     <div class="d-value">{{ stats.feedback.total }}</div>
     <div class="d-sub">across {{ stats.issues_total }} issue{{ stats.issues_total|pluralize }}{% if stats.issues_unsent %} · {{ stats.issues_unsent }} unsent{% endif %}</div>
-  </div>
-  <div class="d-stat">
+  </a>
+  <a class="d-stat" href="{% url 'desk:issues_list' %}">
     <div class="d-label">Feedback rate</div>
     <div class="d-value">{{ stats.feedback.response_rate }}%</div>
     <div class="d-sub">{{ stats.feedback.responded }} of {{ stats.feedback.total }} replied to</div>
-  </div>
+  </a>
 </div>
 
 {% if problems %}
