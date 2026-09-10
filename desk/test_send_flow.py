@@ -69,6 +69,20 @@ class SendFlowTests(TestCase):
         # the widest-reaching events come first, pre-ticked
         self.assertTrue(page.context["rows"][0]["preticked"])
 
+    def test_arriving_from_an_event_starts_with_that_event_ticked(self):
+        """Coming from "good for 2 users" on the Events page, the event you
+        came from is the one already ticked."""
+        page = self.client.get(self.url + f"&e={self.supper.pk}")
+        self.assertIn(self.supper.pk, page.context["chosen"])
+
+    def test_an_event_the_matching_will_not_offer_says_so_rather_than_vanishing(self):
+        draft = event("Not published yet", tags=[self.jazz],
+                      status=Opportunity.Status.DRAFT)
+        page = self.client.get(self.url + f"&e={draft.pk}", follow=True)
+        self.assertNotIn(draft.pk, page.context["chosen"])
+        self.assertContains(page, "Not published yet")
+        self.assertContains(page, "isn&#x27;t in this list")
+
     def test_preview_builds_one_users_email_from_the_ticked_events_only(self):
         response = self.client.post(reverse("desk:send"), {
             "r": f"{self.ada.pk},{self.bo.pk}", "action": "preview",

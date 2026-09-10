@@ -50,11 +50,42 @@
               {% else %}<span style="color:var(--d-bad)">untagged</span>{% endif %}</a>
             {% endwith %}
           </td>
-          <td>{% if opp.good_for %}<a href="{% url 'desk:readers_list' %}?{% for t in opp.tags.all %}tag={{ t.slug }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">{{ opp.good_for }} user{{ opp.good_for|pluralize }}</a>{% else %}<span style="color:var(--d-muted)">nobody yet</span>{% endif %}</td>
+          {% comment %}
+          The count opens the list of exactly those users under the row.
+          Without the script it is an ordinary link to the Users page
+          filtered to the same interests, which is the same people.
+          {% endcomment %}
+          <td>{% if opp.good_for %}<a class="d-row-link" href="{{ opp.suits_url }}" data-expand="suits-{{ opp.pk }}">{{ opp.good_for }} user{{ opp.good_for|pluralize }}</a>{% else %}<span style="color:var(--d-muted)">nobody yet</span>{% endif %}</td>
           <td>{{ opp.recs_count|default:"—" }}</td>
           <td>{{ opp.end_date|default:"—" }}</td>
           <td class="d-col-act"><a class="d-del" href="{% url 'desk:delete' 'listings' opp.pk %}" aria-label="Delete {{ opp.title }}">Delete</a></td>
         </tr>
+        {% if opp.good_for %}
+        <tr class="d-detail" id="suits-{{ opp.pk }}" hidden>
+          <td colspan="12">
+            {% comment %}Pinned to the left of the scroll, so scrolling the wide table sideways to reach the count doesn't leave the names off-screen.{% endcomment %}
+            <div class="d-suits-panel" data-fit>
+            <h3>“{{ opp.title }}” is good for {% if opp.good_for == 1 %}one user{% else %}these {{ opp.good_for }} users{% endif %}</h3>
+            <ul class="d-suits">
+              {% for s in opp.suits %}
+              <li>
+                <a href="{% url 'desk:readers_change' s.reader.pk %}">{{ s.reader.email }}</a>
+                {% if s.reader.name %}<span class="who">{{ s.reader.name }}</span>{% endif %}
+                {% if s.reader.location %}<span class="who">· {{ s.reader.location }}</span>{% endif %}
+                {% for n in s.picked %}<span class="d-pill accent" title="They picked this interest">{{ n }}</span>{% endfor %}
+                {% for n in s.inferred %}<span class="d-pill good" title="Read from their own words by AI">{{ n }}</span>{% endfor %}
+              </li>
+              {% endfor %}
+            </ul>
+            <p class="d-suits-foot">
+              {% if opp.suits_extra %}and {{ opp.suits_extra }} more.{% endif %}
+              {% if opp.send_url and opp.state_key == "live" %}<a class="d-btn small primary" href="{{ opp.send_url }}">Suggest events &amp; send to them</a>{% elif opp.state_key != "live" %}Publish it before it can be sent to them.{% endif %}
+              <a class="d-btn small" href="{{ opp.suits_url }}">Open in Users</a>
+            </p>
+            </div>
+          </td>
+        </tr>
+        {% endif %}
         {% empty %}
         <tr><td colspan="12" class="d-empty">No events match. <a href="{{ request.path }}">Clear filters</a>, <a href="{{ add_url }}">add one</a>, or press <em>Suggest events for my readers</em>.</td></tr>
         {% endfor %}

@@ -214,3 +214,48 @@ class EventScreenTests(TestCase):
         self.assertContains(page, "1 user")
         self.assertContains(page, "tag=jazz-nights")
         self.assertContains(page, "nobody yet")  # an untagged event
+
+    def test_the_count_opens_exactly_those_users_on_the_page(self):
+        """The number and the names have to be the same people: an inferred
+        interest counts like a picked one, and someone unsubscribed counts
+        as neither."""
+        self.gig.tags.add(self.jazz)
+        bob = Reader.objects.create(email="bob@example.com", name="Bob")
+        bob.ai_inferred_tags.add(self.jazz)
+        gone = Reader.objects.create(email="gone@example.com", is_active=False)
+        gone.interest_tags.add(self.jazz)
+
+        page = self.client.get(reverse("desk:listings_list"))
+        gig = [o for o in page.context["page_obj"] if o.pk == self.gig.pk][0]
+        self.assertEqual(gig.good_for, 2)
+        self.assertEqual([row["reader"].email for row in gig.suits],
+                         ["ada@example.com", "bob@example.com"])
+        self.assertEqual(gig.suits[0]["picked"], ["Jazz nights"])
+        self.assertEqual(gig.suits[1]["inferred"], ["Jazz nights"])
+        self.assertEqual(gig.suits_extra, 0)
+
+        self.assertContains(page, "2 users")
+        self.assertContains(page, f'id="suits-{self.gig.pk}"')
+        self.assertContains(page, "bob@example.com")
+        self.assertNotContains(page, "gone@example.com")
+        self.assertIn(f"r={self.ada.pk},{bob.pk}", gig.send_url)
+
+    def test_naming_them_does_not_cost_a_query_per_event(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        def queries():
+            cache.clear()
+            with CaptureQueriesContext(connection) as ctx:
+                self.assertEqual(
+                    self.client.get(reverse("desk:listings_list")).status_code, 200)
+            return len(ctx.captured_queries)
+
+        self.gig.tags.add(self.jazz)
+        for i in range(3):
+            event(f"More {i}").tags.add(self.jazz)
+        queries()
+        few = queries()
+        for i in range(12):
+            event(f"Even more {i}").tags.add(self.jazz)
+        self.assertEqual(few, queries())

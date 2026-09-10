@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.contrib import messages
 from django.core.management import call_command
 from django.db.models import Count, Q
@@ -26,6 +28,76 @@ BULK_ACTIONS = (
 )
 
 
+# How many of the users an event suits are named under its row before the
+# rest become a link.
+SUITS_SHOWN = 20
+# Past this many, "send to all of them" stops being a one-click decision
+# anyone should make from a table, so only the Users list is offered.
+SUITS_SENDABLE = 100
+
+
+def _attach_audience(page_obj):
+    """Who each event on this page is good for, by name.
+
+    "Good for 4 users" and the four users named under it have to be the
+    same four, so both come from one rule: an active reader who picked, or
+    was read as having, any of the event's interests. It is the rule the
+    Users list filters by and the rule the matching scores on, so the
+    number, the names and the page behind the link all agree.
+
+    Three queries for the whole page rather than one per row: the two
+    interest tables, for the tags on this page, then the readers they name.
+    """
+    events = list(page_obj)
+    for event in events:
+        event.suits, event.good_for, event.suits_extra = [], 0, 0
+        event.suits_url, event.send_url = None, None
+
+    tag_ids = {tag.pk for event in events for tag in event.tags.all()}
+    if not tag_ids:
+        return
+
+    readers_by_tag = defaultdict(set)
+    picked = set()
+    for through, is_picked in ((Reader.interest_tags.through, True),
+                               (Reader.ai_inferred_tags.through, False)):
+        rows = through.objects.filter(tag_id__in=tag_ids, reader__is_active=True)
+        for tag_id, reader_id in rows.values_list("tag_id", "reader_id"):
+            readers_by_tag[tag_id].add(reader_id)
+            if is_picked:
+                picked.add((reader_id, tag_id))
+
+    named = {pk for ids in readers_by_tag.values() for pk in ids}
+    readers = list(Reader.objects.filter(pk__in=named).order_by("email"))
+
+    for event in events:
+        tags = list(event.tags.all())
+        if not tags:
+            continue
+        theirs = set().union(*(readers_by_tag[t.pk] for t in tags))
+        event.good_for = len(theirs)
+        if not theirs:
+            continue
+        event.suits_url = "{}?{}".format(
+            reverse("desk:readers_list"), "&".join(f"tag={t.slug}" for t in tags))
+        for reader in readers:
+            if reader.pk not in theirs:
+                continue
+            if len(event.suits) == SUITS_SHOWN:
+                break
+            event.suits.append({
+                "reader": reader,
+                "picked": [t.name for t in tags if (reader.pk, t.pk) in picked],
+                "inferred": [t.name for t in tags
+                             if reader.pk in readers_by_tag[t.pk]
+                             and (reader.pk, t.pk) not in picked],
+            })
+        event.suits_extra = event.good_for - len(event.suits)
+        if event.good_for <= SUITS_SENDABLE:
+            ids = ",".join(str(r.pk) for r in readers if r.pk in theirs)
+            event.send_url = f"{reverse('desk:send')}?r={ids}&e={event.pk}"
+
+
 def _live_state(opp, today):
     if opp.status == Opportunity.Status.PUBLISHED:
         if opp.end_date and opp.end_date < today:
@@ -41,9 +113,6 @@ def listing_list(request):
     today = timezone.localdate()
     qs = Opportunity.objects.annotate(
         recs_count=Count("recommendations", distinct=True),
-        # Readers who picked any of its interests: who it is good for.
-        good_for=Count("tags__interested_readers", distinct=True,
-                       filter=Q(tags__interested_readers__is_active=True)),
     ).prefetch_related("tags")
     qs = search(qs, request, ["title", "description", "editorial_note", "location_area",
                               "location_name", "tags__name"])
@@ -100,6 +169,7 @@ def listing_list(request):
     page_obj = paginate(request, qs.order_by("-created_at"))
     for opp in page_obj:
         opp.state_key, opp.state_label = _live_state(opp, today)
+    _attach_audience(page_obj)
 
     tags_in_use = Tag.objects.filter(opportunities__isnull=False).distinct().order_by("name")
     filter_groups = [

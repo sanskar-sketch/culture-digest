@@ -405,6 +405,23 @@
     });
   }
 
+  // A panel opened under a wide table is as wide as the table, and the
+  // link that opens it can be far to the right - so its contents would
+  // sit off to the left, out of sight. The stylesheet holds such a panel
+  // against the left edge of what you can see; this keeps it no wider
+  // than that, so the whole of it is in view.
+  function fitToView(scope) {
+    (scope || document).querySelectorAll("[data-fit]").forEach(function (el) {
+      var scroll = el.closest(".d-table-scroll");
+      var cell = el.closest("td");
+      if (!scroll || !cell) return;
+      var pad = window.getComputedStyle(cell);
+      var room = scroll.clientWidth
+        - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+      el.style.width = Math.max(240, room) + "px";
+    });
+  }
+
   // A link that opens a panel instead of leaving the page. Without this
   // script the link still works - it goes to the full page - so the
   // panel is a shortcut, never the only way.
@@ -420,8 +437,10 @@
         panel.hidden = !open;
         link.setAttribute("aria-expanded", open ? "true" : "false");
         link.closest("tr").classList.toggle("is-open", open);
+        if (open) fitToView(panel);
       });
     });
+    window.addEventListener("resize", function () { fitToView(); });
   }
 
   // A search box over a set of chips: type, and the ones that don't match

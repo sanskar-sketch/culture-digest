@@ -21,6 +21,7 @@ from django.urls import reverse
 
 from desk.permissions import staff_required
 from opportunities import research
+from opportunities.models import Opportunity
 from readers.models import Reader
 from recommendations import matching
 from recommendations.sending import preview_issue_for_reader, send_issue_for_reader
@@ -97,6 +98,25 @@ def send(request):
         return _act(request, readers, raw)
 
     rows = suggestions(readers)
+    chosen = {r["event"].pk for r in rows if r["preticked"]}
+
+    # Arriving from one event on the Events page - "send this to the users
+    # it's good for" - starts with that event ticked. It is only offered
+    # here if the matching would pick it for someone: an event is good for
+    # a user by interest, but it is sent to them only if it is published
+    # and suits where they are, what they'll pay and when. Saying so beats
+    # a silently missing row.
+    asked = set(_ids(request.GET.get("e")))
+    if asked:
+        offered = {r["event"].pk for r in rows}
+        chosen |= asked & offered
+        missing = list(Opportunity.objects.filter(pk__in=asked - offered)
+                       .values_list("title", flat=True))
+        if missing:
+            messages.info(request, "“" + "”, “".join(missing) + "” isn't in this list: only "
+                          "published events that suit a user on area, budget and dates are "
+                          "offered. Their other picks are below.")
+
     return render(request, "desk/send.html", {
         "page_title": f"Send to {len(readers)} user{'' if len(readers) == 1 else 's'}",
         "breadcrumbs": [("Users", reverse("desk:readers_list")), ("Send", None)],
@@ -106,7 +126,7 @@ def send(request):
         "per_send": SiteConfig.load().recommendations_per_send,
         "preview": None,
         "preview_reader": None,
-        "chosen": {r["event"].pk for r in rows if r["preticked"]},
+        "chosen": chosen,
         "edited_readers": [r for r in readers if _edits(request).get(str(r.pk))],
     })
 
