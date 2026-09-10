@@ -616,3 +616,16 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
 .d-suits .who { color: var(--d-muted); margin-left: 5px; }
 .d-suits .d-pill { margin-left: 5px; display: inline-block; }
 .d-suits-foot { margin: 12px 0 0; font-size: 13px; color: var(--d-muted); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* The review queue: one card per event AI found, editable in place. */
+.d-review { display: grid; gap: 14px; }
+.d-review-card { padding: 16px 18px; }
+.d-review-head { display: flex; align-items: flex-start; gap: 12px; }
+.d-review-head h2 { margin: 0 0 3px; font-size: 15px; }
+.d-review-tick { padding-top: 3px; }
+.d-review-meta { margin: 0; font-size: 12.5px; color: var(--d-muted); display: flex; align-items: center; gap: 8px; }
+.d-review-sources { margin: 10px 0 0; font-size: 12.5px; color: var(--d-muted); }
+.d-review-sources a { color: var(--d-accent-ink); }
+.d-review-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 20px; margin-top: 12px; }
+.d-review-body .d-field { margin-bottom: 10px; }
+.d-review-card .d-form-actions { margin-top: 6px; }

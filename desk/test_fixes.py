@@ -227,11 +227,10 @@ class WordingTests(DeskTestCase):
         self.assertContains(page, "Find events with AI")
         self.assertNotContains(page, "Find listings with AI")
 
-    def test_the_classify_guard_points_at_settings_not_an_env_var(self):
+    def test_an_ai_guard_points_at_settings_not_an_env_var(self):
         opp = event("Gig")
         with mock.patch("recommendations.ai.is_enabled", return_value=False):
-            response = self.client.post(reverse("desk:listings_list"),
-                                        {"action": "suggest", "selected": [opp.pk]},
+            response = self.client.post(reverse("desk:listings_who", args=[opp.pk]),
                                         follow=True)
         self.assertContains(response, "Settings → AI assistance")
         self.assertNotContains(response, "OPENAI_API_KEY")
@@ -380,39 +379,6 @@ class TheInterestYouPickedNarrowsTheSendTests(DeskTestCase):
         self.assertEqual(page.context["tags_raw"], "comedy-nights")
 
 
-class TagWithAIAppliesItTests(DeskTestCase):
-    """It used to print a classification you then had to retype by hand."""
-
-    def test_the_interests_are_put_on_the_event(self):
-        jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
-        gig = event("Late set")
-        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
-             mock.patch("recommendations.ai.classify_opportunity", return_value={
-                 "category": "music", "tags": ["jazz-nights", "invented"],
-                 "price_tier": "budget", "mainstream_to_unusual": 3,
-                 "intimate_to_large_scale": 2, "reasoning": ""}):
-            response = self.client.post(reverse("desk:listings_list"),
-                                        {"action": "suggest", "selected": [gig.pk]},
-                                        follow=True)
-        self.assertEqual(list(gig.tags.all()), [jazz])
-        self.assertContains(response, "tagged Jazz nights")
-
-    def test_the_fields_that_change_the_copy_stay_a_suggestion(self):
-        gig = event("Late set", price_tier="free")
-        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
-             mock.patch("recommendations.ai.classify_opportunity", return_value={
-                 "category": "food", "tags": [], "price_tier": "splurge",
-                 "mainstream_to_unusual": 5, "intimate_to_large_scale": 1,
-                 "reasoning": ""}):
-            response = self.client.post(reverse("desk:listings_list"),
-                                        {"action": "suggest", "selected": [gig.pk]},
-                                        follow=True)
-        gig.refresh_from_db()
-        self.assertEqual(gig.price_tier, "free")
-        self.assertEqual(gig.category, "music")
-        self.assertContains(response, "Also suggested")
-
-
 class OneNameForOneEngineTests(DeskTestCase):
     def test_research_is_called_the_same_thing_wherever_it_is_pressed(self):
         reader = Reader.objects.create(email="ada@example.com")
@@ -437,6 +403,162 @@ class OneExplanationForOneCauseTests(DeskTestCase):
         self.assertFalse(result["ok"])
         self.assertIn("Nothing is published", result["message"])
         self.assertNotIn("Add more published listings", result["message"])
+
+
+class ReviewWhatAIFoundTests(DeskTestCase):
+    """AI research used to drop drafts into the catalogue and leave you to
+    notice. Now everything it finds waits for a person to accept, reject,
+    or correct first."""
+
+    def setUp(self):
+        super().setUp()
+        self.jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        self.found = event("Trio at the Vortex", status=Opportunity.Status.DRAFT,
+                           found_by_ai=True,
+                           sources=[{"title": "The venue", "url": "https://vortex.example"}])
+        self.found.tags.add(self.jazz)
+
+    def test_the_queue_shows_what_is_waiting_with_its_sources(self):
+        page = self.client.get(reverse("desk:listings_review"))
+        self.assertContains(page, "Trio at the Vortex")
+        self.assertContains(page, "https://vortex.example")
+        self.assertContains(page, "Found by AI")
+
+    def test_the_events_page_says_how_many_are_waiting(self):
+        page = self.client.get(reverse("desk:listings_list"))
+        self.assertContains(page, "waiting for you")
+        self.assertContains(page, reverse("desk:listings_review"))
+
+    def test_accepting_one_keeps_the_edits_and_puts_it_live(self):
+        response = self.client.post(reverse("desk:listings_review"), {
+            "accept_one": self.found.pk,
+            f"{self.found.pk}-title": "Trio at the Vortex, corrected",
+            f"{self.found.pk}-category": "music",
+            f"{self.found.pk}-description": "A trio, downstairs.",
+            f"{self.found.pk}-price_tier": "budget",
+            f"{self.found.pk}-location_area": "Manchester",
+            f"{self.found.pk}-booking_url": "https://vortex.example/book",
+            f"{self.found.pk}-tags": [self.jazz.pk],
+            f"{self.found.pk}-start_date": "", f"{self.found.pk}-end_date": "",
+            f"{self.found.pk}-price_display": "", f"{self.found.pk}-location_name": "",
+        }, follow=True)
+        self.found.refresh_from_db()
+        self.assertEqual(self.found.status, Opportunity.Status.PUBLISHED)
+        self.assertEqual(self.found.title, "Trio at the Vortex, corrected")
+        self.assertEqual(self.found.location_area, "Manchester")
+        self.assertContains(response, "accepted and live")
+
+    def test_accepting_a_batch_takes_them_as_they_are(self):
+        second = event("Another one", status=Opportunity.Status.DRAFT)
+        response = self.client.post(reverse("desk:listings_review"),
+                                    {"action": "accept",
+                                     "selected": [self.found.pk, second.pk]}, follow=True)
+        for e in (self.found, second):
+            e.refresh_from_db()
+            self.assertEqual(e.status, Opportunity.Status.PUBLISHED)
+        self.assertContains(response, "2 events accepted")
+
+    def test_rejecting_deletes_it(self):
+        self.client.post(reverse("desk:listings_review"),
+                         {"action": "reject", "selected": [self.found.pk]}, follow=True)
+        self.assertFalse(Opportunity.objects.filter(pk=self.found.pk).exists())
+
+    def test_a_reject_cannot_touch_something_already_live(self):
+        live = event("Already running")
+        self.client.post(reverse("desk:listings_review"),
+                         {"action": "reject", "selected": [live.pk]}, follow=True)
+        self.assertTrue(Opportunity.objects.filter(pk=live.pk).exists())
+
+    def test_nothing_waiting_says_so(self):
+        self.found.delete()
+        self.assertContains(self.client.get(reverse("desk:listings_review")),
+                            "Nothing is waiting")
+
+    def test_an_accepted_event_with_no_interests_is_flagged(self):
+        bare = event("Untagged", status=Opportunity.Status.DRAFT)
+        response = self.client.post(reverse("desk:listings_review"), {
+            "accept_one": bare.pk,
+            f"{bare.pk}-title": "Untagged", f"{bare.pk}-category": "music",
+            f"{bare.pk}-description": "x", f"{bare.pk}-price_tier": "budget",
+            f"{bare.pk}-location_area": "London",
+            f"{bare.pk}-booking_url": "https://example.com/x",
+            f"{bare.pk}-start_date": "", f"{bare.pk}-end_date": "",
+            f"{bare.pk}-price_display": "", f"{bare.pk}-location_name": "",
+        }, follow=True)
+        self.assertContains(response, "can&#x27;t reach anyone yet")
+
+
+class SavingAnEventRunsItTests(DeskTestCase):
+    """There is no draft to forget about any more. What you save is live,
+    and it is tagged as it is created so it can reach someone."""
+
+    def test_the_form_has_no_status_field(self):
+        page = self.client.get(reverse("desk:listings_add"))
+        self.assertNotContains(page, 'name="status"')
+
+    def test_a_saved_event_is_in_circulation(self):
+        data = {"title": "Late set", "slug": "", "category": "music",
+                "description": "x", "editorial_note": "", "price_tier": "budget",
+                "price_display": "", "location_name": "", "location_area": "London",
+                "booking_url": "https://example.com/late", "start_date": "", "end_date": "",
+                "critic_rating": "", "critic_rating_source": "", "critic_quote": "",
+                "mainstream_to_unusual": "3", "intimate_to_large_scale": "2"}
+        with mock.patch("recommendations.ai.is_enabled", return_value=False):
+            self.client.post(reverse("desk:listings_add"), data, follow=True)
+        made = Opportunity.objects.get(title="Late set")
+        self.assertEqual(made.status, Opportunity.Status.PUBLISHED)
+
+    def test_editing_a_live_event_does_not_re_publish_an_archived_one(self):
+        gone = event("Retired", status=Opportunity.Status.ARCHIVED)
+        data = {"title": "Retired", "slug": gone.slug, "category": "music",
+                "description": "x", "editorial_note": "", "price_tier": "budget",
+                "price_display": "", "location_name": "", "location_area": "London",
+                "booking_url": "https://example.com/r", "start_date": "", "end_date": "",
+                "critic_rating": "", "critic_rating_source": "", "critic_quote": "",
+                "mainstream_to_unusual": "3", "intimate_to_large_scale": "2"}
+        self.client.post(reverse("desk:listings_change", args=[gone.pk]), data, follow=True)
+        gone.refresh_from_db()
+        self.assertEqual(gone.status, Opportunity.Status.ARCHIVED)
+
+
+class OnlyArchiveSurvivesTests(DeskTestCase):
+    """Publish, Back to draft and Tag with AI went. Archive stayed, because
+    an ended event has to go somewhere and retiring keeps the feedback the
+    matching learns from."""
+
+    def test_the_bulk_bar_offers_archive_and_put_back_only(self):
+        event("Something")
+        page = self.client.get(reverse("desk:listings_list"))
+        self.assertContains(page, 'value="archive"')
+        self.assertContains(page, 'value="restore"')
+        for gone in ('value="publish"', 'value="back_to_draft"', 'value="suggest"'):
+            self.assertNotContains(page, gone)
+
+    def test_archive_retires_and_put_back_returns(self):
+        gig = event("Gig")
+        self.client.post(reverse("desk:listings_list"),
+                         {"action": "archive", "selected": [gig.pk]}, follow=True)
+        gig.refresh_from_db()
+        self.assertEqual(gig.status, Opportunity.Status.ARCHIVED)
+        self.client.post(reverse("desk:listings_list"),
+                         {"action": "restore", "selected": [gig.pk]}, follow=True)
+        gig.refresh_from_db()
+        self.assertEqual(gig.status, Opportunity.Status.PUBLISHED)
+
+    def test_archiving_keeps_what_readers_said(self):
+        gig = event("Gig")
+        reader = Reader.objects.create(email="ada@example.com")
+        issue = NewsletterIssue.objects.create(reader=reader)
+        Recommendation.objects.create(issue=issue, opportunity=gig, rationale="x", score=1)
+        self.client.post(reverse("desk:listings_list"),
+                         {"action": "archive", "selected": [gig.pk]}, follow=True)
+        self.assertEqual(Recommendation.objects.filter(opportunity=gig).count(), 1)
+
+    def test_an_ended_event_still_archives_itself(self):
+        gone = event("Over", end_date=timezone.localdate() - timedelta(days=1))
+        Opportunity.archive_ended()
+        gone.refresh_from_db()
+        self.assertEqual(gone.status, Opportunity.Status.ARCHIVED)
 
 
 class TheSuiteNeverSpendsMoneyTests(TestCase):

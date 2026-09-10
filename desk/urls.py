@@ -19,6 +19,7 @@ urlpatterns = [
     # Events. The URL *names* keep their old "listings" prefix so nothing
     # that links to them has to change; only the path and the wording do.
     path("events/", listings.listing_list, name="listings_list"),
+    path("events/review/", listings.listing_review, name="listings_review"),
     path("events/add/", listings.listing_form, name="listings_add"),
     path("events/<int:pk>/", listings.listing_form, name="listings_change"),
     path("events/<int:pk>/who/", listings.listing_suggest_audience, name="listings_who"),

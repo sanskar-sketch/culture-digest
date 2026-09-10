@@ -141,9 +141,14 @@ class ListingWorkflowTests(LoggedInTestCase):
         self.assertEqual(obj.created_by, self.user)
         self.assertIn(tag, obj.tags.all())
 
-    def test_bulk_publish(self):
-        opp = opportunity(status=Opportunity.Status.DRAFT)
-        self.client.post(reverse("desk:listings_list"), {"action": "publish", "selected": [opp.pk]})
+    def test_bulk_archive_and_put_back(self):
+        opp = opportunity()
+        self.client.post(reverse("desk:listings_list"),
+                         {"action": "archive", "selected": [opp.pk]})
+        opp.refresh_from_db()
+        self.assertEqual(opp.status, Opportunity.Status.ARCHIVED)
+        self.client.post(reverse("desk:listings_list"),
+                         {"action": "restore", "selected": [opp.pk]})
         opp.refresh_from_db()
         self.assertEqual(opp.status, Opportunity.Status.PUBLISHED)
 

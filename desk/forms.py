@@ -59,7 +59,7 @@ class OpportunityForm(FriendlyChoices, forms.ModelForm):
     class Meta:
         model = Opportunity
         fields = (
-            "title", "slug", "category", "status", "tags",
+            "title", "slug", "category", "tags",
             "description", "editorial_note",
             "price_tier", "price_display", "location_name", "location_area",
             "is_online", "booking_url", "start_date", "end_date",
@@ -79,8 +79,37 @@ class OpportunityForm(FriendlyChoices, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["tags"].queryset = Tag.objects.all()
-        if not self.instance.pk:
-            self.fields["status"].initial = Opportunity.Status.DRAFT
+
+
+class EventReviewForm(FriendlyChoices, forms.ModelForm):
+    """What AI found, laid out to be corrected before you accept it.
+
+    Fewer fields than the full form on purpose: these are the ones AI gets
+    wrong, and a review you have to scroll is a review nobody does.
+    """
+
+    EMPTY_LABELS = {
+        "category": "Choose a category",
+        "price_tier": "Choose a price tier",
+    }
+
+    class Meta:
+        model = Opportunity
+        fields = ("title", "category", "tags", "description", "price_tier",
+                  "price_display", "location_name", "location_area",
+                  "booking_url", "start_date", "end_date")
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "tags": forms.CheckboxSelectMultiple,
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["tags"].queryset = Tag.objects.all()
+        for field in self.fields.values():
+            field.required = field.required and True
 
 
 class TagForm(FriendlyChoices, forms.ModelForm):

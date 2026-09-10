@@ -224,7 +224,7 @@ class Command(BaseCommand):
         ))
         if status == Opportunity.Status.DRAFT:
             self.stdout.write(
-                "They are drafts, so nothing will be sent. Review them in the admin, "
-                "replace the placeholder booking links, then use the 'Publish selected' "
-                "action."
+                "Nothing will be sent from them. They are waiting for you under "
+                "Events, Waiting for you: correct the placeholder booking links, "
+                "then accept the ones you want."
             )

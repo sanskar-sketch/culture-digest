@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 
-from desk.forms import OpportunityForm
+from desk.forms import EventReviewForm, OpportunityForm
 from desk.permissions import staff_required
 from desk.utils import filter_options, paginate, search
 from opportunities import research
@@ -15,15 +15,11 @@ from opportunities.models import Category, Opportunity, Tag
 from readers.models import Reader
 
 BULK_ACTIONS = (
-    {"value": "publish", "label": "Publish",
-     "title": "Make the selected events visible to readers and eligible for matching"},
     {"value": "archive", "label": "Archive",
-     "title": "Take the selected events out of matching, keeping the record"},
-    {"value": "back_to_draft", "label": "Back to draft",
-     "title": "Un-publish the selected events"},
-    {"value": "suggest", "label": "Tag with AI",
-     "title": "Put interests on the selected events so they can reach someone. Category, "
-              "price and the dials are suggested in a message, not applied"},
+     "title": "Retire the selected events. They stop being recommended, and what "
+              "readers said about them is kept"},
+    {"value": "restore", "label": "Put back",
+     "title": "Return the selected archived events to circulation"},
 )
 
 
@@ -103,7 +99,9 @@ def _live_state(opp, today):
             return "ended", "Ended"
         return "live", "Live"
     if opp.status == Opportunity.Status.DRAFT:
-        return "draft", "Draft"
+        # Not a state anyone puts an event in any more: it means AI found
+        # this and nobody has said yes or no to it yet.
+        return "draft", "Waiting for you"
     return "archived", "Archived"
 
 
@@ -152,17 +150,13 @@ def listing_list(request):
         selected = Opportunity.objects.filter(pk__in=ids)
         if not ids:
             messages.warning(request, "Nothing selected.")
-        elif action == "publish":
-            n = selected.update(status=Opportunity.Status.PUBLISHED)
-            messages.success(request, f"{n} event{'' if n == 1 else 's'} marked published.")
         elif action == "archive":
             n = selected.update(status=Opportunity.Status.ARCHIVED)
-            messages.success(request, f"{n} event{'' if n == 1 else 's'} marked archived.")
-        elif action == "back_to_draft":
-            n = selected.update(status=Opportunity.Status.DRAFT)
-            messages.success(request, f"{n} event{'' if n == 1 else 's'} marked draft.")
-        elif action == "suggest":
-            _suggest_classification(request, selected)
+            messages.success(request, f"{n} event{'' if n == 1 else 's'} retired. They "
+                                      "stop being recommended; what readers said is kept.")
+        elif action == "restore":
+            n = selected.update(status=Opportunity.Status.PUBLISHED)
+            messages.success(request, f"{n} event{'' if n == 1 else 's'} back in circulation.")
         return redirect(f"{request.path}?{request.GET.urlencode()}")
 
     page_obj = paginate(request, qs.order_by("-created_at"))
@@ -173,7 +167,10 @@ def listing_list(request):
     tags_in_use = Tag.objects.filter(opportunities__isnull=False).distinct().order_by("name")
     filter_groups = [
         {"title": "Status", "param": "status",
-         "options": filter_options(request, "status", Opportunity.Status.choices)},
+         "options": filter_options(request, "status", [
+             (Opportunity.Status.PUBLISHED, "In circulation"),
+             (Opportunity.Status.DRAFT, "Waiting for you"),
+             (Opportunity.Status.ARCHIVED, "Archived")])},
         {"title": "Dates", "param": "live",
          "options": filter_options(request, "live", [("live", "Still on"), ("ended", "Ended"), ("undated", "No dates")])},
         {"title": "Category", "param": "category", "options": filter_options(request, "category", Category.choices)},
@@ -192,8 +189,9 @@ def listing_list(request):
     context = {
         "page_title": "Events",
         "page_blurb": "Shows, exhibitions, meals, talks, walks - everything the newsletter "
-                      "can recommend. An event stays a draft, invisible to readers, until "
-                      "you publish it, and is archived on its own once it has ended.",
+                      "can recommend. What you add here is in circulation straight away; "
+                      "what AI finds waits for you to accept it. An event archives itself "
+                      "once it has ended.",
         "breadcrumbs": [("Events", None)],
         "page_obj": page_obj,
         "result_count": qs.count(),
@@ -204,10 +202,95 @@ def listing_list(request):
         "delete_kind": "listings",
         "add_url": reverse("desk:listings_add"),
         "readers_total": Reader.objects.filter(is_active=True).count(),
+        "waiting": Opportunity.objects.filter(status=Opportunity.Status.DRAFT).count(),
         "wanted": list(Tag.objects.filter(origin=Tag.Origin.READER, opportunities__isnull=True)
                        .order_by("-times_requested", "name")[:8]),
     }
     return render(request, "desk/listing_list.html", context)
+
+
+@staff_required
+def listing_review(request):
+    """What AI found, waiting for a person to say yes or no.
+
+    Research puts everything it finds here rather than into circulation.
+    Each card is editable, because AI gets a date or a price wrong often
+    enough that "accept or reject" alone would throw away good events. The
+    pages it read are shown beside it, so a claim can be checked before it
+    is believed.
+
+    Accepting saves your corrections and puts the event live. Rejecting
+    deletes it - nothing has been sent from it, so there is nothing to keep.
+    """
+    waiting = (Opportunity.objects.filter(status=Opportunity.Status.DRAFT)
+               .prefetch_related("tags").order_by("-created_at"))
+
+    if request.method == "POST":
+        ids = request.POST.getlist("selected")
+        action = request.POST.get("action")
+        if request.POST.get("accept_one"):
+            return _accept_one(request, request.POST["accept_one"])
+        if not ids:
+            messages.warning(request, "Nothing selected.")
+        elif action == "accept":
+            n = waiting.filter(pk__in=ids).update(status=Opportunity.Status.PUBLISHED)
+            messages.success(request, f"{n} event{'' if n == 1 else 's'} accepted and live. "
+                                      "They can be recommended from now on.")
+        elif action == "reject":
+            n, _ = waiting.filter(pk__in=ids).delete()
+            messages.success(request, "Rejected. Those events are gone.")
+        return redirect("desk:listings_review")
+
+    # Ten at a time. A review is a considered thing, and a page of sixty
+    # editable cards is one nobody finishes.
+    page_obj = paginate(request, waiting, per_page=10)
+    cards = []
+    for event in page_obj:
+        form = EventReviewForm(instance=event, prefix=str(event.pk))
+        for field in form.fields.values():
+            field.widget.attrs["form"] = f"accept-{event.pk}"
+        cards.append({
+            "event": event, "form": form,
+            "sources": [src for src in (event.sources or []) if isinstance(src, dict)],
+        })
+
+    return render(request, "desk/listing_review.html", {
+        "page_title": "Waiting for you",
+        "page_blurb": "Events AI found, and anything else not yet in circulation. "
+                      "Correct what it got wrong, then accept or reject. Nothing here "
+                      "can reach a reader until you accept it.",
+        "breadcrumbs": [("Events", reverse("desk:listings_list")), ("Waiting", None)],
+        "cards": cards,
+        "page_obj": page_obj,
+        "result_count": waiting.count(),
+        "bulk_actions": [
+            {"value": "accept", "label": "Accept selected",
+             "title": "Put the ticked events into circulation, as they are"},
+            {"value": "reject", "label": "Reject selected",
+             "title": "Delete the ticked events",
+             "confirm": "Reject these? They are deleted, not archived."},
+        ],
+    })
+
+
+def _accept_one(request, pk):
+    """Accept one card, keeping whatever the editor corrected on it."""
+    event = get_object_or_404(Opportunity, pk=pk, status=Opportunity.Status.DRAFT)
+    form = EventReviewForm(request.POST, instance=event, prefix=str(event.pk))
+    if not form.is_valid():
+        messages.error(request, format_html(
+            "Could not accept “{}”: {}", event.title,
+            "; ".join(f"{f}: {' '.join(e)}" for f, e in form.errors.items())))
+        return redirect("desk:listings_review")
+    saved = form.save(commit=False)
+    saved.status = Opportunity.Status.PUBLISHED
+    saved.save()
+    form.save_m2m()
+    messages.success(request, f"“{saved.title}” accepted and live."
+                              + ("" if saved.tags.exists() else
+                                 " It has no interests, so it can't reach anyone yet - "
+                                 "open it and tick some."))
+    return redirect("desk:listings_review")
 
 
 def _suggest_for_readers(request):
@@ -237,42 +320,6 @@ def _suggest_for_readers(request):
     return redirect("desk:listings_list")
 
 
-def _suggest_classification(request, queryset):
-    """Tag the selected events, and suggest the rest.
-
-    Interests are applied: they are visible on the event, saved with it,
-    and trivially undone. Category, price and the dials change what a
-    reader is told about the thing, so those stay a suggestion in the
-    message for a person to accept.
-    """
-    from recommendations import ai
-
-    if not ai.is_enabled():
-        messages.warning(request, "AI is not configured, or event classification is "
-                                  "switched off in Settings → AI assistance.")
-        return
-    for opportunity in queryset[:10]:
-        suggestion = ai.classify_opportunity(opportunity)
-        if not suggestion:
-            messages.warning(request, f"Could not tag “{opportunity.title}”.")
-            continue
-        tags = list(Tag.objects.filter(slug__in=suggestion.get("tags") or []))
-        if tags:
-            opportunity.tags.add(*tags)
-        suits = _who_would_like(opportunity)
-        messages.info(request, format_html(
-            "<strong>{}</strong> — tagged {}. {} user{} would be reached. Also suggested: "
-            "category {}, price {}, mainstream→unusual {}, intimate→large-scale {} - "
-            "change those on the event if they fit.",
-            opportunity.title,
-            ", ".join(t.name for t in tags) or "nothing new",
-            suits["count"], "" if suits["count"] == 1 else "s",
-            suggestion.get("category", "—"), suggestion.get("price_tier", "—"),
-            suggestion.get("mainstream_to_unusual", "—"),
-            suggestion.get("intimate_to_large_scale", "—"),
-        ))
-
-
 @staff_required
 def listing_form(request, pk=None):
     instance = get_object_or_404(Opportunity, pk=pk) if pk else None
@@ -288,6 +335,11 @@ def listing_form(request, pk=None):
                 obj = form.save(commit=False)
                 if not obj.pk and not obj.created_by_id:
                     obj.created_by = request.user
+                if creating:
+                    # Saving an event is the decision to run it. What AI
+                    # finds is the only thing that waits, and it waits on
+                    # the review screen.
+                    obj.status = Opportunity.Status.PUBLISHED
                 obj.save()
                 form.save_m2m()
                 messages.success(request, f"Saved “{obj.title}”.")

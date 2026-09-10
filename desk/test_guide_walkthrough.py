@@ -93,15 +93,15 @@ class GuideWalkthrough(TestCase):
         data.update(overrides)
         return follow(self.client, reverse("desk:listings_add"), data)
 
-    def test_05_a_new_listing_saves_as_a_draft_and_says_so(self):
+    def test_05_a_new_listing_goes_straight_into_circulation(self):
+        """Saving an event is the decision to run it. There is no draft to
+        forget about: only what AI found waits, and it waits on review."""
         response = self._add_listing()
         self.assertIn("Saved “Trio residency”.", messages_in(response))
         listing = Opportunity.objects.get(title="Trio residency")
-        self.assertEqual(listing.status, Opportunity.Status.DRAFT)
-        # The pill reads DRAFT on screen, but that is CSS uppercasing "Draft" -
-        # so the guide says "a grey Draft pill", which is what is really there.
+        self.assertEqual(listing.status, Opportunity.Status.PUBLISHED)
         self.assertContains(self.client.get(reverse("desk:listings_list")),
-                            '<span class="d-pill neutral">Draft</span>', html=True)
+                            '<span class="d-pill good">Live</span>', html=True)
 
     def test_06_a_draft_is_never_recommended_to_anyone(self):
         """The guide's claim that a draft is invisible to readers."""
@@ -120,27 +120,29 @@ class GuideWalkthrough(TestCase):
         listing.save(update_fields=["status"])
         self.assertTrue(matching.top_matches_for_reader(reader))
 
-    def test_07_publishing_from_the_list_reports_how_many_and_shows_live(self):
-        self._add_listing()
-        listing = Opportunity.objects.get(title="Trio residency")
-        response = follow(self.client, reverse("desk:listings_list"),
-                          {"action": "publish", "selected": [listing.pk]})
-        self.assertIn("1 event marked published.", messages_in(response))
-        self.assertContains(response, "Live")
+    def test_07_accepting_from_the_review_queue_reports_and_shows_live(self):
+        listing = self._published_listing("Found by AI")
+        Opportunity.objects.filter(pk=listing.pk).update(status=Opportunity.Status.DRAFT)
+        response = follow(self.client, reverse("desk:listings_review"),
+                          {"action": "accept", "selected": [listing.pk]})
+        self.assertIn("1 event accepted and live. They can be recommended from now on.",
+                      messages_in(response))
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, Opportunity.Status.PUBLISHED)
 
-    def test_08_the_overview_count_moves_as_soon_as_you_publish(self):
+    def test_08_the_overview_count_moves_as_soon_as_you_accept(self):
         """The check the guide gives you has to work on the next refresh.
 
-        These figures used to be cached for a minute, so publishing and
-        looking at the number showed the old one. Caching them again -
-        even with invalidation - would break this: bulk Publish goes
-        through queryset.update(), which fires no signals.
+        These figures used to be cached for a minute, so accepting an event
+        and looking at the number showed the old one. Caching them again -
+        even with invalidation - would break this: accepting goes through
+        queryset.update(), which fires no signals.
         """
-        self._add_listing()
-        listing = Opportunity.objects.get(title="Trio residency")
+        listing = self._published_listing("Trio residency")
+        Opportunity.objects.filter(pk=listing.pk).update(status=Opportunity.Status.DRAFT)
         before = self.client.get(reverse("desk:dashboard")).context["stats"]
-        follow(self.client, reverse("desk:listings_list"),
-               {"action": "publish", "selected": [listing.pk]})
+        follow(self.client, reverse("desk:listings_review"),
+               {"action": "accept", "selected": [listing.pk]})
         after = self.client.get(reverse("desk:dashboard")).context["stats"]
         self.assertEqual(after["opportunities"]["live"],
                          before["opportunities"]["live"] + 1)

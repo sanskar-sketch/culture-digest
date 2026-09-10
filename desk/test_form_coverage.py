@@ -24,6 +24,12 @@ INTENTIONALLY_ABSENT = {
         # listing. Shown read-only on the form with the pages it read - an
         # editor checks those sources, they don't retype them.
         "found_by_ai", "sources",
+        # Not a setting any more, so not a field. An event is in
+        # circulation from the moment you save it; what AI found waits on
+        # the review screen until you accept or reject it; Archive retires
+        # one, and an ended event archives itself. Every transition has a
+        # button that says what it does, which a dropdown never did.
+        "status",
     },
     "opportunities.Tag": {
         # Both written by readers.interests when someone types an interest

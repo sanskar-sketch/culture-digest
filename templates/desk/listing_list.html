@@ -4,11 +4,18 @@
 <div class="d-page-top">
   <h1>{{ page_title }}</h1>
   <div class="d-page-actions">
+    {% if waiting %}<a href="{% url 'desk:listings_review' %}" class="d-btn">{{ waiting }} waiting for you</a>{% endif %}
     <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="action" value="suggest_for_readers" class="d-btn" title="AI searches the web for events matching the interests your {{ readers_total }} readers have most and you have fewest events for">Find events with AI</button></form>
   <a href="{{ add_url }}" class="d-btn primary">Add event</a>
   </div>
 </div>
 <p class="d-page-blurb">{{ page_blurb }}</p>
+{% if waiting %}
+<div class="d-msg info" style="margin-bottom:16px;">
+  <span><strong>{{ waiting }}</strong> event{{ waiting|pluralize }} {{ waiting|pluralize:"is,are" }} waiting for you to accept or reject.
+  <a href="{% url 'desk:listings_review' %}">Review {{ waiting|pluralize:"it,them" }}</a>. Nothing there can reach a reader until you accept it.</span>
+</div>
+{% endif %}
 {% if wanted %}
 <div class="d-msg warning" style="margin-bottom:16px;">
   <span>Users asked for {% for t in wanted %}<strong>{{ t.name }}</strong>{% if t.times_requested > 1 %} (×{{ t.times_requested }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %} and there's nothing to send them. <strong>Find events with AI</strong> looks for exactly these.</span>
@@ -35,7 +42,7 @@
           <td>{{ opp.get_category_display }}</td>
           <td>
             {% if opp.state_key == "live" %}<span class="d-pill good">Live</span>
-            {% elif opp.state_key == "draft" %}<span class="d-pill neutral">Draft</span>
+            {% elif opp.state_key == "draft" %}<a href="{% url 'desk:listings_review' %}" class="d-pill neutral" title="Accept or reject it on the review page">{{ opp.state_label }}</a>
             {% elif opp.state_key == "ended" %}<span class="d-pill warn">Ended</span>
             {% else %}<span class="d-pill bad">Archived</span>{% endif %}
           </td>
