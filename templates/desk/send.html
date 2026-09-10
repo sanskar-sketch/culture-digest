@@ -3,7 +3,7 @@
 <div class="d-page-top">
   <h1>{{ page_title }}</h1>
   <div class="d-page-actions">
-    <form method="post" class="d-inline">{% csrf_token %}<input type="hidden" name="r" value="{{ raw }}"><button type="submit" name="action" value="research" class="d-btn" title="AI searches the web for events matching what these users like most and you have fewest events for">Find more with AI</button></form>
+    <form method="post" class="d-inline">{% csrf_token %}<input type="hidden" name="r" value="{{ raw }}"><input type="hidden" name="t" value="{{ tags_raw }}"><button type="submit" name="action" value="research" class="d-btn" title="AI searches the web for events matching what these users like most and you have fewest events for">Find events with AI</button></form>
     <a class="d-btn" href="{% url 'desk:readers_list' %}">Back to users</a>
   </div>
 </div>
@@ -19,7 +19,11 @@
 <form method="post" data-bulk-form>
   {% csrf_token %}
   <input type="hidden" name="r" value="{{ raw }}">
+  <input type="hidden" name="t" value="{{ tags_raw }}">
   <h2 style="font-size:15px;margin:0 0 8px;">2 · Which events</h2>
+  {% if narrowing %}
+  <p style="font-size:13px;margin:0 0 8px;">Only events tagged {% for t in narrowing %}<strong>{{ t.name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %} are offered, because that is how you picked these users. <a href="{% url 'desk:send' %}?r={{ raw }}">Show everything that suits them</a>.</p>
+  {% endif %}
   <div class="d-bulkbar">
     <span class="d-bulk-count" data-selected-count>None selected</span>
     <label style="font-size:12.5px;display:inline-flex;align-items:center;gap:6px;">
@@ -55,7 +59,7 @@
         </tr>
         {% endwith %}
         {% empty %}
-        <tr><td colspan="8" class="d-empty">Nothing published suits these users yet. Press <strong>Find more with AI</strong>, or <a href="{% url 'desk:listings_list' %}">add events</a> and tag them.</td></tr>
+        <tr><td colspan="8" class="d-empty">Nothing published suits these users yet. Press <strong>Find events with AI</strong>, or <a href="{% url 'desk:listings_list' %}">add events</a> and tag them.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -84,6 +88,7 @@
     <form method="post" id="edit-lines">
       {% csrf_token %}
       <input type="hidden" name="r" value="{{ raw }}">
+  <input type="hidden" name="t" value="{{ tags_raw }}">
       <input type="hidden" name="preview_reader" value="{{ preview_reader.pk }}">
       {% for pk in chosen %}<input type="hidden" name="event" value="{{ pk }}">{% endfor %}
       {% for pick in preview.picks %}

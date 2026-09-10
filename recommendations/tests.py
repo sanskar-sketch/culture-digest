@@ -862,7 +862,7 @@ class AIHealthReportingTests(TestCase):
         row = self._row()
         self.assertTrue(row["ok"])
         self.assertIn("no calls yet", row["detail"])
-        self.assertIn("Suggest tags with AI", row["detail"])
+        self.assertIn("Tag with AI", row["detail"])
 
     @override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-4o")
     def test_the_master_switch_being_off_is_reported_as_the_cause(self):

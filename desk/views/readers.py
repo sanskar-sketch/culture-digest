@@ -17,13 +17,6 @@ BULK_ACTIONS = (
     {"value": "choose", "label": "Suggest events & send",
      "title": "See the events that suit these users - on their interests, area, budget "
               "and what they've said - pick the ones to send, read one, send"},
-    {"value": "preview", "label": "Preview, from everything",
-     "title": "Dry run - builds what each selected user would get from every published "
-              "event. Nothing is sent"},
-    {"value": "send", "label": "Send now, from everything",
-     "title": "Skip choosing: each selected user gets their own picks from every "
-              "published event, immediately",
-     "confirm": "This really emails the selected users now. Send?"},
 )
 
 
@@ -103,17 +96,10 @@ def reader_list(request):
         if not ids:
             messages.warning(request, "Nothing selected.")
         elif action == "choose":
-            return redirect(f"{reverse('desk:send')}?r={','.join(ids)}")
-        elif action in ("preview", "send"):
-            dry_run = action == "preview"
-            for reader in selected:
-                try:
-                    result = send_issue_for_reader(reader, dry_run=dry_run)
-                except Exception as exc:
-                    messages.error(request, f"{reader.email}: send failed — {exc}")
-                    continue
-                level = messages.success if (result.sent or dry_run) else messages.warning
-                level(request, f"{reader.email}: {result.message}")
+            url = f"{reverse('desk:send')}?r={','.join(ids)}"
+            if chosen_slugs:
+                url += "&t=" + ",".join(chosen_slugs)
+            return redirect(url)
         return redirect(f"{request.path}?{request.GET.urlencode()}")
 
     page_obj = paginate(request, qs.order_by("-created_at"))

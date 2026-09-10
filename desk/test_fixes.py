@@ -40,22 +40,20 @@ class DeskTestCase(TestCase):
         self.client.login(username="boss", password="pw")
 
 
-class LoadSampleEventsTests(DeskTestCase):
-    """Its button is on the Events list, so the Events list has to answer
-    it. It used to fall through to the bulk branch and say "Nothing
-    selected", which made it a button that did nothing at all."""
+class LoadSampleEventsIsGoneTests(DeskTestCase):
+    """It was scaffolding for an empty install, and it was broken for long
+    enough to prove nobody needed it. The command remains for a new one."""
 
-    def test_the_button_on_the_events_page_actually_loads_them(self):
+    def test_the_button_is_not_on_the_events_page(self):
+        page = self.client.get(reverse("desk:listings_list"))
+        self.assertNotContains(page, "load_sample_catalogue")
+        self.assertNotContains(page, "Load sample events")
+
+    def test_posting_it_no_longer_seeds_anything(self):
         before = Opportunity.objects.count()
-        response = self.client.post(reverse("desk:listings_list"),
-                                    {"load_sample_catalogue": "1"}, follow=True)
-        self.assertGreater(Opportunity.objects.count(), before)
-        self.assertContains(response, "sample events as drafts")
-
-    def test_it_does_not_answer_with_nothing_selected(self):
-        response = self.client.post(reverse("desk:listings_list"),
-                                    {"load_sample_catalogue": "1"}, follow=True)
-        self.assertNotContains(response, "Nothing selected")
+        self.client.post(reverse("desk:listings_list"),
+                         {"load_sample_catalogue": "1"}, follow=True)
+        self.assertEqual(Opportunity.objects.count(), before)
 
 
 class PreviewShowsTheEmailTests(DeskTestCase):
@@ -306,6 +304,139 @@ class OverviewFiguresLeadSomewhereTests(DeskTestCase):
     def test_each_figure_is_a_link(self):
         page = self.client.get(reverse("desk:dashboard"))
         self.assertEqual(page.content.decode().count('<a class="d-stat'), 4)
+
+
+class CatalogueWideSendsAreGoneTests(DeskTestCase):
+    """Two buttons emailed people from the whole catalogue with nothing to
+    look at first. One of them said Preview and showed a count."""
+
+    def setUp(self):
+        super().setUp()
+        jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        self.reader = Reader.objects.create(email="ada@example.com", location="London")
+        self.reader.interest_tags.add(jazz)
+        for i in range(3):
+            event(f"Gig {i}").tags.add(jazz)
+
+    def test_neither_button_is_offered(self):
+        page = self.client.get(reverse("desk:readers_list"))
+        self.assertNotContains(page, "Preview, from everything")
+        self.assertNotContains(page, "Send now, from everything")
+        self.assertContains(page, "Suggest events &amp; send")
+
+    def test_posting_the_old_send_action_sends_nothing(self):
+        self.client.post(reverse("desk:readers_list"),
+                         {"action": "send", "selected": [self.reader.pk]}, follow=True)
+        self.assertEqual(NewsletterIssue.objects.count(), 0)
+
+    def test_posting_the_old_preview_action_does_nothing(self):
+        response = self.client.post(reverse("desk:readers_list"),
+                                    {"action": "preview", "selected": [self.reader.pk]},
+                                    follow=True)
+        self.assertNotContains(response, "Dry run")
+        self.assertEqual(NewsletterIssue.objects.count(), 0)
+
+
+class TheInterestYouPickedNarrowsTheSendTests(DeskTestCase):
+    """Picking comedy to choose who to write to, then being offered
+    everything, is the mismatch that made results feel wrong."""
+
+    def setUp(self):
+        super().setUp()
+        self.comedy = Tag.objects.create(name="Comedy", slug="comedy-nights")
+        self.jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        self.reader = Reader.objects.create(email="ada@example.com", location="London")
+        self.reader.interest_tags.add(self.comedy, self.jazz)
+        self.standup = event("Stand-up night")
+        self.standup.tags.add(self.comedy)
+        self.gig = event("Late jazz")
+        self.gig.tags.add(self.jazz)
+
+    def test_the_choice_carries_the_interest_to_the_send_page(self):
+        response = self.client.post(
+            reverse("desk:readers_list") + "?tag=comedy-nights",
+            {"action": "choose", "selected": [self.reader.pk]})
+        self.assertIn("t=comedy-nights", response.url)
+
+    def test_only_events_with_that_interest_are_offered(self):
+        page = self.client.get(reverse("desk:send"),
+                               {"r": self.reader.pk, "t": "comedy-nights"})
+        titles = [row["event"].title for row in page.context["rows"]]
+        self.assertEqual(titles, ["Stand-up night"])
+        self.assertContains(page, "Only events tagged")
+
+    def test_without_it_everything_that_suits_them_is_offered(self):
+        page = self.client.get(reverse("desk:send"), {"r": self.reader.pk})
+        titles = sorted(row["event"].title for row in page.context["rows"])
+        self.assertEqual(titles, ["Late jazz", "Stand-up night"])
+        self.assertNotContains(page, "Only events tagged")
+
+    def test_the_narrowing_survives_a_preview(self):
+        page = self.client.post(reverse("desk:send"), {
+            "r": self.reader.pk, "t": "comedy-nights", "action": "preview",
+            "event": [self.standup.pk]})
+        self.assertEqual([row["event"].title for row in page.context["rows"]],
+                         ["Stand-up night"])
+        self.assertEqual(page.context["tags_raw"], "comedy-nights")
+
+
+class TagWithAIAppliesItTests(DeskTestCase):
+    """It used to print a classification you then had to retype by hand."""
+
+    def test_the_interests_are_put_on_the_event(self):
+        jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
+        gig = event("Late set")
+        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
+             mock.patch("recommendations.ai.classify_opportunity", return_value={
+                 "category": "music", "tags": ["jazz-nights", "invented"],
+                 "price_tier": "budget", "mainstream_to_unusual": 3,
+                 "intimate_to_large_scale": 2, "reasoning": ""}):
+            response = self.client.post(reverse("desk:listings_list"),
+                                        {"action": "suggest", "selected": [gig.pk]},
+                                        follow=True)
+        self.assertEqual(list(gig.tags.all()), [jazz])
+        self.assertContains(response, "tagged Jazz nights")
+
+    def test_the_fields_that_change_the_copy_stay_a_suggestion(self):
+        gig = event("Late set", price_tier="free")
+        with mock.patch("recommendations.ai.is_enabled", return_value=True), \
+             mock.patch("recommendations.ai.classify_opportunity", return_value={
+                 "category": "food", "tags": [], "price_tier": "splurge",
+                 "mainstream_to_unusual": 5, "intimate_to_large_scale": 1,
+                 "reasoning": ""}):
+            response = self.client.post(reverse("desk:listings_list"),
+                                        {"action": "suggest", "selected": [gig.pk]},
+                                        follow=True)
+        gig.refresh_from_db()
+        self.assertEqual(gig.price_tier, "free")
+        self.assertEqual(gig.category, "music")
+        self.assertContains(response, "Also suggested")
+
+
+class OneNameForOneEngineTests(DeskTestCase):
+    def test_research_is_called_the_same_thing_wherever_it_is_pressed(self):
+        reader = Reader.objects.create(email="ada@example.com")
+        for url in (reverse("desk:listings_list"),
+                    reverse("desk:send") + f"?r={reader.pk}",
+                    reverse("desk:interests_list")):
+            page = self.client.get(url)
+            self.assertContains(page, "Find events with AI")
+            self.assertNotContains(page, "Find more with AI")
+            self.assertNotContains(page, "Suggest events for my readers")
+
+
+class OneExplanationForOneCauseTests(DeskTestCase):
+    """The preview kept its own copy of the skip message, so the same
+    situation was explained two different ways."""
+
+    def test_the_preview_says_what_the_send_says(self):
+        from recommendations.sending import preview_issue_for_reader
+
+        reader = Reader.objects.create(email="ada@example.com")
+        result = preview_issue_for_reader(reader, min_recommendations=99)
+        self.assertFalse(result["ok"])
+        self.assertIn("Nothing is published", result["message"])
+        self.assertNotIn("Add more published listings", result["message"])
 
 
 class TheSuiteNeverSpendsMoneyTests(TestCase):

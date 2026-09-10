@@ -1,7 +1,6 @@
 from collections import defaultdict
 
 from django.contrib import messages
-from django.core.management import call_command
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -22,9 +21,9 @@ BULK_ACTIONS = (
      "title": "Take the selected events out of matching, keeping the record"},
     {"value": "back_to_draft", "label": "Back to draft",
      "title": "Un-publish the selected events"},
-    {"value": "suggest", "label": "Suggest tags with AI",
-     "title": "Propose a category, interests, price and dials - nothing is saved until "
-              "you open the event and accept it"},
+    {"value": "suggest", "label": "Tag with AI",
+     "title": "Put interests on the selected events so they can reach someone. Category, "
+              "price and the dials are suggested in a message, not applied"},
 )
 
 
@@ -146,8 +145,6 @@ def listing_list(request):
         qs = qs.filter(found_by_ai=False)
 
     if request.method == "POST":
-        if request.POST.get("load_sample_catalogue") is not None:
-            return _load_sample_catalogue(request)  # its button is on this page
         action = request.POST.get("action")
         if action == "suggest_for_readers":
             return _suggest_for_readers(request)  # acts on readers, not a selection
@@ -241,6 +238,13 @@ def _suggest_for_readers(request):
 
 
 def _suggest_classification(request, queryset):
+    """Tag the selected events, and suggest the rest.
+
+    Interests are applied: they are visible on the event, saved with it,
+    and trivially undone. Category, price and the dials change what a
+    reader is told about the thing, so those stay a suggestion in the
+    message for a person to accept.
+    """
     from recommendations import ai
 
     if not ai.is_enabled():
@@ -250,16 +254,22 @@ def _suggest_classification(request, queryset):
     for opportunity in queryset[:10]:
         suggestion = ai.classify_opportunity(opportunity)
         if not suggestion:
-            messages.warning(request, f"Could not classify “{opportunity.title}”.")
+            messages.warning(request, f"Could not tag “{opportunity.title}”.")
             continue
+        tags = list(Tag.objects.filter(slug__in=suggestion.get("tags") or []))
+        if tags:
+            opportunity.tags.add(*tags)
+        suits = _who_would_like(opportunity)
         messages.info(request, format_html(
-            "<strong>{}</strong> — category: <code>{}</code>; interests: <code>{}</code>; "
-            "price: <code>{}</code>; mainstream→unusual: <code>{}</code>; "
-            "intimate→large-scale: <code>{}</code>. {}",
-            opportunity.title, suggestion.get("category", "—"),
-            ", ".join(suggestion.get("tags") or []) or "—",
-            suggestion.get("price_tier", "—"), suggestion.get("mainstream_to_unusual", "—"),
-            suggestion.get("intimate_to_large_scale", "—"), suggestion.get("reasoning", ""),
+            "<strong>{}</strong> — tagged {}. {} user{} would be reached. Also suggested: "
+            "category {}, price {}, mainstream→unusual {}, intimate→large-scale {} - "
+            "change those on the event if they fit.",
+            opportunity.title,
+            ", ".join(t.name for t in tags) or "nothing new",
+            suits["count"], "" if suits["count"] == 1 else "s",
+            suggestion.get("category", "—"), suggestion.get("price_tier", "—"),
+            suggestion.get("mainstream_to_unusual", "—"),
+            suggestion.get("intimate_to_large_scale", "—"),
         ))
 
 
@@ -268,8 +278,6 @@ def listing_form(request, pk=None):
     instance = get_object_or_404(Opportunity, pk=pk) if pk else None
     filled = None
     if request.method == "POST":
-        if request.POST.get("load_sample_catalogue") is not None:
-            return _load_sample_catalogue(request)
         if request.POST.get("fill_from") is not None:
             filled = _fill_with_ai(request)
             form = OpportunityForm(initial=filled or None)
@@ -446,20 +454,3 @@ def listing_suggest_audience(request, pk):
            f"price {suggestion.get('price_tier', '—')} - change those below if they fit.")
     )
     return redirect("desk:listings_change", pk=pk)
-
-
-def _load_sample_catalogue(request):
-    before = Opportunity.objects.count()
-    try:
-        call_command("seed_sample_catalogue")
-    except Exception as exc:
-        messages.error(request, f"Could not load the samples: {exc}")
-    else:
-        added = Opportunity.objects.count() - before
-        if added:
-            messages.success(request, f"Added {added} sample events as drafts. Review "
-                                      "them, replace the placeholder booking links, then "
-                                      "publish the ones you want.")
-        else:
-            messages.info(request, "The samples are already loaded - nothing added.")
-    return redirect("desk:listings_list")

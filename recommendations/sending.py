@@ -230,7 +230,7 @@ def preview_issue_for_reader(reader, min_recommendations: int | None = None,
             "ok": False, "match_count": len(matches),
             "message": (f"Skipped: only {len(matches)} strong match"
                         f"{'' if len(matches) == 1 else 'es'} "
-                        f"(needs {min_recommendations}). Add more published listings."),
+                        f"(needs {min_recommendations}). " + _why_thin(reader, pool)),
         }
 
     budget = ai.TimeBudget(config.ai_send_budget_seconds)

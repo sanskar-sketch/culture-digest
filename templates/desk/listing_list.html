@@ -4,15 +4,14 @@
 <div class="d-page-top">
   <h1>{{ page_title }}</h1>
   <div class="d-page-actions">
-    <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="load_sample_catalogue" value="1" class="d-btn">Load sample events</button></form>
-    <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="action" value="suggest_for_readers" class="d-btn" title="AI searches the web for events matching the interests your {{ readers_total }} readers have most and you have fewest events for">Suggest events for my readers</button></form>
+    <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="action" value="suggest_for_readers" class="d-btn" title="AI searches the web for events matching the interests your {{ readers_total }} readers have most and you have fewest events for">Find events with AI</button></form>
   <a href="{{ add_url }}" class="d-btn primary">Add event</a>
   </div>
 </div>
 <p class="d-page-blurb">{{ page_blurb }}</p>
 {% if wanted %}
 <div class="d-msg warning" style="margin-bottom:16px;">
-  <span>Users asked for {% for t in wanted %}<strong>{{ t.name }}</strong>{% if t.times_requested > 1 %} (×{{ t.times_requested }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %} and there's nothing to send them. <strong>Suggest events for my readers</strong> looks for exactly these.</span>
+  <span>Users asked for {% for t in wanted %}<strong>{{ t.name }}</strong>{% if t.times_requested > 1 %} (×{{ t.times_requested }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %} and there's nothing to send them. <strong>Find events with AI</strong> looks for exactly these.</span>
 </div>
 {% endif %}
 
@@ -87,7 +86,7 @@
         </tr>
         {% endif %}
         {% empty %}
-        <tr><td colspan="12" class="d-empty">No events match. <a href="{{ request.path }}">Clear filters</a>, <a href="{{ add_url }}">add one</a>, or press <em>Suggest events for my readers</em>.</td></tr>
+        <tr><td colspan="12" class="d-empty">No events match. <a href="{{ request.path }}">Clear filters</a>, <a href="{{ add_url }}">add one</a>, or press <em>Find events with AI</em>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

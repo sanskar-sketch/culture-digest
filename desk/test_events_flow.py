@@ -111,7 +111,7 @@ class EventScreenTests(TestCase):
     def test_the_list_is_called_events_and_offers_suggestions(self):
         page = self.client.get(reverse("desk:listings_list"))
         self.assertContains(page, "<h1>Events</h1>", html=True)
-        self.assertContains(page, "Suggest events for my readers")
+        self.assertContains(page, "Find events with AI")
 
     def test_who_it_reaches_is_nobody_until_it_has_interests(self):
         page = self.client.get(reverse("desk:listings_change", args=[self.gig.pk]))

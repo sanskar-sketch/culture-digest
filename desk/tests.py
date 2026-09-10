@@ -157,10 +157,13 @@ class ListingWorkflowTests(LoggedInTestCase):
         self.assertContains(response, "Pottery class")
         self.assertNotContains(response, "Jazz basement")
 
-    def test_load_sample_catalogue(self):
+    def test_the_sample_catalogue_command_still_seeds(self):
+        """No button presses this any more - a new install runs the command -
+        but an empty desk still needs something to look at."""
+        from django.core.management import call_command
+
         before = Opportunity.objects.count()
-        response = self.client.post(reverse("desk:listings_add"), {"load_sample_catalogue": "1"})
-        self.assertEqual(response.status_code, 302)
+        call_command("seed_sample_catalogue")
         self.assertGreater(Opportunity.objects.count(), before)
 
 

@@ -245,12 +245,13 @@ class PickByInterestTests(DeskTestCase):
         self.assertEqual(narrow.context["result_count"], 1)
 
 
-    def test_sending_reaches_only_the_readers_ticked(self):
+    def test_choosing_carries_only_the_readers_ticked_to_the_send(self):
         response = self.client.post(self.url("tag=jazz-nights"), {
-            "action": "send", "selected": [self.ada.pk]}, follow=True)
-        self.assertIn("Sent", " ".join(m.message for m in response.context["messages"]))
-        self.assertEqual(NewsletterIssue.objects.count(), 1)
-        self.assertEqual(NewsletterIssue.objects.get().reader, self.ada)
+            "action": "choose", "selected": [self.ada.pk]})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"r={self.ada.pk}", response.url)
+        self.assertNotIn(str(self.bo.pk), response.url.split("r=")[1].split("&")[0])
+        self.assertEqual(NewsletterIssue.objects.count(), 0)
 
     def test_every_tag_of_a_reader_is_on_one_page(self):
         inferred = Tag.objects.create(name="Basement rooms", slug="basement-rooms")

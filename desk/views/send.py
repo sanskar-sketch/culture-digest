@@ -21,7 +21,7 @@ from django.urls import reverse
 
 from desk.permissions import staff_required
 from opportunities import research
-from opportunities.models import Opportunity
+from opportunities.models import Opportunity, Tag
 from readers.models import Reader
 from recommendations import matching
 from recommendations.sending import preview_issue_for_reader, send_issue_for_reader
@@ -66,7 +66,25 @@ def _readers(request):
     return list(Reader.objects.filter(pk__in=ids, is_active=True).order_by("email")), raw
 
 
-def suggestions(readers):
+def _narrowing(request):
+    """The interests picked on the Users page, carried through to here.
+
+    Picking "comedy" to choose who to write to and then being offered
+    everything is the kind of mismatch that makes a desk feel wrong. If
+    those interests came with the users, only events carrying them are
+    offered, and the page says so with a way to drop it.
+    """
+    raw = request.GET.get("t") or request.POST.get("t") or ""
+    slugs = [s.strip() for s in raw.split(",") if s.strip()]
+    tags = list(Tag.objects.filter(slug__in=slugs)) if slugs else []
+    if not tags:
+        return [], None, ""
+    pool = set(Opportunity.objects.filter(tags__in=tags)
+               .values_list("pk", flat=True).distinct())
+    return tags, pool, raw
+
+
+def suggestions(readers, pool=None):
     """Events the matching would pick for these users, pooled and ranked.
 
     One row per event: how many of the users it suits, the best score it
@@ -75,7 +93,7 @@ def suggestions(readers):
     """
     per_event = defaultdict(lambda: {"suits": [], "best": 0.0})
     for reader in readers:
-        for match in matching.top_matches_for_reader(reader, limit=PER_USER):
+        for match in matching.top_matches_for_reader(reader, limit=PER_USER, pool=pool):
             row = per_event[match.opportunity.pk]
             row["suits"].append(reader)
             row["best"] = max(row["best"], match.score)
@@ -94,10 +112,12 @@ def send(request):
         messages.warning(request, "Tick some users first.")
         return redirect("desk:readers_list")
 
+    narrowing, pool, tags_raw = _narrowing(request)
+
     if request.method == "POST":
         return _act(request, readers, raw)
 
-    rows = suggestions(readers)
+    rows = suggestions(readers, pool=pool)
     chosen = {r["event"].pk for r in rows if r["preticked"]}
 
     # Arriving from one event on the Events page - "send this to the users
@@ -123,6 +143,8 @@ def send(request):
         "readers": readers,
         "raw": raw,
         "rows": rows,
+        "narrowing": narrowing,
+        "tags_raw": tags_raw,
         "per_send": SiteConfig.load().recommendations_per_send,
         "preview": None,
         "preview_reader": None,
@@ -133,7 +155,8 @@ def send(request):
 
 def _act(request, readers, raw):
     action = request.POST.get("action")
-    back = f"{reverse('desk:send')}?r={raw}"
+    narrowing, pool, tags_raw = _narrowing(request)
+    back = f"{reverse('desk:send')}?r={raw}" + (f"&t={tags_raw}" if tags_raw else "")
 
     if action == "research":
         from recommendations import ai
@@ -151,8 +174,8 @@ def _act(request, readers, raw):
                 "already running."))
         return redirect(back)
 
-    pool = [int(x) for x in request.POST.getlist("event") if str(x).isdigit()]
-    if not pool:
+    chosen_events = [int(x) for x in request.POST.getlist("event") if str(x).isdigit()]
+    if not chosen_events:
         messages.warning(request, "Tick at least one event.")
         return redirect(back)
 
@@ -189,14 +212,16 @@ def _act(request, readers, raw):
         action = "preview"
 
     if action == "preview":
-        preview = preview_issue_for_reader(reader, pool=pool, overrides=edits.get(str(reader.pk)))
-        rows = suggestions(readers)
+        preview = preview_issue_for_reader(reader, pool=chosen_events,
+                                           overrides=edits.get(str(reader.pk)))
+        rows = suggestions(readers, pool=pool)
         return render(request, "desk/send.html", {
             "page_title": f"Send to {len(readers)} user{'' if len(readers) == 1 else 's'}",
             "breadcrumbs": [("Users", reverse("desk:readers_list")), ("Send", None)],
             "readers": readers, "raw": raw, "rows": rows,
+            "narrowing": narrowing, "tags_raw": tags_raw,
             "per_send": SiteConfig.load().recommendations_per_send,
-            "preview": preview, "preview_reader": reader, "chosen": set(pool),
+            "preview": preview, "preview_reader": reader, "chosen": set(chosen_events),
             "edited_readers": [r for r in readers if edits.get(str(r.pk))],
         })
 
@@ -204,7 +229,7 @@ def _act(request, readers, raw):
         sent = skipped = failed = 0
         for reader in readers:
             try:
-                result = send_issue_for_reader(reader, pool=pool,
+                result = send_issue_for_reader(reader, pool=chosen_events,
                                                overrides=edits.get(str(reader.pk)))
             except Exception as exc:
                 failed += 1
@@ -223,7 +248,7 @@ def _act(request, readers, raw):
         if not sent and not failed:
             messages.warning(request, "Nobody was sent anything - the chosen events weren't "
                                       "a strong enough match for them. Tick more, or press "
-                                      "Find more with AI.")
+                                      "Find events with AI.")
         return redirect("desk:readers_list")
 
     return redirect(back)

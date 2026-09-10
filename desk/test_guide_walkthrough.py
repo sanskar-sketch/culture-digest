@@ -188,10 +188,9 @@ class GuideWalkthrough(TestCase):
             self._published_listing(f"Gig {i}")
         reader = Reader.objects.create(email="ada@example.com", location="London",
                                        interest_categories=["music"])
-        response = follow(self.client, reverse("desk:readers_list"),
-                          {"action": "preview", "selected": [reader.pk]})
-        said = " ".join(messages_in(response))
-        self.assertIn("Dry run: would send", said)
+        response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
+                                    {"action": "preview"})
+        self.assertTrue(response.context["preview"]["ok"])
         # Nothing recorded, nothing sent, nothing put on cooldown.
         self.assertEqual(NewsletterIssue.objects.count(), 0)
         self.assertEqual(Recommendation.objects.count(), 0)
@@ -201,13 +200,12 @@ class GuideWalkthrough(TestCase):
         reader = Reader.objects.create(email="ada@example.com", location="London",
                                        interest_categories=["music"])
         # One match is enough out of the box; only a raised minimum skips.
-        response = follow(self.client, reverse("desk:readers_list"),
-                          {"action": "preview", "selected": [reader.pk]})
-        self.assertIn("Dry run: would send 1 recommendations",
-                      " ".join(messages_in(response)))
+        response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
+                                    {"action": "preview"})
+        self.assertTrue(response.context["preview"]["ok"])
         self._save_config(min_recommendations=2)
-        response = follow(self.client, reverse("desk:readers_list"),
-                          {"action": "preview", "selected": [reader.pk]})
+        response = follow(self.client, reverse("desk:readers_change", args=[reader.pk]),
+                          {"action": "preview"})
         said = " ".join(messages_in(response))
         self.assertIn("Skipped: only 1 strong match", said)
         self.assertIn("needs 2", said)
@@ -217,8 +215,8 @@ class GuideWalkthrough(TestCase):
             self._published_listing(f"Gig {i}")
         reader = Reader.objects.create(email="ada@example.com", location="London",
                                        interest_categories=["music"])
-        response = follow(self.client, reverse("desk:readers_list"),
-                          {"action": "send", "selected": [reader.pk]})
+        response = follow(self.client, reverse("desk:readers_change", args=[reader.pk]),
+                          {"action": "send"})
         self.assertIn("Sent", " ".join(messages_in(response)))
         issue = NewsletterIssue.objects.get()
         self.assertIsNotNone(issue.sent_at)
@@ -272,16 +270,14 @@ class GuideWalkthrough(TestCase):
         reader = Reader.objects.create(email="ada@example.com", location="London",
                                        interest_categories=["music"])
         self._save_config(recommendations_per_send=2, min_recommendations=1)
-        response = follow(self.client, reverse("desk:readers_list"),
-                          {"action": "preview", "selected": [reader.pk]})
-        self.assertIn("ada@example.com: Dry run: would send 2 recommendations.",
-                      messages_in(response))
+        response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
+                                    {"action": "preview"})
+        self.assertEqual(len(response.context["preview"]["picks"]), 2)
 
         self._save_config(recommendations_per_send=5, min_recommendations=1)
-        response = follow(self.client, reverse("desk:readers_list"),
-                          {"action": "preview", "selected": [reader.pk]})
-        self.assertIn("ada@example.com: Dry run: would send 5 recommendations.",
-                      messages_in(response))
+        response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
+                                    {"action": "preview"})
+        self.assertEqual(len(response.context["preview"]["picks"]), 5)
 
     def test_15_cooldown_stops_the_same_listing_coming_round_again(self):
         from recommendations import matching

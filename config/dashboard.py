@@ -139,7 +139,7 @@ def _ai_row() -> dict:
     if not last:
         return {"name": "AI assistance", "ok": True,
                 "detail": f"{where} · no calls yet since the last restart. To check "
-                          "it works, run Suggest tags with AI on a listing."}
+                          "it works, run Tag with AI on an event."}
     when = timesince(last["at"])
     if last["ok"]:
         return {"name": "AI assistance", "ok": True,
