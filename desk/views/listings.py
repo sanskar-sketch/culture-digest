@@ -312,8 +312,8 @@ def _suggest_for_readers(request):
             request,
             f"Searching for events for {', '.join(started)} - the interests your readers "
             "have most and you have least for. This takes a minute or two; refresh and "
-            "anything found will be here as a draft with the pages it read. Nothing is "
-            "published until you say so.")
+            "anything found waits under Waiting for you, with the pages it read. Nothing "
+            "goes out until you accept it.")
     else:
         messages.info(request, "Nothing to search for: every interest your readers have "
                                "already has live events, or research is already running.")

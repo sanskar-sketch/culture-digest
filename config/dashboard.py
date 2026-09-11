@@ -18,8 +18,9 @@ SECTIONS = [
         "title": "What you can send",
         "rows": [
             {"key": "listings", "name": "Events", "singular": "event",
-             "blurb": "Everything the newsletter can recommend. An event is invisible "
-                      "until you publish it, and archives itself once it has ended."},
+             "blurb": "Everything the newsletter can recommend. What you add is in "
+                      "circulation at once; what AI finds waits for you to accept it; "
+                      "an event archives itself once it has ended."},
         ],
     },
     {
@@ -156,7 +157,7 @@ def stats() -> dict:
     publish a listing and the live count kept the old value until the
     minute was up, so the obvious way to check your own change - look at
     the number - failed. Invalidating on write would not have fixed it
-    either, because the bulk Publish action goes through
+    either, because accepting a batch goes through
     `queryset.update()`, which fires no signals at all.
 
     So it is computed every time. Six aggregate queries on a page nobody

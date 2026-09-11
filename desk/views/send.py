@@ -134,7 +134,7 @@ def send(request):
                        .values_list("title", flat=True))
         if missing:
             messages.info(request, "“" + "”, “".join(missing) + "” isn't in this list: only "
-                          "published events that suit a user on area, budget and dates are "
+                          "events in circulation that suit a user on area, budget and dates are "
                           "offered. Their other picks are below.")
 
     return render(request, "desk/send.html", {
@@ -167,8 +167,8 @@ def _act(request, readers, raw):
         else:
             started = research.for_readers(Reader.objects.filter(pk__in=[r.pk for r in readers]))
             messages.success(request, (
-                f"Searching for events for {', '.join(started)}. They arrive under Events "
-                "as drafts, with sources - publish the ones you want and come back here."
+                f"Searching for events for {', '.join(started)}. They arrive under Events, "
+                "Waiting for you, with sources - accept the ones you want and come back here."
                 if started else
                 "These users' interests all have live events already, or research is "
                 "already running."))

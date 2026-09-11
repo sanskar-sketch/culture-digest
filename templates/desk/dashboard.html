@@ -10,7 +10,7 @@ dead end, and three of these screens had no link anywhere else.
   <a class="d-stat accent" href="{% url 'desk:listings_list' %}?status=published&amp;live=live">
     <div class="d-label">Live catalogue</div>
     <div class="d-value">{{ stats.opportunities.live }}</div>
-    <div class="d-sub">{{ stats.opportunities.published }} published · {{ stats.opportunities.draft }} draft</div>
+    <div class="d-sub">{{ stats.opportunities.published }} in circulation · {{ stats.opportunities.draft }} waiting for you</div>
   </a>
   <a class="d-stat" href="{% url 'desk:readers_list' %}">
     <div class="d-label">Readers</div>

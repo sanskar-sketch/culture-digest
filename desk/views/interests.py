@@ -12,7 +12,7 @@ from opportunities.models import Category, Opportunity, Tag
 BULK_ACTIONS = (
     {"value": "research", "label": "Find events with AI",
      "title": "Search the web for real events matching the selected interests. "
-              "Everything found arrives as a draft event with its sources"},
+              "Everything found waits for you to accept it, with its sources"},
 )
 
 
@@ -109,8 +109,8 @@ def _research(request):
             messages.success(
                 request,
                 f"Searching for {', '.join(started)}. This takes a minute or two - "
-                "refresh Events and anything found will be there as a draft, with "
-                "the pages it read. Nothing is published until you say so.")
+                "anything found waits under Events, Waiting for you, with "
+                "the pages it read. Nothing goes out until you accept it.")
         busy = len(tags) - len(started)
         if busy:
             messages.info(request, f"{busy} already being researched - leave them running.")

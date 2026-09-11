@@ -85,7 +85,7 @@
             </ul>
             <p class="d-suits-foot">
               {% if opp.suits_extra %}and {{ opp.suits_extra }} more.{% endif %}
-              {% if opp.send_url and opp.state_key == "live" %}<a class="d-btn small primary" href="{{ opp.send_url }}">Suggest events &amp; send to them</a>{% elif opp.state_key != "live" %}Publish it before it can be sent to them.{% endif %}
+              {% if opp.send_url and opp.state_key == "live" %}<a class="d-btn small primary" href="{{ opp.send_url }}">Suggest events &amp; send to them</a>{% elif opp.state_key == "draft" %}It is waiting for you, so it can't be sent yet. <a class="d-btn small" href="{% url 'desk:listings_review' %}">Accept it first</a>{% elif opp.state_key == "archived" %}It is archived. Put it back to send it.{% elif opp.state_key == "ended" %}It has ended, so it won't be sent.{% endif %}
               <a class="d-btn small" href="{{ opp.suits_url }}">Open in Users</a>
             </p>
             </div>
