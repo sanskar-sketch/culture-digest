@@ -188,5 +188,13 @@ class Opportunity(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.title)[:220]
+            # A recurring night, or an AI find of something already listed,
+            # can share a title. The address still has to be unique, or the
+            # second save fails outright.
+            base = slugify(self.title)[:200] or "event"
+            slug, n = base, 2
+            while Opportunity.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base}-{n}"
+                n += 1
+            self.slug = slug
         super().save(*args, **kwargs)

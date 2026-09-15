@@ -99,15 +99,21 @@ def template_preview(request, pk):
                                                link_url="https://example.com/frieze",
                                                link_label="Plan the day")}
     else:
+        from recommendations.emailing import _paragraphs
+
+        rationale = ("Forty seats, no amplification, and a quartet that plays like it means it. "
+                     "It's the small-room night you told us you'd cross town for.")
         rec = SimpleNamespace(
             opportunity=SimpleNamespace(title="Trio residency in a basement jazz room",
                                         get_category_display=lambda: "Music",
-                                        location_area="London", price_display="£16"),
-            rationale="A small room and a short set - the kind of thing you said you like.",
+                                        location_name="The Vortex", location_area="London",
+                                        price_display="£16", critic_quote="", critic_rating_source=""),
+            rationale=rationale, rationale_html=_paragraphs(rationale), verdict="GO.",
+            fit_display="★★★★☆", dates="Fri 19 Sep",
             booking_url="https://example.com/book", more_like_this_url="https://example.com/f/more",
             not_for_me_url="https://example.com/f/no", save_url="https://example.com/f/save",
             booked_url="https://example.com/f/booked")
-        context = {**base, "recommendations": [rec]}
+        context = {**base, "recommendations": [rec], "issue_dates": "15–21 Sep"}
 
     try:
         html, text = template.render(context)

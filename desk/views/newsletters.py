@@ -5,7 +5,7 @@ from django.urls import reverse
 from desk.permissions import staff_required
 from desk.utils import filter_options, paginate, search
 from opportunities.models import Category
-from recommendations.models import NewsletterIssue, Recommendation
+from recommendations.models import PICK_ORDER, NewsletterIssue, Recommendation
 
 
 @staff_required
@@ -28,7 +28,7 @@ def issue_list(request):
         "breadcrumbs": [("Newsletter issues", None)],
         "page_obj": page_obj,
         "result_count": qs.count(),
-        "search_placeholder": "Search by reader or listing…",
+        "search_placeholder": "Search by user or event…",
         "filter_groups": [
             {"title": "Delivery", "param": "delivery", "options": filter_options(request, "delivery", [("sent", "Sent"), ("unsent", "Not sent")])},
         ],
@@ -40,7 +40,7 @@ def issue_list(request):
 @staff_required
 def issue_detail(request, pk):
     issue = get_object_or_404(NewsletterIssue.objects.select_related("reader"), pk=pk)
-    recs = issue.recommendations.select_related("opportunity").order_by("-created_at")
+    recs = issue.recommendations.select_related("opportunity").order_by(*PICK_ORDER)
     context = {
         "page_title": f"Issue #{issue.pk}",
         "breadcrumbs": [("Newsletter issues", reverse("desk:issues_list")), (f"Issue #{issue.pk}", None)],
@@ -69,7 +69,7 @@ def recommendation_list(request):
         "breadcrumbs": [("Recommendations", None)],
         "page_obj": page_obj,
         "result_count": qs.count(),
-        "search_placeholder": "Search by listing, reader or rationale…",
+        "search_placeholder": "Search by event, user or the line written…",
         "filter_groups": [
             {"title": "Feedback", "param": "feedback", "options": filter_options(request, "feedback", Recommendation.Feedback.choices)},
             {"title": "Category", "param": "category", "options": filter_options(request, "category", Category.choices)},

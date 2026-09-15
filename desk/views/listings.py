@@ -150,13 +150,29 @@ def listing_list(request):
         selected = Opportunity.objects.filter(pk__in=ids)
         if not ids:
             messages.warning(request, "Nothing selected.")
-        elif action == "archive":
-            n = selected.update(status=Opportunity.Status.ARCHIVED)
-            messages.success(request, f"{n} event{'' if n == 1 else 's'} retired. They "
-                                      "stop being recommended; what readers said is kept.")
-        elif action == "restore":
-            n = selected.update(status=Opportunity.Status.PUBLISHED)
-            messages.success(request, f"{n} event{'' if n == 1 else 's'} back in circulation.")
+        elif action in ("archive", "restore"):
+            # Waiting events are accepted or rejected on the review screen.
+            # Archive and Put back never touch them, or Put back would put
+            # an unreviewed AI find straight into circulation.
+            waiting = selected.filter(status=Opportunity.Status.DRAFT).count()
+            if action == "archive":
+                n = selected.exclude(status=Opportunity.Status.DRAFT).update(
+                    status=Opportunity.Status.ARCHIVED)
+                if n:
+                    messages.success(request, f"Retired {n} event{'' if n == 1 else 's'}. "
+                                              f"{'It stops' if n == 1 else 'They stop'} being "
+                                              "recommended; what users said is kept.")
+            else:
+                n = selected.filter(status=Opportunity.Status.ARCHIVED).update(
+                    status=Opportunity.Status.PUBLISHED)
+                if n:
+                    messages.success(request, f"Put {n} event{'' if n == 1 else 's'} back in circulation.")
+                elif not waiting:
+                    messages.info(request, "Only archived events can be put back.")
+            if waiting:
+                messages.info(request, f"{waiting} event{' is' if waiting == 1 else 's are'} "
+                                       "waiting for you, so left alone. Accept or reject "
+                                       "them on Waiting for you.")
         return redirect(f"{request.path}?{request.GET.urlencode()}")
 
     page_obj = paginate(request, qs.order_by("-created_at"))

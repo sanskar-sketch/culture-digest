@@ -610,6 +610,87 @@ class OnlyArchiveSurvivesTests(DeskTestCase):
         self.assertEqual(gone.status, Opportunity.Status.ARCHIVED)
 
 
+class PicksReadBestFirstTests(DeskTestCase):
+    """A newsletter numbered its weakest pick 1: picks were read newest
+    first, and the best was created first."""
+
+    def test_the_email_and_the_preview_list_the_best_match_first(self):
+        from recommendations.emailing import render_newsletter
+        from recommendations.models import PICK_ORDER
+
+        reader = Reader.objects.create(email="ada@example.com", name="Ada")
+        issue = NewsletterIssue.objects.create(reader=reader)
+        for title, score in (("Best", 9.0), ("Middle", 5.0), ("Weakest", 1.0)):
+            Recommendation.objects.create(issue=issue, opportunity=event(title),
+                                          rationale="x", score=score)
+        ordered = [r.opportunity.title for r in issue.recommendations.order_by(*PICK_ORDER)]
+        self.assertEqual(ordered, ["Best", "Middle", "Weakest"])
+        _, html, text = render_newsletter(issue)
+        self.assertLess(text.index("BEST"), text.index("WEAKEST"))
+
+    def test_the_issue_page_lists_them_the_same_way(self):
+        reader = Reader.objects.create(email="ada@example.com")
+        issue = NewsletterIssue.objects.create(reader=reader)
+        for title, score in (("Weakest", 1.0), ("Best", 9.0)):
+            Recommendation.objects.create(issue=issue, opportunity=event(title),
+                                          rationale="x", score=score)
+        page = self.client.get(reverse("desk:issues_change", args=[issue.pk])).content.decode()
+        self.assertLess(page.index("Best"), page.index("Weakest"))
+
+
+class SameTitleSavesTests(DeskTestCase):
+    """Adding an event whose title matched an existing one crashed with a
+    database error, because the address made from the title wasn't unique."""
+
+    def test_a_second_event_with_the_same_title_gets_its_own_address(self):
+        first = event("Late set")
+        second = event("Late set")
+        self.assertNotEqual(first.slug, second.slug)
+        self.assertTrue(second.slug.startswith(first.slug))
+
+    def test_the_add_form_saves_it_instead_of_failing(self):
+        event("Late set")
+        data = {"title": "Late set", "slug": "", "category": "music",
+                "description": "x", "editorial_note": "", "price_tier": "budget",
+                "price_display": "", "location_name": "", "location_area": "London",
+                "booking_url": "https://example.com/late", "start_date": "", "end_date": "",
+                "critic_rating": "", "critic_rating_source": "", "critic_quote": "",
+                "mainstream_to_unusual": "3", "intimate_to_large_scale": "2"}
+        with mock.patch("recommendations.ai.is_enabled", return_value=False):
+            response = self.client.post(reverse("desk:listings_add"), data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Opportunity.objects.filter(title="Late set").count(), 2)
+
+
+class ArchiveAndPutBackLeaveWaitingAloneTests(DeskTestCase):
+    """Put back used to publish whatever was ticked, so an unreviewed AI
+    find could go straight into circulation without being accepted."""
+
+    def test_put_back_does_not_publish_an_event_waiting_for_review(self):
+        found = event("Found by AI", status=Opportunity.Status.DRAFT, found_by_ai=True)
+        response = self.client.post(reverse("desk:listings_list"),
+                                    {"action": "restore", "selected": [found.pk]}, follow=True)
+        found.refresh_from_db()
+        self.assertEqual(found.status, Opportunity.Status.DRAFT)
+        self.assertContains(response, "waiting for you, so left alone")
+
+    def test_archive_does_not_archive_an_event_waiting_for_review(self):
+        found = event("Found by AI", status=Opportunity.Status.DRAFT)
+        self.client.post(reverse("desk:listings_list"),
+                         {"action": "archive", "selected": [found.pk]}, follow=True)
+        found.refresh_from_db()
+        self.assertEqual(found.status, Opportunity.Status.DRAFT)
+
+    def test_a_mixed_selection_acts_only_on_what_it_should(self):
+        live, found = event("Live one"), event("Waiting one", status=Opportunity.Status.DRAFT)
+        response = self.client.post(reverse("desk:listings_list"),
+                                    {"action": "archive", "selected": [live.pk, found.pk]}, follow=True)
+        live.refresh_from_db(); found.refresh_from_db()
+        self.assertEqual(live.status, Opportunity.Status.ARCHIVED)
+        self.assertEqual(found.status, Opportunity.Status.DRAFT)
+        self.assertContains(response, "Retired 1 event. It stops being recommended")
+
+
 class TheSuiteNeverSpendsMoneyTests(TestCase):
     """A real .env on the machine is how anyone checks the AI or the
     sending works. Without this, the suite quietly called OpenAI for every

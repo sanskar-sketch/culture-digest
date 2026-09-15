@@ -59,7 +59,7 @@ dead end, and three of these screens had no link anywhere else.
     <div class="d-row"><span class="d-name">Saved</span><span class="d-bar"><span style="width: {% widthratio stats.feedback.saved stats.feedback.total|default:1 100 %}%"></span></span><span class="d-num">{{ stats.feedback.saved }}</span></div>
     <div class="d-row"><span class="d-name">Not for me</span><span class="d-bar"><span style="width: {% widthratio stats.feedback.not_for_me stats.feedback.total|default:1 100 %}%"></span></span><span class="d-num">{{ stats.feedback.not_for_me }}</span></div>
     <p style="font-size:12px;color:var(--d-muted);margin:12px 0 0;">
-      {{ stats.tags_total }} interest{{ stats.tags_total|pluralize }}{% if stats.tags_unused %}, <span style="color:var(--d-warn)">{{ stats.tags_unused }} not yet on any listing</span>{% endif %}.
+      {{ stats.tags_total }} interest{{ stats.tags_total|pluralize }}{% if stats.tags_unused %}, <span style="color:var(--d-warn)">{{ stats.tags_unused }} not yet on any event</span>{% endif %}.
     </p>
   </div>
 </div>

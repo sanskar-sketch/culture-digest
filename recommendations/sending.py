@@ -18,7 +18,7 @@ from django.utils import timezone
 
 from . import ai, matching
 from .emailing import send_newsletter
-from .models import NewsletterIssue, Recommendation
+from .models import PICK_ORDER, NewsletterIssue, Recommendation
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +253,7 @@ def preview_issue_for_reader(reader, min_recommendations: int | None = None,
                      "event_id": rec.opportunity_id, "rationale": rec.rationale,
                      "verdict": rec.verdict,
                      "edited": str(rec.opportunity_id) in edited}
-                    for rec in issue.recommendations.select_related("opportunity")
+                    for rec in issue.recommendations.select_related("opportunity").order_by(*PICK_ORDER)
                 ],
                 "message": f"Would send {len(matches)} recommendations.",
             }

@@ -206,7 +206,9 @@ def render_newsletter(issue) -> tuple[str, str, str]:
 
     config = SiteConfig.load()
     reader = issue.reader
-    recs = list(issue.recommendations.select_related("opportunity").all())
+    from .models import PICK_ORDER
+
+    recs = list(issue.recommendations.select_related("opportunity").order_by(*PICK_ORDER))
 
     rec_contexts = []
     for rec in recs:

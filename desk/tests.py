@@ -142,7 +142,8 @@ class ListingWorkflowTests(LoggedInTestCase):
         self.assertIn(tag, obj.tags.all())
 
     def test_bulk_archive_and_put_back(self):
-        opp = opportunity()
+        # A live event: events still waiting for review are never archived.
+        opp = opportunity(status=Opportunity.Status.PUBLISHED)
         self.client.post(reverse("desk:listings_list"),
                          {"action": "archive", "selected": [opp.pk]})
         opp.refresh_from_db()

@@ -106,6 +106,8 @@ def reader_list(request):
     availability = dict(Reader.Availability.choices)
     for reader in page_obj:
         reader.completeness = _profile_completeness(reader)
+        categories = dict(Category.choices)
+        reader.follows_labels = [categories.get(v, v) for v in (reader.interest_categories or [])]
         picked = {t.pk for t in reader.interest_tags.all()}
         reader.inferred_only = [t for t in reader.ai_inferred_tags.all() if t.pk not in picked]
         # Their own words on when: stored as values, shown as labels.

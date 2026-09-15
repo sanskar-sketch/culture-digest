@@ -436,7 +436,8 @@
         var open = panel.hidden;
         panel.hidden = !open;
         link.setAttribute("aria-expanded", open ? "true" : "false");
-        link.closest("tr").classList.toggle("is-open", open);
+        var row = link.closest("tr");
+        if (row) row.classList.toggle("is-open", open);
         if (open) fitToView(panel);
       });
     });

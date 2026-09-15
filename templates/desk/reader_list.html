@@ -66,7 +66,7 @@
                 {% if reader.inferred_only %}<p>{% for t in reader.inferred_only %}<span class="d-pill good" title="Inferred by AI from their own words">{{ t.name }}</span>{% endfor %}</p>{% endif %}
                 {% if reader.ai_avoid_tags.all %}<p>Avoids: {% for t in reader.ai_avoid_tags.all %}<span class="d-pill bad">{{ t.name }}</span>{% endfor %}</p>{% endif %}
                 {% if reader.ai_taste_summary %}<p title="What AI read into their own words">{{ reader.ai_taste_summary }}</p>{% endif %}
-                {% if reader.interest_categories %}<p>Follows {{ reader.interest_categories|join:", " }}</p>{% endif %}
+                {% if reader.follows_labels %}<p>Follows {{ reader.follows_labels|join:", " }}</p>{% endif %}
                 {% if reader.other_interests %}<p class="own">“{{ reader.other_interests }}”</p>{% endif %}
               </div>
               <div>

@@ -81,7 +81,7 @@
   <div class="d-fieldset">
     <h2>Who it reaches</h2>
     {% if suits.tags %}
-    <p style="margin:0 0 6px;font-size:14px;"><strong>{{ suits.count }}</strong> reader{{ suits.count|pluralize }} picked or were inferred to like {% for t in suits.tags %}<span class="d-pill accent">{{ t.name }}</span>{% if not forloop.last %} {% endif %}{% endfor %}.</p>
+    <p style="margin:0 0 6px;font-size:14px;"><strong>{{ suits.count }}</strong> user{{ suits.count|pluralize }} {{ suits.count|pluralize:"is,are" }} interested in {% for t in suits.tags %}<span class="d-pill accent">{{ t.name }}</span>{% if not forloop.last %} {% endif %}{% endfor %}.</p>
     <p style="margin:0;font-size:13px;"><a href="{{ suits.url }}">See them on Users</a> - tick them there, and <em>Suggest events &amp; send</em> will offer this event.</p>
     {% else %}
     <p style="margin:0;font-size:14px;color:var(--d-muted);">No interests on this event yet, so no reader can be matched to it. Tick some above, or press <strong>Who would like this?</strong> and AI will tag it.</p>

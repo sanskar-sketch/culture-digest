@@ -7,7 +7,7 @@
   <div class="d-stat accent">
     <div class="d-label">Opened a pick</div>
     <div class="d-value">{{ click_rate }}%</div>
-    <div class="d-sub">{{ clicks_total }} click{{ clicks_total|pluralize }} across {{ recs_total }} recommendation{{ recs_total|pluralize }}</div>
+    <div class="d-sub">{{ opened }} opened across {{ recs_total }} pick{{ recs_total|pluralize }}</div>
   </div>
   <div class="d-stat">
     <div class="d-label">Pressed a button</div>
@@ -29,7 +29,7 @@
 {% if unmet %}
 <div class="d-card" style="border-color:var(--d-warn);">
   <h2 style="color:var(--d-warn);">Asked for, nothing to send</h2>
-  <p style="font-size:12.5px;color:var(--d-muted);margin:0 0 10px;">Interests readers typed in themselves that no listing carries. The most useful thing on this page.</p>
+  <p style="font-size:12.5px;color:var(--d-muted);margin:0 0 10px;">Interests readers typed in themselves that no event carries. The most useful thing on this page.</p>
   <table class="d-table">
     <thead><tr><th>Interest</th><th>Readers who asked</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th></tr></thead>
     <tbody>
@@ -38,7 +38,7 @@
         <td><a class="d-row-link" href="{% url 'desk:interests_change' tag.pk %}">{{ tag.name }}</a></td>
         <td>{{ tag.times_requested }}</td>
         <td class="d-col-act"><a class="d-del" style="color:var(--d-accent-ink);border-color:var(--d-accent);"
-           href="{% url 'desk:interests_list' %}?origin=reader&amp;coverage=empty">Find listings</a></td>
+           href="{% url 'desk:interests_list' %}?origin=reader&amp;coverage=empty">Find events</a></td>
       </tr>
       {% endfor %}
     </tbody>
@@ -98,9 +98,9 @@
 </p>
 
 <div class="d-card">
-  <h2>Most opened listings</h2>
+  <h2>Most opened events</h2>
   <table class="d-table">
-    <thead><tr><th>Listing</th><th>Clicks</th><th>Readers</th></tr></thead>
+    <thead><tr><th>Event</th><th>Clicks</th><th>Users</th></tr></thead>
     <tbody>
       {% for row in most_clicked %}
       <tr>
@@ -117,7 +117,7 @@
   <h2>Recommended, and ignored</h2>
   <p style="font-size:12.5px;color:var(--d-muted);margin:0 0 10px;">Sent more than once, never opened, never rated. Worth rewriting or archiving.</p>
   <table class="d-table">
-    <thead><tr><th>Listing</th><th>Times sent</th></tr></thead>
+    <thead><tr><th>Event</th><th>Times sent</th></tr></thead>
     <tbody>
       {% for row in ignored %}
       <tr><td class="wrap"><a class="d-row-link" href="{% url 'desk:listings_change' row.listing_id %}">{{ row.title }}</a></td><td>{{ row.sent }}</td></tr>

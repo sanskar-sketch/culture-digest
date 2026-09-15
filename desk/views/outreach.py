@@ -11,10 +11,10 @@ from readers.models import Reader
 def reader_tags(request, pk):
     reader = get_object_or_404(Reader, pk=pk)
     return render(request, "desk/reader_tags.html", {
-        "page_title": f"Tags for {reader.email}",
+        "page_title": f"What we believe about {reader.name or reader.email}",
         "breadcrumbs": [("Users", reverse("desk:readers_list")),
                         (reader.email, reverse("desk:readers_change", args=[reader.pk])),
-                        ("Tags", None)],
+                        ("What we believe", None)],
         "reader": reader,
         "picked": reader.interest_tags.all().order_by("name"),
         "inferred": reader.ai_inferred_tags.all().order_by("name"),

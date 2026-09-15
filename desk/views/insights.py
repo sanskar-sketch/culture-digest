@@ -121,6 +121,7 @@ def insights(request):
         "responded": responded,
         "response_rate": _percent(responded, recs_total),
         "clicks_total": clicks_total,
+        "opened": booking_clicks,
         "click_rate": _percent(booking_clicks, recs_total),
         "readers_who_clicked": readers_who_clicked,
         "reach": _percent(readers_who_clicked, readers_total),

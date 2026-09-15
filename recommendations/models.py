@@ -1,9 +1,17 @@
 import uuid
 
 from django.db import models
+from django.db.models import F
 
 from opportunities.models import Opportunity
 from readers.models import Reader
+
+
+# The order picks are read in, wherever a newsletter is shown or sent: the
+# best match first, the soonest event first when two score the same. The
+# model's default order is newest-first, which for one issue meant the
+# weakest pick was numbered 1.
+PICK_ORDER = ("-score", F("opportunity__start_date").asc(nulls_last=True), "created_at")
 
 
 class NewsletterIssue(models.Model):
