@@ -206,8 +206,8 @@ def _act(request, readers, raw):
                 elif event_id in mine or rationale != original or verdict != original_verdict:
                     mine[event_id] = {"rationale": rationale, "verdict": verdict}
             edits[str(reader.pk)] = mine
-            messages.success(request, f"Edits kept for {reader.email} - this is what they'll get. "
-                                      "They're used when you press Write & send.")
+            messages.success(request, f"Edits kept for {reader.email}. Your lines are sent word for word "
+                                      "when you press Write & send; AI writes the rest again then.")
         _save_edits(request, edits)
         action = "preview"
 

@@ -77,7 +77,7 @@
 {% if preview.ok %}
 <div class="d-card">
   <p style="font-size:13px;margin:0 0 6px;"><strong>Subject:</strong> {{ preview.subject }}</p>
-  <p style="font-size:12px;color:var(--d-muted);margin:0;">Built exactly as the send will be, then thrown away. Nothing was sent or recorded.</p>
+  <p style="font-size:12px;color:var(--d-muted);margin:0;">Built the way the send builds it, then thrown away. Nothing was sent or recorded. Lines you edit are sent word for word; AI writes the others again when you send.</p>
 </div>
 <div class="d-split">
   <div class="d-card"><h2>The email</h2><iframe srcdoc="{{ preview.html|force_escape }}" class="d-preview-frame"></iframe></div>
