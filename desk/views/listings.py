@@ -462,7 +462,7 @@ def _fill_with_ai(request):
                           "check every field before saving.",
     }
     messages.success(request, (
-        f"Filled in from {len(urls)} page(s) - check the date and price, then save. "
+        f"Filled in from {len(urls)} page{'' if len(urls) == 1 else 's'} - check the date and price, then save. "
         "Nothing is saved yet." if urls else
         "Filled it in, but AI didn't say which pages it read - check every field "
         "against the venue before saving. Nothing is saved yet."))

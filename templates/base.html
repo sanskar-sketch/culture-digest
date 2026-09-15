@@ -78,6 +78,13 @@
       background: rgba(255, 255, 255, 0.8);
       border-bottom: 1px solid var(--hairline);
     }
+    /* Every public page opens on a dark hero, so the nav has to read on
+       black: a white wordmark, and dark glass once the page scrolls. */
+    body:has(.hero.bg-dark) .site-nav .wordmark { color: var(--text-dark); }
+    body:has(.hero.bg-dark) .site-nav.scrolled {
+      background: rgba(0, 0, 0, 0.72);
+      border-bottom-color: var(--hairline-dark);
+    }
     .site-nav .wordmark {
       font-size: 20px;
       font-weight: 700;
@@ -483,7 +490,14 @@
     @media (prefers-reduced-motion: reduce) { .other-field { animation: none; } }
 
     /* ---------- step wizard ---------- */
-    .wizard { scroll-margin-top: 60px; }
+    /* At least a screen tall, so every step can scroll to the same place
+       under the nav: no leftover hero above it, no footer below, and no
+       jump between a short step and a long one. */
+    .wizard {
+      scroll-margin-top: 60px;
+      min-height: calc(100vh - 60px);
+      min-height: calc(100svh - 60px);
+    }
 
     .wizard-progress {
       position: sticky;

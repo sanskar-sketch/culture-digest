@@ -3,10 +3,18 @@
 <div class="d-page-top"><h1>{{ page_title }}</h1></div>
 <p class="d-page-blurb">To {{ issue.reader.email }} · {{ issue.created_at|date:"j M Y, H:i" }}{% if issue.sent_at %} · sent {{ issue.sent_at|date:"j M Y, H:i" }}{% else %} · not sent{% endif %}</p>
 <div class="d-sublist">
+  {% if recommendations %}
+  <div class="d-sublist-row" style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--d-muted);">
+    <span style="flex:0 0 260px;">Event</span>
+    <span style="flex:0 0 120px;">Fit · score</span>
+    <span style="flex:0 0 140px;">Their reply</span>
+    <span style="flex:1;">The line they got</span>
+  </div>
+  {% endif %}
   {% for rec in recommendations %}
   <div class="d-sublist-row">
     <span style="flex:0 0 260px;font-weight:600;color:var(--d-ink);">{{ rec.opportunity.title }}</span>
-    <span style="flex:0 0 100px;">{{ rec.score|floatformat:1 }}</span>
+    <span style="flex:0 0 120px;white-space:nowrap;" title="{{ rec.score|floatformat:1 }}">{{ rec.fit_display }} <span style="color:var(--d-muted);">{{ rec.score|floatformat:1 }}</span></span>
     <span style="flex:0 0 140px;">{{ rec.get_feedback_display }}</span>
     <span style="flex:1;color:var(--d-muted);">{{ rec.rationale|truncatewords:20 }}</span>
   </div>

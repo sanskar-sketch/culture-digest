@@ -101,19 +101,35 @@ def template_preview(request, pk):
     else:
         from recommendations.emailing import _paragraphs
 
-        rationale = ("Forty seats, no amplification, and a quartet that plays like it means it. "
-                     "It's the small-room night you told us you'd cross town for.")
-        rec = SimpleNamespace(
-            opportunity=SimpleNamespace(title="Trio residency in a basement jazz room",
-                                        get_category_display=lambda: "Music",
-                                        location_name="The Vortex", location_area="London",
-                                        price_display="£16", critic_quote="", critic_rating_source=""),
-            rationale=rationale, rationale_html=_paragraphs(rationale), verdict="GO.",
-            fit_display="★★★★☆", dates="Fri 19 Sep",
-            booking_url="https://example.com/book", more_like_this_url="https://example.com/f/more",
-            not_for_me_url="https://example.com/f/no", save_url="https://example.com/f/save",
-            booked_url="https://example.com/f/booked")
-        context = {**base, "recommendations": [rec], "issue_dates": "15–21 Sep"}
+        # A few picks, so a design is judged against something that looks
+        # like a real issue rather than a lone card.
+        stand_ins = [
+            ("Trio residency in a basement jazz room", "Music", "The Vortex", "£16", "Fri 19 Sep",
+             "★★★★☆", "GO.",
+             "Forty seats, no amplification, and a quartet that plays like it means it. "
+             "It's the small-room night you told us you'd cross town for."),
+            ("Frieze Sculpture", "Exhibition", "Regent's Park", "Free", "Until 26 Oct",
+             "★★★★☆", "I think you'll love this.",
+             "Big, strange work set loose among the trees, and nothing to pay. "
+             "Go on a weekday morning and you'll have most of it to yourself."),
+            ("A new play in a converted chapel", "Theatre", "Hackney", "£22", "Thu 18 Sep",
+             "★★★☆☆", "A gamble, but a deliberate one.",
+             "Ninety minutes, no interval, and a cast of three. "
+             "Further from your usual than the others, which is the point."),
+        ]
+        recs = [
+            SimpleNamespace(
+                opportunity=SimpleNamespace(title=title, get_category_display=lambda c=category: c,
+                                            location_name=venue, location_area="London",
+                                            price_display=price, critic_quote="", critic_rating_source=""),
+                rationale=rationale, rationale_html=_paragraphs(rationale), verdict=verdict,
+                fit_display=fit, dates=dates,
+                booking_url="https://example.com/book", more_like_this_url="https://example.com/f/more",
+                not_for_me_url="https://example.com/f/no", save_url="https://example.com/f/save",
+                booked_url="https://example.com/f/booked")
+            for title, category, venue, price, dates, fit, verdict, rationale in stand_ins
+        ]
+        context = {**base, "recommendations": recs, "issue_dates": "15–21 Sep"}
 
     try:
         html, text = template.render(context)

@@ -18,7 +18,7 @@
 {% endif %}
 {% if wanted %}
 <div class="d-msg warning" style="margin-bottom:16px;">
-  <span>Users asked for {% for t in wanted %}<strong>{{ t.name }}</strong>{% if t.times_requested > 1 %} (×{{ t.times_requested }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %} and there's nothing to send them. <strong>Find events with AI</strong> looks for exactly these.</span>
+  <span>Users asked for {% for t in wanted %}<strong>{{ t.name }}</strong>{% if t.times_requested > 1 %} (×{{ t.times_requested }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %} and there's nothing to send them. <strong>Find events with AI</strong> searches for the interests users hold most and you have fewest events for.</span>
 </div>
 {% endif %}
 
