@@ -57,7 +57,7 @@
 
   <div class="d-fieldset">
     <h2>Taste attributes</h2>
-    <p class="d-fieldset-desc">These drive matching against a reader's stated taste. A critic quote is printed in the newsletter and attributed to the source above - only paste a real one, nothing will invent one.</p>
+    <p class="d-fieldset-desc">These drive matching against a reader's stated taste. The critic rating here only nudges the score; what readers see - each publication's stars, linked - is under <a href="#reviews">Critic reviews</a> below.</p>
     {% include "desk/_field.html" with field=form.critic_rating %}
     {% include "desk/_field.html" with field=form.critic_rating_source %}
     {% include "desk/_field.html" with field=form.critic_quote %}
@@ -113,4 +113,51 @@
     <button type="submit" name="save_add_another" value="1" class="d-btn">Save and add another</button>
   </div>
 </form>
+
+{% if instance %}
+<div class="d-card" id="reviews" style="margin-top:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+    <h2 style="margin:0;">Critic reviews</h2>
+    <form method="post" action="{% url 'desk:listings_reviews' instance.pk %}" class="d-inline">{% csrf_token %}<button type="submit" name="action" value="find" class="d-btn small"{% if reviews_running %} disabled{% endif %}>{% if reviews_running %}Looking…{% else %}Find reviews with AI{% endif %}</button></form>
+  </div>
+  <p class="d-fieldset-desc" style="margin:8px 0 12px;">Printed beside FOR YOU in the newsletter, e.g. <em>Guardian ★★★★ · Time Out ★★★★★</em>, linked to the review. Only verified ones go out: confirmed on the review page itself, or checked by you. Never averaged, never invented.</p>
+  {% if reviews %}
+  <div class="d-table-wrap"><div class="d-table-scroll">
+  <table class="d-table">
+    <thead><tr><th>Publication</th><th>Stars</th><th>Status</th><th>What the check found</th><th class="d-col-act"><span class="d-sr-only">Actions</span></th></tr></thead>
+    <tbody>
+      {% for review in reviews %}
+      <tr>
+        <td><a href="{{ review.url }}" target="_blank" rel="noopener noreferrer">{{ review.publication }}</a>{% if review.found_by_ai %} <span class="d-pill neutral">AI</span>{% endif %}</td>
+        <td>{% if review.stars is not None %}{{ review.stars_display }}{% else %}<span style="color:var(--d-muted);">no star rating</span>{% endif %}</td>
+        <td>{% if review.is_verified %}<span class="d-pill good">{{ review.get_verified_display }}</span>{% else %}<span class="d-pill warn">Not in the newsletter</span>{% endif %}</td>
+        <td class="wrap" style="font-size:12.5px;color:var(--d-muted);">{{ review.check_note }}{% if review.quote %}<br>“{{ review.quote }}”{% endif %}</td>
+        <td class="d-col-act">
+          <form method="post" action="{% url 'desk:listings_reviews' instance.pk %}" class="d-inline">{% csrf_token %}<input type="hidden" name="review" value="{{ review.pk }}">
+            {% if review.is_verified %}<button type="submit" name="action" value="unverify" class="d-btn small">Take out</button>{% else %}<button type="submit" name="action" value="verify" class="d-btn small" title="You've opened the review and the rating is right">Verify</button> <button type="submit" name="action" value="recheck" class="d-btn small">Check again</button>{% endif %}
+            <button type="submit" name="action" value="delete" class="d-del" data-confirm="Remove {{ review.publication }}'s review?">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div></div>
+  {% else %}
+  <p style="margin:0 0 12px;font-size:14px;color:var(--d-muted);">No reviews yet.{% if reviews_running %} AI is looking - refresh in a minute.{% endif %}</p>
+  {% endif %}
+  <form method="post" action="{% url 'desk:listings_reviews' instance.pk %}" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <input type="text" name="publication" placeholder="Publication, e.g. The Guardian" aria-label="Publication" required style="flex:1 1 180px;">
+    <select name="stars" aria-label="Stars" data-no-search style="min-height:34px;">
+      <option value="">No star rating</option>
+      {% for value in review_star_choices %}<option value="{{ value }}">{{ value|floatformat:"-1" }} stars</option>{% endfor %}
+    </select>
+    <input type="url" name="url" placeholder="Link to the review" aria-label="Link to the review" required style="flex:2 1 240px;">
+    <input type="text" name="quote" placeholder="Short quote, copied exactly (optional)" aria-label="Quote" style="flex:2 1 240px;">
+    <button type="submit" class="d-btn small primary">Add review</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

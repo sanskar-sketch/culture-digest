@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Tell me what you thought &mdash; {{ site_config.site_name }}{% endblock %}
+{% block content %}
+  <section class="hero bg-dark">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="hero-content reveal is-visible">
+      <span class="eyebrow">In your own words</span>
+      <p class="hero-brand" style="font-size:clamp(34px,6vw,64px);margin-bottom:10px;">{{ site_config.site_name }}<span class="brand-dot"></span></p>
+      <h1>{% if about_week %}What did you make of this week?{% else %}What did you think?{% endif %}</h1>
+      <p class="lede" style="margin-left:auto;margin-right:auto;">
+        {% if about_week %}Anything about your culture week: what landed, what missed, what you'd like more or less of.
+        {% else %}About <strong>{{ recommendation.opportunity.title }}</strong>: why it's for you, or why it isn't.{% endif %}
+        It shapes what I send you next.
+      </p>
+      <form method="post" style="max-width:560px;margin:0 auto;text-align:left;">
+        {% csrf_token %}
+        {% if about_week %}<input type="hidden" name="about" value="week">{% endif %}
+        <label for="reply-text" style="position:absolute;left:-9999px;">Your reply</label>
+        <textarea id="reply-text" name="text" rows="6" required maxlength="4000"
+          placeholder="e.g. I'd rather see the original artists than tribute nights. And more small rooms."
+          style="width:100%;box-sizing:border-box;padding:14px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:inherit;font:inherit;font-size:16px;line-height:1.5;"></textarea>
+        <div style="margin-top:14px;text-align:center;"><button type="submit" class="btn btn-primary">Send</button></div>
+      </form>
+    </div>
+  </section>
+{% endblock %}

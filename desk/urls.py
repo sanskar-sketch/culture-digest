@@ -23,6 +23,7 @@ urlpatterns = [
     path("events/add/", listings.listing_form, name="listings_add"),
     path("events/<int:pk>/", listings.listing_form, name="listings_change"),
     path("events/<int:pk>/who/", listings.listing_suggest_audience, name="listings_who"),
+    path("events/<int:pk>/reviews/", listings.listing_reviews, name="listings_reviews"),
     path("listings/", RedirectView.as_view(pattern_name="desk:listings_list", query_string=True)),
 
     path("interests/", interests.interest_list, name="interests_list"),

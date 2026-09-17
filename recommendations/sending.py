@@ -16,7 +16,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from . import ai, matching
+from . import ai, compose, matching
 from .emailing import send_newsletter
 from .models import PICK_ORDER, NewsletterIssue, Recommendation
 
@@ -92,8 +92,13 @@ def send_issue_for_reader(
     min_recommendations: int | None = None,
     pool=None,
     overrides=None,
+    composed=None,
 ) -> SendResult:
-    """Match, build the issue, and send it.
+    """Compose the reader's culture week, store it and send it.
+
+    `composed` is an issue already written - a draft the editor read and
+    perhaps changed - and is sent exactly as it stands, without asking AI
+    again. Otherwise it is composed here.
 
     A dry run builds the issue and renders the email, then rolls back, so it
     has no persistent effect - in particular it must not put opportunities
@@ -105,35 +110,23 @@ def send_issue_for_reader(
     if min_recommendations is None:
         min_recommendations = config.min_recommendations
 
-    matches = matching.top_matches_for_reader(reader, pool=pool)
-    if len(matches) < min_recommendations:
+    if composed is None:
+        composed = compose.compose(reader, pool=pool, overrides=overrides)
+    count = len(composed.picks)
+    if count < min_recommendations:
         return SendResult(
             reader_email=reader.email,
             sent=False,
-            match_count=len(matches),
+            match_count=count,
             message=(
-                f"Skipped: only {len(matches)} strong match"
-                f"{'' if len(matches) == 1 else 'es'} "
+                f"Skipped: only {count} strong match"
+                f"{'' if count == 1 else 'es'} "
                 f"(needs {min_recommendations}). " + _why_thin(reader, pool)
             ),
         )
 
-    # One AI call per recommendation adds up; cap the total so a send can
-    # never outlive the request that triggered it.
-    budget = ai.TimeBudget(config.ai_send_budget_seconds)
-
     with transaction.atomic():
-        issue = NewsletterIssue.objects.create(reader=reader)
-        for match in matches:
-            rationale, verdict = _line_for(match, reader, budget, overrides)
-            Recommendation.objects.create(
-                issue=issue,
-                opportunity=match.opportunity,
-                rationale=rationale,
-                verdict=verdict,
-                score=match.score,
-            )
-
+        issue = compose.materialise(composed)
         message_id = send_newsletter(issue, dry_run=dry_run)
 
         if dry_run:
@@ -141,8 +134,8 @@ def send_issue_for_reader(
             return SendResult(
                 reader_email=reader.email,
                 sent=False,
-                match_count=len(matches),
-                message=f"Dry run: would send {len(matches)} recommendations.",
+                match_count=count,
+                message=f"Dry run: would send {count} recommendations.",
             )
 
         issue.sent_at = timezone.now()
@@ -152,8 +145,8 @@ def send_issue_for_reader(
     return SendResult(
         reader_email=reader.email,
         sent=True,
-        match_count=len(matches),
-        message=f"Sent {len(matches)} recommendations"
+        match_count=count,
+        message=f"Sent {count} recommendations"
                 + (f" (message id {message_id})." if message_id else "."),
         issue=issue,
     )
@@ -194,72 +187,48 @@ def _why_thin(reader, pool=None) -> str:
             "and dates. Add events, or widen theirs.")
 
 
-def _line_for(match, reader, budget, overrides):
-    """The words under a pick: the editor's if they edited them, else AI's.
-
-    An edited line is final - AI is not asked again for that pick, so the
-    preview the editor approved is what goes out, and it costs nothing.
-    """
-    edit = (overrides or {}).get(str(match.opportunity.pk)) or {}
-    if (edit.get("rationale") or "").strip():
-        return edit["rationale"].strip(), (edit.get("verdict") or "").strip()
-    return matching.build_rationale(match, reader, budget=budget)
-
-
 def preview_issue_for_reader(reader, min_recommendations: int | None = None,
-                             pool=None, overrides=None) -> dict:
-    """What this reader's next newsletter would look like, rendered.
+                             pool=None, overrides=None, composed=None) -> dict:
+    """What this reader's next culture week would look like, rendered.
 
-    Same path as a real send - matching, rationales, the template - then
-    rolled back, so what you read is what they would get rather than an
-    approximation of it. Nothing is stored and nothing goes on cooldown.
+    The same composition a send uses, rendered without storing anything:
+    nothing goes on cooldown, and the links go straight to the venues
+    because the picks have no records yet.
     """
-    from django.db import transaction
-
     from siteconfig.models import SiteConfig
 
-    from .emailing import render_newsletter
+    from .emailing import render_composed
 
     config = SiteConfig.load()
     if min_recommendations is None:
         min_recommendations = config.min_recommendations
 
-    matches = matching.top_matches_for_reader(reader, pool=pool)
-    if len(matches) < min_recommendations:
-        return {
-            "ok": False, "match_count": len(matches),
-            "message": (f"Skipped: only {len(matches)} strong match"
-                        f"{'' if len(matches) == 1 else 'es'} "
-                        f"(needs {min_recommendations}). " + _why_thin(reader, pool)),
-        }
-
-    budget = ai.TimeBudget(config.ai_send_budget_seconds)
-    rendered = {}
     try:
-        with transaction.atomic():
-            issue = NewsletterIssue.objects.create(reader=reader)
-            for match in matches:
-                rationale, verdict = _line_for(match, reader, budget, overrides)
-                Recommendation.objects.create(
-                    issue=issue, opportunity=match.opportunity, rationale=rationale,
-                    verdict=verdict, score=match.score)
-            subject, html, text = render_newsletter(issue)
-            edited = set((overrides or {}).keys())
-            rendered = {
-                "ok": True, "match_count": len(matches), "subject": subject,
-                "html": html, "text": text,
-                "picks": [
-                    {"title": rec.opportunity.title, "score": rec.score,
-                     "event_id": rec.opportunity_id, "rationale": rec.rationale,
-                     "verdict": rec.verdict,
-                     "edited": str(rec.opportunity_id) in edited}
-                    for rec in issue.recommendations.select_related("opportunity").order_by(*PICK_ORDER)
-                ],
-                "message": f"Would send {len(matches)} recommendations.",
+        if composed is None:
+            composed = compose.compose(reader, pool=pool, overrides=overrides)
+        count = len(composed.picks)
+        if count < min_recommendations:
+            return {
+                "ok": False, "match_count": count,
+                "message": (f"Skipped: only {count} strong match"
+                            f"{'' if count == 1 else 'es'} "
+                            f"(needs {min_recommendations}). " + _why_thin(reader, pool)),
             }
-            transaction.set_rollback(True)
+        subject, html, text = render_composed(composed, tracked=False)
     except Exception as exc:
         logger.exception("Preview failed for %s", reader.email)
-        return {"ok": False, "match_count": len(matches),
-                "message": f"Could not build a preview: {exc}"}
-    return rendered
+        return {"ok": False, "match_count": 0, "message": f"Could not build a preview: {exc}"}
+
+    return {
+        "ok": True, "match_count": count, "subject": subject, "html": html, "text": text,
+        "composed": composed,
+        "intro": composed.intro, "closing": composed.closing,
+        "picks": [
+            {"title": p.opportunity.title, "score": p.score, "event_id": p.event_id,
+             "rationale": p.rationale, "verdict": p.hook, "caveat": p.caveat,
+             "stars": p.stars, "section": p.section, "is_top": p.is_top,
+             "timing_label": p.timing_label, "edited": p.edited}
+            for p in composed.picks
+        ],
+        "message": f"Would send {count} recommendations.",
+    }

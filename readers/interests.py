@@ -92,6 +92,29 @@ def run(reader) -> dict:
     return {"absorbed": absorbed, "interpreted": interpreted}
 
 
+def reread(reader) -> None:
+    """Read a reader's taste again after they've told us something new.
+
+    Only the interpretation - not absorbing typed interests again, which
+    would count the same request twice. Off the request, and only when AI
+    is on, so a reply is never slowed or lost by it.
+    """
+    from recommendations import ai
+
+    if not ai.is_enabled("interpret_readers"):
+        return
+
+    def work():
+        try:
+            ai.apply_interpretation(reader)
+        except Exception:
+            logger.exception("Could not re-read the taste of %s", reader.email)
+        finally:
+            close_old_connections()
+
+    threading.Thread(target=work, daemon=True, name="reread-taste").start()
+
+
 def start(reader) -> None:
     """Run on a background thread. Never raises into the signup."""
 

@@ -174,16 +174,23 @@ class ListingWorkflowTests(LoggedInTestCase):
 
 
 class ReaderWorkflowTests(LoggedInTestCase):
-    @patch("desk.views.readers.send_issue_for_reader")
-    def test_preview_and_send_actions(self, send):
-        from recommendations.sending import SendResult
-
-        send.return_value = SendResult(reader_email="x", sent=True, match_count=2, message="Sent 2.")
+    @patch("recommendations.drafts.send_to")
+    def test_send_hands_the_reader_to_the_background_send(self, send_to):
         reader = Reader.objects.create(email="ada@example.com")
         response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
                                     {"action": "send"})
         self.assertEqual(response.status_code, 302)
-        send.assert_called_once_with(reader, dry_run=False)
+        self.assertEqual(send_to.call_args.args[0], [reader])
+        self.assertIsNone(send_to.call_args.kwargs["pool"])
+
+    @patch("recommendations.drafts.build")
+    def test_preview_starts_writing_a_draft_and_shows_the_page(self, build):
+        reader = Reader.objects.create(email="ada@example.com")
+        response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
+                                    {"action": "preview"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("preview=1", response.url)
+        self.assertEqual(build.call_args.args[0], reader)
 
     def test_filters_by_follows_and_status(self):
         Reader.objects.create(email="a@example.com", interest_categories=["music"])

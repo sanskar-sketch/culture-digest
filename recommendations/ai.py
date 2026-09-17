@@ -93,18 +93,19 @@ def is_enabled(feature: str = "write_rationales") -> bool:
     return SiteConfig.load().ai_available(feature)
 
 
-def _client():
+def _client(timeout: float | None = None):
     import openai
 
     # A bounded, non-retrying client. These calls can happen inside a web
     # request (the admin's send action), where the worker is killed if the
     # request outlives gunicorn's timeout - an unbounded call takes the whole
-    # site down with it, not just the send.
+    # site down with it, not just the send. Work that runs in the background
+    # passes its own, longer ceiling.
     from siteconfig.models import SiteConfig
 
     return openai.OpenAI(
         api_key=settings.OPENAI_API_KEY,
-        timeout=SiteConfig.load().ai_timeout_seconds,
+        timeout=timeout or SiteConfig.load().ai_timeout_seconds,
         max_retries=0,
     )
 
@@ -143,7 +144,7 @@ class TimeBudget:
 
 def _call(
     system: str, user: str, schema: dict, schema_name: str, max_tokens: int = 4000,
-    feature: str = "write_rationales",
+    feature: str = "write_rationales", timeout: float | None = None,
 ) -> dict | None:
     """One structured call. Returns parsed JSON, or None if AI is off or fails."""
     from siteconfig.models import SiteConfig
@@ -151,7 +152,7 @@ def _call(
     if not is_enabled(feature):
         return None
     try:
-        completion = _client().chat.completions.create(
+        completion = _client(timeout).chat.completions.create(
             model=SiteConfig.load().resolved_ai_model,
             max_completion_tokens=max_tokens,
             messages=[
@@ -284,10 +285,26 @@ Things they typed in themselves, where our fixed lists didn't fit:
 
 Anything else they wanted us to know (open-ended - they could write anything here):
 {reader.notes or "(nothing written)"}
+
+Replies they have sent since, about the picks we sent them (newest first -
+these are the freshest signal, and outrank the signup answers where they differ):
+{_replies_text(reader)}
 </reader_input>"""
 
     return _call(INTERPRET_SYSTEM, user, INTERPRET_SCHEMA, "reader_taste",
                  max_tokens=2000, feature="interpret_readers")
+
+
+def _replies_text(reader) -> str:
+    from .models import ReaderReply
+
+    rows = []
+    for reply in ReaderReply.objects.filter(reader=reader).select_related(
+            "recommendation__opportunity")[:15]:
+        about = (f" about '{reply.recommendation.opportunity.title}'"
+                 if reply.recommendation_id else " about their week")
+        rows.append(f"- {reply.created_at:%-d %b}{about}: {reply.text.strip()}")
+    return "\n".join(rows) or "(none yet)"
 
 
 def apply_interpretation(reader) -> bool:
@@ -494,6 +511,263 @@ Anything else they told us: {reader.notes or "(nothing written)"}
 
 
 # --------------------------------------------------------------------------
+# 3b. Writing a whole culture week
+# --------------------------------------------------------------------------
+#
+# One call for the whole issue rather than one per pick: the editor has to
+# see the week at once to say which things are the strongest bets, to plan
+# the days, and to avoid saying the same thing twenty times.
+
+ISSUE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "intro": {
+            "type": "string",
+            "description": "The editor's note that opens the issue. Two to four sentences.",
+        },
+        "picks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "integer"},
+                    "for_you_stars": {
+                        "type": "number",
+                        "description": "FOR YOU rating, 1 to 5 in steps of 0.5.",
+                    },
+                    "hook": {
+                        "type": "string",
+                        "description": "One sentence: the editor's call on it.",
+                    },
+                    "what_it_is": {"type": "string"},
+                    "why_for_you": {"type": "string"},
+                    "caveat": {
+                        "type": "string",
+                        "description": "Worth knowing before going, or empty.",
+                    },
+                },
+                "required": ["event_id", "for_you_stars", "hook", "what_it_is",
+                             "why_for_you", "caveat"],
+                "additionalProperties": False,
+            },
+        },
+        "programme": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"day": {"type": "string"}, "plan": {"type": "string"}},
+                "required": ["day", "plan"],
+                "additionalProperties": False,
+            },
+        },
+        "closing": {"type": "string"},
+    },
+    "required": ["intro", "picks", "programme", "closing"],
+    "additionalProperties": False,
+}
+
+ISSUE_SYSTEM = f"""You are the editor of a personalised weekly culture newsletter, writing
+one reader's culture week. You are not a listings site. You are a very good
+culture editor who knows this reader, reads widely, and tells them which
+things are actually worth their time - and which aren't.
+
+{UNTRUSTED_NOTE}
+
+TWO RATINGS, NEVER CONFUSED
+
+- FOR YOU (your for_you_stars) is how strongly you think this reader should
+  consider it: 1 to 5 in half stars. It is about them, not about quality.
+  Each item arrives with score_stars from the matching engine; stay within
+  one star of it, and use the whole range honestly. Something a critic
+  loved can be a three-star idea for this person, and a modest film can be
+  a five-star one for them.
+- Critic ratings belong to the publications. You are given the verified
+  reviews for each item. You may mention them. You may never invent a
+  review, a star rating, a quote, or a publication's opinion, and never
+  imply a consensus. If an item has no reviews listed, say nothing about
+  critics at all - no "acclaimed", no "rave reviews". If a review is listed
+  without stars, it has no star rating: do not give it one.
+
+The critic tells them whether it's good. You tell them whether it's good
+for them.
+
+FOR EACH ITEM
+
+- hook: one sentence, your call on it, in your own voice. For example
+  "This is probably my best live-music bet for you this week.", "This one
+  is much more unusual.", "I'm flagging it rather than recommending it."
+- what_it_is: what it actually is, concretely - who, what happens, what
+  makes this one distinct - from the listing only. Two to four sentences
+  for depth "full", one or two for "short".
+- why_for_you: why it suits this reader in particular. Name the signal:
+  something they said in their own words, a reply they sent, a past pick
+  they liked or turned down, something they saved, the interests they
+  chose. Draw the real distinction when there is one (the original artist
+  rather than a tribute night; new work with roots in a history they love;
+  a cheap punt in a small room). One to three sentences. Never flattery.
+- caveat: honest things worth knowing - that the timing makes it now or
+  never, that it runs for months so there's no rush, that it's long, that
+  it's new and unreviewed so it may be worth waiting, that it's a gamble.
+  Only from the listing and its timing. Empty if there is nothing.
+- Use the timing given ("Final week: closes Sat 19 Sep", "Book ahead") -
+  urgency is part of the recommendation. Don't restate dates already given
+  unless it matters.
+- A "saved" item is something they told us they wanted to go to: remind
+  them, more urgently if it is closing.
+- A "wildcard" item is outside what they picked, because they asked to be
+  surprised: say so, and why it might be worth the gamble.
+
+FOR THE ISSUE
+
+- intro: two to four sentences opening the week. How good a week it is for
+  them, honestly. If their replies or feedback have changed what you're
+  choosing, say what changed ("I've leant further towards the original
+  artists after your note about tribute nights"). If a section is thin,
+  it's fine to say so - never pretend a weak week is a strong one. Do not
+  list the items.
+- programme: "If I were programming your week" - a short day-by-day plan
+  using only items given, each on a day it is actually on (or any day for
+  releases and things with no fixed date), fitted to when they say they're
+  free. Three to seven entries. Day like "Thursday 17" or "Any evening".
+- closing: one or two sentences naming the strongest two or three bets -
+  the ones you'd most hate them to miss.
+
+VOICE
+
+First person, British English, conversational and specific, with opinions
+and dry wit. Address them as "you". Don't write their name - it's in the
+title. Don't open a write-up with the item's title; it's already the
+heading. No hype: no "immerse yourself", no "dive into", no "unmissable",
+no exclamation marks. Shorter is better than padded.
+
+FACTS
+
+Every date, price, venue, name, running time and award must come from the
+listing you are given. If a detail isn't there, leave it out. A reader may
+book on the strength of this.
+
+Write an entry for every item given, keyed by event_id."""
+
+
+def _reader_context(reader) -> str:
+    """Everything we know about a reader's taste, for writing to them."""
+    from .models import Recommendation, ReaderReply
+
+    lines = [
+        f"Where they live: {reader.location or 'not specified'}",
+        f"Categories they follow: {', '.join(reader.interest_categories or []) or 'no preference stated'}",
+        f"Interests they picked: {', '.join(reader.interest_tags.values_list('name', flat=True)) or 'none'}",
+        f"Budget: {reader.get_budget_display() if reader.budget else 'not specified'}",
+        f"How far they'll travel: {reader.get_travel_radius_display() if reader.travel_radius else 'not specified'}",
+        f"When they're free: {', '.join(reader.availability or []) or 'not specified'}",
+        f"Mainstream (1) to unusual (5): {reader.mainstream_preference or 'not specified'}",
+        f"Intimate (1) to large-scale (5): {reader.scale_preference or 'not specified'}",
+        f"Open to the odd surprise: {'yes' if reader.open_to_surprise else 'no'}",
+    ]
+    if reader.ai_taste_summary:
+        lines.append(f"Our reading of their taste: {reader.ai_taste_summary}")
+
+    history = (Recommendation.objects.filter(issue__reader=reader)
+               .exclude(feedback=Recommendation.Feedback.NONE)
+               .select_related("opportunity").order_by("-feedback_at")[:30])
+    by_kind: dict[str, list[str]] = {}
+    for rec in history:
+        by_kind.setdefault(rec.get_feedback_display(), []).append(
+            f"{rec.opportunity.title} ({rec.opportunity.get_category_display()})")
+    for label, titles in by_kind.items():
+        lines.append(f"Past picks they pressed '{label}' on: {'; '.join(titles)}")
+
+    replies = ReaderReply.objects.filter(reader=reader).select_related(
+        "recommendation__opportunity")[:12]
+    reply_lines = []
+    for reply in replies:
+        about = (f" (about '{reply.recommendation.opportunity.title}')"
+                 if reply.recommendation_id else "")
+        reply_lines.append(f"- {reply.created_at:%-d %b}{about}: {reply.text.strip()}")
+
+    return (
+        "\n".join(lines)
+        + "\n\n<reader_input>\n"
+        + f"Things they've loved, in their words: {reader.loved_examples or '(nothing written)'}\n"
+        + f"Things not for them: {reader.disliked_examples or '(nothing written)'}\n"
+        + f"Interests they typed in themselves: {reader.other_interests or '(none)'}\n"
+        + f"Places they love to travel to: {reader.travel_destinations or '(nothing written)'}\n"
+        + f"On budget, in their words: {reader.other_budget or '(none)'}\n"
+        + f"On when they're free, in their words: {reader.other_availability or '(none)'}\n"
+        + f"Anything else they told us at signup: {reader.notes or '(nothing written)'}\n"
+        + "Replies they have sent us, newest first:\n"
+        + ("\n".join(reply_lines) if reply_lines else "(none yet)")
+        + "\n</reader_input>"
+    )
+
+
+def _item_for_writing(pick, depth: str) -> dict:
+    opp = pick.opportunity
+    where = ", ".join(x for x in (opp.location_name, opp.location_area) if x)
+    reviews = []
+    for review in opp.verified_reviews():
+        if review.stars is not None:
+            entry = f"{review.publication}: {float(review.stars):g} stars out of 5"
+        else:
+            entry = f"{review.publication}: reviewed, no star rating"
+        if review.quote:
+            entry += f' - quote: "{review.quote}"'
+        reviews.append(entry)
+    return {
+        "event_id": opp.pk,
+        "depth": depth,
+        "title": opp.title,
+        "category": opp.get_category_display(),
+        "timing": pick.timing_label or ("on now" if pick.timing == "on" else pick.timing),
+        "dates": f"{opp.start_date or 'no start date'} to {opp.end_date or 'no end date'}",
+        "where": where or ("online / at home" if opp.is_online else "not given"),
+        "price": opp.price_display or opp.get_price_tier_display(),
+        "description": opp.description,
+        "editorial_note": opp.editorial_note or "",
+        "interests": [t.name for t in opp.tags.all()],
+        "verified_critic_reviews": reviews,
+        "score_stars": pick.stars,
+        "matching_signals": pick.reasons,
+        "saved_by_reader": pick.saved,
+        "wildcard": pick.wildcard,
+        "book_ahead": pick.timing == "book_ahead",
+    }
+
+
+def write_issue(reader, issue, picks) -> dict | None:
+    """Write a whole culture week: rating, words for every pick, intro, plan.
+
+    Returns the parsed response, or None to fall back to the template. Runs
+    in the background - it is given the long timeout, never a page's.
+    """
+    from siteconfig.models import SiteConfig
+
+    config = SiteConfig.load()
+    if not is_enabled("write_rationales") or not picks:
+        return None
+
+    ranked = sorted((p for p in picks if not p.saved and p.timing != "book_ahead"),
+                    key=lambda p: (-p.stars, -p.score))
+    full = {p.event_id for p in ranked[: config.top_picks_count + 2]}
+    items = [_item_for_writing(p, "full" if p.event_id in full else "short") for p in picks]
+
+    user = f"""The week: {issue.week_label} (today is {issue.week_start:%A %-d %B %Y}).
+
+The reader:
+{_reader_context(reader)}
+
+The items for this week, as JSON:
+{json.dumps(items, indent=1, default=str)}"""
+
+    result = _call(ISSUE_SYSTEM, user, ISSUE_SCHEMA, "culture_week",
+                   max_tokens=16000, feature="write_rationales",
+                   timeout=config.ai_issue_timeout_seconds)
+    if not result or not result.get("picks"):
+        return None
+    return result
+
+
+# --------------------------------------------------------------------------
 # 4. Researching real listings
 # --------------------------------------------------------------------------
 #
@@ -623,6 +897,173 @@ niche; intimate_to_large_scale is 1 for a small room and 5 for a big venue."""
     _record(True, "research_listings",
             f"found {len(kept)} for “{interest_name}”"
             + (f", dropped {dropped} with no source" if dropped else ""))
+    return {"listings": kept, "notes": payload.get("notes", ""), "dropped": dropped}
+
+
+# --------------------------------------------------------------------------
+# 4b. Critic reviews of a listing
+# --------------------------------------------------------------------------
+#
+# The model only finds the pages. Whether a rating is printed is decided by
+# opportunities.reviews, which reads each page itself.
+
+REVIEWS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "reviews": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "publication": {"type": "string"},
+                    "stars": {"type": ["number", "null"],
+                              "description": "Out of 5 as the review states it, or null "
+                                             "if the review has no star rating."},
+                    "url": {"type": "string", "description": "The review page itself."},
+                    "quote": {"type": "string", "description": "Up to 25 words copied "
+                              "exactly from the review, or empty."},
+                },
+                "required": ["publication", "stars", "url", "quote"],
+                "additionalProperties": False,
+            },
+        },
+        "notes": {"type": "string"},
+    },
+    "required": ["reviews", "notes"],
+    "additionalProperties": False,
+}
+
+REVIEWS_SYSTEM = """You find professional critics' reviews of one specific cultural event,
+release or book, for a newsletter that prints each publication's star rating
+beside its own recommendation.
+
+Hard rules:
+- Only reviews of this exact thing - this production, this album, this book,
+  this exhibition - not an earlier run, a different staging, or a preview.
+- Only professional publications: e.g. The Guardian, The Observer, Time Out,
+  The Times, The Sunday Times, Financial Times, Evening Standard, The
+  Telegraph, The Independent, The Stage, i, and for music Pitchfork, NME,
+  Mojo, Uncut; for film Empire, Sight and Sound; for books the London Review
+  of Books. Not blogs, not aggregators, not audience ratings.
+- url must be the review page you actually read, on the publication's own site.
+- stars exactly as that review states them, out of 5. If the review gives no
+  star rating, stars is null. Never estimate a rating from the tone.
+- At most one review per publication.
+- If you find none, return an empty list. An empty list is a good answer; a
+  guessed review is a lie about a real newspaper."""
+
+
+def research_reviews(opportunity, timeout: float = 180.0) -> dict | None:
+    """Search the web for critics' reviews of one listing. Never raises."""
+    from siteconfig.models import SiteConfig
+
+    if not is_enabled("classify_opportunities"):
+        return None
+    where = ", ".join(x for x in (opportunity.location_name, opportunity.location_area) if x)
+    prompt = f"""Find professional critics' reviews of:
+
+Title: {opportunity.title}
+Kind: {opportunity.get_category_display()}
+Where: {where or "not given"}
+Dates: {opportunity.start_date or "not given"} to {opportunity.end_date or "not given"}
+About it: {opportunity.description[:600]}
+
+Today's date: {timezone.localdate():%Y-%m-%d}"""
+    try:
+        response = _research_client(timeout=timeout).responses.create(
+            model=SiteConfig.load().resolved_ai_model,
+            instructions=REVIEWS_SYSTEM,
+            input=prompt,
+            tools=[{"type": "web_search"}],
+            max_output_tokens=3000,
+            text={"format": {"type": "json_schema", "name": "critic_reviews",
+                             "strict": True, "schema": REVIEWS_SCHEMA}},
+        )
+        payload = json.loads(response.output_text)
+    except Exception as exc:
+        logger.exception("Review research failed for %r", opportunity.title)
+        _record(False, "research_reviews", f"{type(exc).__name__}: {exc}")
+        return None
+    _record(True, "research_reviews",
+            f"found {len(payload.get('reviews') or [])} for “{opportunity.title}”")
+    return payload
+
+
+# --------------------------------------------------------------------------
+# 4c. This week's releases: books, albums, TV
+# --------------------------------------------------------------------------
+
+RELEASE_KINDS = {
+    "book": ("new books published in the UK", "the publisher's or a bookshop's page for it"),
+    "listen": ("new albums and significant new music released", "the artist's, label's or a record shop's page"),
+    "watch": ("new TV series and streaming releases starting in the UK",
+              "the channel's or streaming service's page for it"),
+}
+
+RELEASES_SYSTEM = """You research this week's cultural releases for a personalised culture
+newsletter's editor: books, albums, and TV or streaming series. The editor
+checks everything before it reaches a reader, but checks your work rather
+than rewriting it.
+
+Hard rules:
+- Real releases only, confirmed by pages you actually read, each listed in
+  `sources`. A release with no source is worthless - leave it out.
+- The release date must fall in the window you are given, and be stated by a
+  source. Never guess a date.
+- booking_url is a real page where a reader can buy, stream or read about it.
+  Never invent a URL.
+- location_name is the publisher, label, channel or streaming service.
+- Prefer genuinely distinctive work - original artists doing something new,
+  well-reviewed or significant books and series - over filler. Five good
+  ones beat fifteen.
+- Only use category values, price tiers and tag slugs from the lists given.
+- If there's nothing worth listing, return an empty list and say so."""
+
+
+def research_releases(kind: str, start, end, interests: list[str], count: int = 6,
+                      timeout: float = 240.0) -> dict | None:
+    """Search the web for this window's releases of one kind. Never raises."""
+    from opportunities.models import Category, Opportunity, Tag
+    from siteconfig.models import SiteConfig
+
+    if kind not in RELEASE_KINDS or not is_enabled("classify_opportunities"):
+        return None
+    what, where_to_link = RELEASE_KINDS[kind]
+    tags = list(Tag.objects.values_list("slug", flat=True)[:400])
+    prompt = f"""Find up to {count} {what} between {start:%A %-d %B %Y} and {end:%A %-d %B %Y}.
+
+Lean towards what these readers are interested in: {", ".join(interests) or "no particular lean"}.
+
+For each: category "{kind}", start_date = the release date, end_date empty,
+location_area "UK", booking_url = {where_to_link}, price_tier from the list
+(most books and albums are "budget"; streaming on an existing subscription is
+"free").
+
+Allowed categories: {", ".join(v for v, _ in Category.choices)}
+Allowed price tiers: {", ".join(v for v, _ in Opportunity.PriceTier.choices)}
+Allowed tag slugs: {", ".join(tags)}
+
+For the two dials: mainstream_to_unusual is 1 for crowd-pleasing and 5 for
+niche; intimate_to_large_scale is 1 for something small and personal, 5 for
+something big."""
+    try:
+        response = _research_client(timeout=timeout).responses.create(
+            model=SiteConfig.load().resolved_ai_model,
+            instructions=RELEASES_SYSTEM,
+            input=prompt,
+            tools=[{"type": "web_search"}],
+            max_output_tokens=8000,
+            text={"format": {"type": "json_schema", "name": "researched_releases",
+                             "strict": True, "schema": RESEARCH_SCHEMA}},
+        )
+        payload = json.loads(response.output_text)
+    except Exception as exc:
+        logger.exception("Release research failed for %s", kind)
+        _record(False, "research_releases", f"{type(exc).__name__}: {exc}")
+        return None
+    kept = [row for row in payload.get("listings") or [] if row.get("sources")]
+    dropped = len(payload.get("listings") or []) - len(kept)
+    _record(True, "research_releases", f"found {len(kept)} {kind} releases")
     return {"listings": kept, "notes": payload.get("notes", ""), "dropped": dropped}
 
 

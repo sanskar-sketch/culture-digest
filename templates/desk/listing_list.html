@@ -6,6 +6,7 @@
   <div class="d-page-actions">
     {% if waiting %}<a href="{% url 'desk:listings_review' %}" class="d-btn">{{ waiting }} waiting for you</a>{% endif %}
     <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="action" value="suggest_for_readers" class="d-btn" title="AI searches the web for events matching the interests your {{ readers_total }} readers have most and you have fewest events for">Find events with AI</button></form>
+    <form method="post" class="d-inline">{% csrf_token %}<button type="submit" name="action" value="find_releases" class="d-btn" title="AI searches for this week's new books, albums and TV series, leaning towards what your readers like">Find this week's releases</button></form>
   <a href="{{ add_url }}" class="d-btn primary">Add event</a>
   </div>
 </div>

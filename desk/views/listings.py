@@ -10,7 +10,7 @@ from django.utils.html import format_html
 from desk.forms import EventReviewForm, OpportunityForm
 from desk.permissions import staff_required
 from desk.utils import filter_options, paginate, search
-from opportunities import research
+from opportunities import research, reviews
 from opportunities.models import Category, Opportunity, Tag
 from readers.models import Reader
 
@@ -146,6 +146,8 @@ def listing_list(request):
         action = request.POST.get("action")
         if action == "suggest_for_readers":
             return _suggest_for_readers(request)  # acts on readers, not a selection
+        if action == "find_releases":
+            return _find_releases(request)
         ids = request.POST.getlist("selected")
         selected = Opportunity.objects.filter(pk__in=ids)
         if not ids:
@@ -249,7 +251,10 @@ def listing_review(request):
         if not ids:
             messages.warning(request, "Nothing selected.")
         elif action == "accept":
+            accepted = list(waiting.filter(pk__in=ids))
             n = waiting.filter(pk__in=ids).update(status=Opportunity.Status.PUBLISHED)
+            # What the critics said, found and checked in the background.
+            reviews.start_many(accepted)
             messages.success(request, f"{n} event{'' if n == 1 else 's'} accepted and live. "
                                       "They can be recommended from now on.")
         elif action == "reject":
@@ -302,11 +307,28 @@ def _accept_one(request, pk):
     saved.status = Opportunity.Status.PUBLISHED
     saved.save()
     form.save_m2m()
+    reviews.start_many([saved])
     messages.success(request, f"“{saved.title}” accepted and live."
                               + ("" if saved.tags.exists() else
                                  " It has no interests, so it can't reach anyone yet - "
                                  "open it and tick some."))
     return redirect("desk:listings_review")
+
+
+def _find_releases(request):
+    """New books, albums and TV for the coming week, found by AI, waiting for review."""
+    from recommendations import ai
+
+    if not ai.is_enabled("classify_opportunities"):
+        messages.warning(request, "AI is not configured, or event research is switched "
+                                  "off in Settings → AI assistance.")
+    elif research.start_releases():
+        messages.success(request, (
+            "Searching for this week's new books, albums and TV. It takes a few minutes; "
+            "what's found waits under Waiting for you, with the pages it read."))
+    else:
+        messages.info(request, "A search for this week's releases is already running.")
+    return redirect("desk:listings_list")
 
 
 def _suggest_for_readers(request):
@@ -361,6 +383,8 @@ def listing_form(request, pk=None):
                 messages.success(request, f"Saved “{obj.title}”.")
                 if creating and not obj.tags.exists():
                     _tag_on_creation(request, obj)
+                if creating:
+                    reviews.start_many([obj])
                 if "save_add_another" in request.POST:
                     return redirect("desk:listings_add")
                 return redirect("desk:listings_change", pk=obj.pk)
@@ -380,6 +404,9 @@ def listing_form(request, pk=None):
         )
 
     context = {
+        "reviews": list(instance.reviews.all()) if instance else [],
+        "reviews_running": bool(instance and reviews.is_running(instance)),
+        "review_star_choices": [x / 2 for x in range(1, 11)],
         "page_title": "Add event" if not instance else f"Edit {instance.title}",
         "breadcrumbs": [("Events", reverse("desk:listings_list")),
                         ("Add" if not instance else instance.title, None)],
@@ -522,3 +549,67 @@ def listing_suggest_audience(request, pk):
            f"price {suggestion.get('price_tier', '—')} - change those below if they fit.")
     )
     return redirect("desk:listings_change", pk=pk)
+
+
+@staff_required
+def listing_reviews(request, pk):
+    """Critic reviews on one event: find, add, check, verify, remove."""
+    from decimal import Decimal, InvalidOperation
+
+    from opportunities.models import CriticReview
+
+    event = get_object_or_404(Opportunity, pk=pk)
+    back = reverse("desk:listings_change", args=[pk]) + "#reviews"
+    if request.method != "POST":
+        return redirect(back)
+    action = request.POST.get("action")
+
+    if action == "find":
+        if reviews.start(event):
+            messages.success(request, "Looking for critics' reviews. Each one found is checked "
+                                      "against its page; refresh in a minute.")
+        else:
+            messages.warning(request, "AI is off, or a search for this event is already running.")
+        return redirect(back)
+
+    if action == "add":
+        publication = reviews.canonical_publication(request.POST.get("publication", ""))[:80]
+        url = (request.POST.get("url") or "").strip()
+        if not publication or not url.startswith(("http://", "https://")):
+            messages.error(request, "A review needs the publication and the link to it.")
+            return redirect(back)
+        stars = None
+        if request.POST.get("stars"):
+            try:
+                stars = Decimal(request.POST["stars"])
+            except InvalidOperation:
+                stars = None
+        CriticReview.objects.update_or_create(
+            opportunity=event, publication=publication,
+            defaults={"url": url[:500], "stars": stars,
+                      "quote": (request.POST.get("quote") or "").strip()[:300],
+                      "verified": CriticReview.Verified.EDITOR,
+                      "check_note": "Added by an editor.", "checked_at": timezone.now()})
+        messages.success(request, f"{publication}'s review added. It goes in the newsletter.")
+        return redirect(back)
+
+    review = get_object_or_404(CriticReview, pk=request.POST.get("review"), opportunity=event)
+    if action == "verify":
+        review.verified = CriticReview.Verified.EDITOR
+        review.check_note = "Checked by an editor."
+        review.save(update_fields=["verified", "check_note"])
+        messages.success(request, f"{review.publication}'s review verified.")
+    elif action == "unverify":
+        review.verified = ""
+        review.check_note = "Unticked by an editor - it stays out of the newsletter."
+        review.save(update_fields=["verified", "check_note"])
+        messages.info(request, f"{review.publication}'s review taken out of the newsletter.")
+    elif action == "recheck":
+        review.verified = ""
+        reviews.check(review)
+        review.save()
+        messages.info(request, f"{review.publication}: {review.check_note}")
+    elif action == "delete":
+        review.delete()
+        messages.success(request, "Review removed.")
+    return redirect(back)

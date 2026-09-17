@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>{{ site_config.site_name }}</title>
+<title>{{ title }}</title>
 </head>
 <body style="margin:0; padding:0; background:#f5f5f7; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif; color:#1d1d1f;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;">
@@ -14,84 +14,115 @@
 
         <!-- header -->
         <tr>
-          <td style="background:#000000; border-radius:0 0 24px 24px; padding:36px 32px 32px;" align="center">
-            <div style="font-size:38px; line-height:1.05; font-weight:700; letter-spacing:-0.035em; color:#ffffff;">
+          <td style="background:#000000; border-radius:0 0 24px 24px; padding:34px 32px 30px;" align="center">
+            <div style="font-size:34px; line-height:1.05; font-weight:700; letter-spacing:-0.035em; color:#ffffff;">
               {{ site_config.site_name }}<span style="color:#ff375f;">.</span>
             </div>
-            <div style="font-size:13px; line-height:1.5; color:#a1a1a6; margin-top:10px;">
-              {{ site_config.tagline }}
-            </div>
-            <h1 style="font-size:30px; line-height:1.2; margin:20px 0 0; color:#ffffff; font-weight:700; letter-spacing:-0.02em; text-transform:uppercase;">
-              {% if reader.name %}{{ reader.name }}'s {{ recommendations|length }}{% else %}This week's {{ recommendations|length }}{% endif %}
-            </h1>
-            <div style="font-size:13px; color:#a1a1a6; margin-top:8px;">
-              {{ issue_dates }}{% if reader.location %} &middot; {{ reader.location }}{% endif %}
-            </div>
+            <div style="font-size:13px; line-height:1.5; color:#a1a1a6; margin-top:8px;">{{ site_config.tagline }}</div>
+            <h1 style="font-size:28px; line-height:1.2; margin:22px 0 0; color:#ffffff; font-weight:700; letter-spacing:-0.02em;">{{ title }}</h1>
+            <div style="font-size:14px; color:#a1a1a6; margin-top:6px;">{{ issue_dates }}{% if reader.location %} &middot; {{ reader.location }}{% endif %}</div>
           </td>
         </tr>
 
-        <tr><td style="height:28px; line-height:28px; font-size:0;">&nbsp;</td></tr>
+        <tr><td style="height:24px; line-height:24px; font-size:0;">&nbsp;</td></tr>
 
-        <!-- recommendations -->
-        {% for rec in recommendations %}
+        {% if intro %}
+        <!-- the editor's note -->
         <tr>
           <td style="padding:0 0 20px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff; border:1px solid #e5e5ea; border-radius:18px;">
+              <tr><td style="padding:24px 28px 12px; font-size:16px; line-height:1.65; color:#1d1d1f;">
+                {{ intro_html }}
+                <p style="margin:4px 0 12px; font-size:12px; line-height:1.5; color:#86868b;">FOR YOU &#9733; is how strongly I think you should consider it.{% if has_critics %} Critic stars sit beside it only where I&rsquo;ve checked a real review.{% endif %}</p>
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+        {% endif %}
+
+        {% for section in sections %}
+        {% if section.title %}
+        <tr>
+          <td style="padding:10px 6px 12px; font-size:13px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#1d1d1f;">
+            {{ section.emoji }}&nbsp; {{ section.title }}
+          </td>
+        </tr>
+        {% endif %}
+        {% for rec in section.picks %}
+        <tr>
+          <td style="padding:0 0 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff; border:1px solid {% if rec.urgent %}#ffd1db{% else %}#e5e5ea{% endif %}; border-radius:18px;">
               <tr>
-                <td style="padding:28px 28px 24px;">
-                  <div style="font-size:26px; font-weight:700; color:#d2d2d7; line-height:1; margin-bottom:8px;">{{ forloop.counter }}</div>
-                  <h2 style="font-size:21px; line-height:1.3; margin:0 0 8px; font-weight:700; letter-spacing:-0.01em; color:#1d1d1f; text-transform:uppercase;">{{ rec.opportunity.title }}</h2>
-                  <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#ff375f; margin-bottom:10px;">
-                    {{ rec.opportunity.get_category_display }}{% if rec.opportunity.location_name %} &middot; {{ rec.opportunity.location_name }}{% elif rec.opportunity.location_area %} &middot; {{ rec.opportunity.location_area }}{% endif %}{% if rec.opportunity.price_display %} &middot; {{ rec.opportunity.price_display }}{% endif %}{% if rec.dates %} &middot; {{ rec.dates }}{% endif %}
+                <td style="padding:{% if rec.is_top or section.key == 'picks' %}26px 28px 22px{% else %}20px 24px 18px{% endif %};">
+                  {% if rec.is_top or section.key == "picks" %}<div style="font-size:24px; font-weight:700; color:#d2d2d7; line-height:1; margin-bottom:8px;">{{ forloop.counter }}</div>{% endif %}
+                  <h2 style="font-size:{% if rec.is_top or section.key == 'picks' %}21px{% else %}18px{% endif %}; line-height:1.3; margin:0 0 6px; font-weight:700; letter-spacing:-0.01em; color:#1d1d1f;">{{ rec.title }}</h2>
+                  <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#ff375f; margin-bottom:8px;">
+                    {{ rec.category }}{% if rec.where %} &middot; {{ rec.where }}{% endif %}{% if rec.price %} &middot; {{ rec.price }}{% endif %}{% if rec.dates and not rec.timing_label %} &middot; {{ rec.dates }}{% endif %}
                   </div>
-                  <div style="font-size:14px; color:#1d1d1f; margin-bottom:14px;">
-                    <span style="letter-spacing:1px;">{{ rec.fit_display }}</span>
-                    <span style="color:#86868b; font-size:12px;">&nbsp;fit for you</span>
-                  </div>
-
-                  <div style="font-size:15px; line-height:1.65; margin:0 0 16px; color:#4a4a4f;">
-                    {{ rec.rationale_html }}
-                  </div>
-
-                  {% if rec.opportunity.critic_quote %}
-                  <p style="font-size:14px; line-height:1.6; margin:0 0 16px; padding-left:14px; border-left:3px solid #e5e5ea; color:#4a4a4f;">
-                    &ldquo;{{ rec.opportunity.critic_quote }}&rdquo;{% if rec.opportunity.critic_rating_source %}
-                    <span style="color:#86868b;">&mdash; {{ rec.opportunity.critic_rating_source }}</span>{% endif %}
-                  </p>
-                  {% elif rec.opportunity.critic_rating_source %}
-                  <p style="font-size:13px; margin:0 0 16px; color:#86868b;">
-                    Critics: {{ rec.opportunity.critic_rating_source }}
-                  </p>
+                  {% if rec.timing_label %}
+                  <div style="margin:0 0 10px;"><span style="display:inline-block; font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px; {% if rec.urgent %}background:#ff375f; color:#ffffff;{% elif rec.book_ahead %}background:#1d1d1f; color:#ffffff;{% else %}background:#f2f2f5; color:#4a4a4f;{% endif %}">{{ rec.timing_label }}</span></div>
                   {% endif %}
-
-                  {% if rec.verdict %}
-                  <p style="font-size:14px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; margin:0 0 18px; color:#1d1d1f;">
-                    Verdict: {{ rec.verdict }}
-                  </p>
-                  {% endif %}
-                  <a href="{{ rec.booking_url }}" style="display:inline-block; background:#000000; color:#ffffff; text-decoration:none; padding:12px 24px; border-radius:999px; font-size:14px; font-weight:500;">Book / learn more &rarr;</a>
-
-                  <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:22px; border-top:1px solid #eeeeef; padding-top:16px; width:100%;">
-                    <tr><td style="padding-top:16px; font-size:12px; color:#86868b;">
-                      <a href="{{ rec.more_like_this_url }}" style="color:#86868b; text-decoration:none;">More like this</a>
-                      &nbsp;&middot;&nbsp;
-                      <a href="{{ rec.not_for_me_url }}" style="color:#86868b; text-decoration:none;">Not for me</a>
-                      &nbsp;&middot;&nbsp;
-                      <a href="{{ rec.save_url }}" style="color:#86868b; text-decoration:none;">Save</a>
-                      &nbsp;&middot;&nbsp;
-                      <a href="{{ rec.booked_url }}" style="color:#86868b; text-decoration:none;">I booked this</a>
-                    </td></tr>
-                  </table>
+                  <div style="font-size:13px; color:#1d1d1f; margin-bottom:12px; line-height:1.6;">
+                    <span style="font-weight:700; letter-spacing:0.04em;">FOR YOU</span>&nbsp;<span style="letter-spacing:1px;">{{ rec.stars }}</span>{% for review in rec.reviews %}<span style="color:#c7c7cc;">&nbsp;&middot;&nbsp;</span><a href="{{ review.url }}" style="color:#4a4a4f; text-decoration:none;">{{ review.label }}</a>{% endfor %}
+                  </div>
+                  {% if rec.hook %}<p style="font-size:15px; line-height:1.5; font-weight:600; margin:0 0 10px; color:#1d1d1f;">{{ rec.hook }}</p>{% endif %}
+                  <div style="font-size:15px; line-height:1.65; margin:0 0 6px; color:#4a4a4f;">{{ rec.rationale_html }}</div>
+                  {% for review in rec.reviews %}{% if review.quote %}
+                  <p style="font-size:14px; line-height:1.6; margin:0 0 12px; padding-left:14px; border-left:3px solid #e5e5ea; color:#4a4a4f;">&ldquo;{{ review.quote }}&rdquo; <span style="color:#86868b;">&mdash; {{ review.publication }}</span></p>
+                  {% endif %}{% endfor %}
+                  {% if rec.caveat %}<p style="font-size:14px; line-height:1.6; margin:0 0 14px; color:#6e6e73;"><strong style="color:#1d1d1f;">Worth knowing:</strong> {{ rec.caveat }}</p>{% endif %}
+                  <a href="{{ rec.booking_url }}" style="display:inline-block; background:#000000; color:#ffffff; text-decoration:none; padding:{% if rec.is_top %}11px 22px{% else %}9px 18px{% endif %}; border-radius:999px; font-size:13px; font-weight:500;">{% if rec.book_ahead %}Book{% else %}Details{% endif %} &rarr;</a>
+                  {% for review in rec.reviews %}<a href="{{ review.url }}" style="display:inline-block; margin:6px 0 0 12px; color:#1d1d1f; font-size:13px; text-decoration:underline;">{{ review.publication }} review</a>{% endfor %}
+                  <div style="margin-top:16px; border-top:1px solid #eeeeef; padding-top:12px; font-size:12px; color:#86868b; line-height:1.8;">
+                    <a href="{{ rec.more_like_this_url }}" style="color:#86868b; text-decoration:none;">More like this</a>&nbsp;&middot;&nbsp;<a href="{{ rec.not_for_me_url }}" style="color:#86868b; text-decoration:none;">Not for me</a>&nbsp;&middot;&nbsp;<a href="{{ rec.save_url }}" style="color:#86868b; text-decoration:none;">Save</a>&nbsp;&middot;&nbsp;<a href="{{ rec.booked_url }}" style="color:#86868b; text-decoration:none;">I booked this</a>&nbsp;&middot;&nbsp;<a href="{{ rec.reply_url }}" style="color:#86868b; text-decoration:none;">Tell me why</a>
+                  </div>
                 </td>
               </tr>
             </table>
           </td>
         </tr>
         {% endfor %}
+        {% endfor %}
+
+        {% if programme %}
+        <!-- the week, planned -->
+        <tr>
+          <td style="padding:6px 0 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#1d1d1f; border-radius:18px;">
+              <tr><td style="padding:24px 28px 16px;">
+                <div style="font-size:13px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#ffffff; margin-bottom:12px;">If I were programming your week</div>
+                {% for row in programme %}
+                <p style="margin:0 0 10px; font-size:15px; line-height:1.55; color:#e5e5ea;"><strong style="color:#ffffff;">{{ row.day }}:</strong> {{ row.plan }}</p>
+                {% endfor %}
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+        {% endif %}
+
+        {% if strongest %}
+        <!-- the strongest bets -->
+        <tr>
+          <td style="padding:0 0 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff; border:1px solid #e5e5ea; border-radius:18px;">
+              <tr><td style="padding:22px 28px 14px;">
+                <div style="font-size:13px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#1d1d1f; margin-bottom:10px;">My strongest bets this week</div>
+                {% for rec in strongest %}
+                <p style="margin:0 0 6px; font-size:15px; line-height:1.5; color:#1d1d1f;">{{ rec.title }} <span style="letter-spacing:1px; color:#4a4a4f;">{{ rec.stars }}</span></p>
+                {% endfor %}
+                {% if closing %}<p style="margin:10px 0 8px; font-size:15px; line-height:1.6; color:#4a4a4f;">{{ closing }}</p>{% endif %}
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+        {% endif %}
 
         <!-- footer -->
         <tr>
           <td style="padding:12px 28px 0;" align="center">
+            <p style="font-size:14px; line-height:1.6; color:#1d1d1f; margin:0 0 14px;">
+              <a href="{{ reply_url }}" style="color:#1d1d1f;">Tell me what you thought of this week</a> &mdash; it shapes what I send you next.
+            </p>
             <p style="font-size:12px; line-height:1.6; color:#86868b; margin:0;">
               {{ site_config.site_name }} &mdash; {{ site_config.tagline }}<br>
               <a href="{{ unsubscribe_url }}" style="color:#86868b;">Unsubscribe</a>

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Thanks &mdash; {{ site_config.site_name }}{% endblock %}
+{% block content %}
+  <section class="hero bg-dark">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="hero-content reveal is-visible">
+      <span class="eyebrow">Noted</span>
+      <p class="hero-brand" style="font-size:clamp(34px,6vw,64px);margin-bottom:10px;">{{ site_config.site_name }}<span class="brand-dot"></span></p>
+      <h1>Thank you.</h1>
+      <p class="lede" style="margin-left:auto;margin-right:auto;">
+        I've kept what you said{% if not about_week %} about <strong>{{ recommendation.opportunity.title }}</strong>{% endif %}.
+        You'll see it in what I choose for you next week.
+      </p>
+      <a href="/" class="btn btn-ghost">Back home</a>
+    </div>
+  </section>
+{% endblock %}

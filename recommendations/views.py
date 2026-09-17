@@ -13,7 +13,10 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .models import LinkClick, Recommendation
+from .models import LinkClick, ReaderReply, Recommendation
+
+# Long enough for a proper paragraph, short enough that nobody pastes a book.
+REPLY_MAX = 4000
 
 ACTION_TO_FEEDBACK = {
     "more-like-this": Recommendation.Feedback.MORE_LIKE_THIS,
@@ -62,6 +65,49 @@ def booking_click_view(request, token):
     _record(recommendation.issue.reader, destination, LinkClick.Section.BOOKING,
             recommendation=recommendation)
     return redirect(destination)
+
+
+def review_click_view(request, token, review_id):
+    """A critic review linked from a pick: record it, then open the review."""
+    recommendation = get_object_or_404(
+        Recommendation.objects.select_related("issue__reader"), feedback_token=token)
+    # The review has to belong to this pick's event, or the id in the path
+    # could be used to bounce readers to any stored URL.
+    review = get_object_or_404(recommendation.opportunity.reviews, pk=review_id)
+    _record(recommendation.issue.reader, review.url, LinkClick.Section.REVIEW,
+            recommendation=recommendation)
+    return redirect(review.url)
+
+
+def reply_view(request, token):
+    """A reader telling us, in words, what they thought.
+
+    Reached from "Tell me why" under a pick, from the feedback page, or
+    from the foot of the email about the week as a whole. What they write
+    is kept, read into their taste, and handed to whoever writes their next
+    issue - which is how "tribute nights aren't for me" changes every week
+    after it.
+    """
+    recommendation = get_object_or_404(
+        Recommendation.objects.select_related("opportunity", "issue__reader"),
+        feedback_token=token)
+    reader = recommendation.issue.reader
+    about_week = (request.POST.get("about") or request.GET.get("about")) == "week"
+
+    if request.method == "POST":
+        text = (request.POST.get("text") or "").strip()[:REPLY_MAX]
+        if text:
+            ReaderReply.objects.create(
+                reader=reader, issue=recommendation.issue,
+                recommendation=None if about_week else recommendation, text=text)
+            from readers import interests
+
+            interests.reread(reader)
+            return render(request, "feedback/replied.html",
+                          {"recommendation": recommendation, "about_week": about_week})
+
+    return render(request, "feedback/reply.html",
+                  {"recommendation": recommendation, "about_week": about_week})
 
 
 def campaign_click_view(request, token):

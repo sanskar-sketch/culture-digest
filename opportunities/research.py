@@ -27,7 +27,7 @@ from datetime import datetime
 from django.db import close_old_connections
 from django.utils.text import slugify
 
-from .models import Category, Opportunity, Tag
+from .models import RELEASE_CATEGORIES, Category, Opportunity, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -94,10 +94,13 @@ def save_drafts(payload: dict, interest: Tag | None = None) -> list[Opportunity]
         if _already_have(row):
             continue
 
+        category = _choice(row.get("category"), Category.choices, Category.OTHER)
         opportunity = Opportunity.objects.create(
             title=title[:200],
             slug=_unique_slug(title),
-            category=_choice(row.get("category"), Category.choices, Category.OTHER),
+            category=category,
+            # A book, an album, a series: nobody travels to it.
+            is_online=category in RELEASE_CATEGORIES,
             description=(row.get("description") or "").strip(),
             editorial_note="Researched by AI. Check the date, the price and that it "
                            "is still on before publishing.",
@@ -105,7 +108,8 @@ def save_drafts(payload: dict, interest: Tag | None = None) -> list[Opportunity]
                                Opportunity.PriceTier.MODERATE),
             price_display=(row.get("price_display") or "").strip()[:60],
             location_name=(row.get("location_name") or "").strip()[:200],
-            location_area=(row.get("location_area") or "").strip()[:120],
+            location_area=((row.get("location_area") or "").strip()
+                           or ("UK" if category in RELEASE_CATEGORIES else ""))[:120],
             booking_url=booking_url[:500],
             start_date=_date(row.get("start_date")),
             end_date=_date(row.get("end_date")),
@@ -197,3 +201,71 @@ def for_readers(readers=None, limit: int = 5, count: int = 4) -> list[str]:
     area = areas.most_common(1)[0][0] if areas else ""
 
     return [tag.name for tag in wanted if start(tag, area=area, count=count)]
+
+
+# ---------------------------------------------------------------------------
+# This week's releases
+# ---------------------------------------------------------------------------
+
+_releases_running = threading.Event()
+
+
+def releases_window(today=None):
+    """From a few days back - so "just out" counts - to a week ahead."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    today = today or timezone.localdate()
+    return today - timedelta(days=3), today + timedelta(days=7)
+
+
+def reader_interests_for(kind: str, limit: int = 12) -> list[str]:
+    """The interests active readers hold most, to lean the search towards them."""
+    from django.db.models import Count, Q
+
+    from readers.models import Reader
+
+    active = Reader.objects.filter(is_active=True)
+    rows = (Tag.objects.annotate(n=Count("interested_readers", distinct=True,
+                                         filter=Q(interested_readers__in=active)))
+            .filter(n__gt=0).filter(Q(category=kind) | Q(category="") | Q(category__in=[
+                Category.MUSIC, Category.FILM, Category.EXHIBITION, Category.TALK]))
+            .order_by("-n", "name")[:limit])
+    return [t.name for t in rows]
+
+
+def run_releases(kinds=("book", "listen", "watch"), count: int = 6) -> dict:
+    """Search each kind of release for the coming week and save drafts. Synchronous."""
+    from recommendations import ai
+
+    start, end = releases_window()
+    created, notes = [], []
+    for kind in kinds:
+        payload = ai.research_releases(kind, start, end, reader_interests_for(kind), count=count)
+        if payload is None:
+            continue
+        created += save_drafts(payload)
+        if payload.get("notes"):
+            notes.append(f"{kind}: {payload['notes']}")
+    return {"created": created, "notes": " ".join(notes)}
+
+
+def start_releases() -> bool:
+    """Search for releases on a background thread. False if one is already running."""
+    if _releases_running.is_set():
+        return False
+    _releases_running.set()
+
+    def work():
+        try:
+            result = run_releases()
+            logger.info("Release research created %d draft(s)", len(result["created"]))
+        except Exception:
+            logger.exception("Release research failed")
+        finally:
+            close_old_connections()
+            _releases_running.clear()
+
+    threading.Thread(target=work, daemon=True, name="research-releases").start()
+    return True

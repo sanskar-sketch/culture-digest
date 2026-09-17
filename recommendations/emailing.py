@@ -200,39 +200,125 @@ def deliver(to_email: str, subject: str, text_body: str, html_body: str) -> str 
     return headers.get("X-Message-Id") or headers.get("x-message-id")
 
 
-def render_newsletter(issue) -> tuple[str, str, str]:
-    """Return (subject, html_body, text_body) for a NewsletterIssue."""
+def build_review_url(token, review) -> str:
+    """A critic review's link, routed through us so the click is recorded."""
+    path = reverse("recommendations:review-click",
+                   kwargs={"token": token, "review_id": review.pk})
+    return settings.SITE_BASE_URL.rstrip("/") + path
+
+
+def build_reply_url(token, about_week: bool = False) -> str:
+    path = reverse("recommendations:reply", kwargs={"token": token})
+    return settings.SITE_BASE_URL.rstrip("/") + path + ("?about=week" if about_week else "")
+
+
+def _possessive(reader) -> str:
+    first = reader.name.split(" ")[0] if reader.name else ""
+    if not first:
+        return "Your "
+    return f"{first}’ " if first.endswith("s") else f"{first}’s "
+
+
+def _pick_view(*, opportunity, rationale, hook, caveat, rating, section, is_top, timing,
+               timing_label, token, tracked, position=0):
+    """One pick, as every newsletter template sees it.
+
+    `tracked` is False for a preview: its picks have no records yet, so its
+    links go straight to the venue and the review rather than through us.
+    """
+    from opportunities.models import stars_text
+
+    def link(action):
+        return build_feedback_url(token, action) if tracked and token else "#"
+
+    reviews = []
+    for review in opportunity.verified_reviews():
+        stars = review.stars_display
+        reviews.append({
+            "publication": review.publication,
+            "stars": stars,
+            "label": f"{review.publication} {stars}" if stars else f"{review.publication}: reviewed, no star rating",
+            "url": build_review_url(token, review) if tracked and token else review.url,
+            "quote": review.quote,
+        })
+
+    where = opportunity.location_name or ("" if opportunity.is_release else opportunity.location_area)
+    return {
+        "opportunity": opportunity,
+        "title": opportunity.title,
+        "category": opportunity.get_category_display(),
+        "where": where,
+        "price": opportunity.price_display,
+        "dates": _date_range(opportunity),
+        "timing": timing,
+        "timing_label": timing_label,
+        "urgent": timing == "last_chance",
+        "book_ahead": timing == "book_ahead",
+        "rating": rating,
+        "stars": stars_text(rating),
+        "fit_display": stars_text(rating),
+        "hook": hook,
+        "verdict": hook,
+        "rationale": rationale,
+        "rationale_html": _paragraphs(rationale),
+        "caveat": caveat,
+        "reviews": reviews,
+        "is_top": is_top,
+        "section": section,
+        "position": position,
+        "booking_url": (settings.SITE_BASE_URL.rstrip("/")
+                        + reverse("recommendations:booking-click", kwargs={"token": token})
+                        if tracked and token else opportunity.booking_url),
+        "more_like_this_url": link("more-like-this"),
+        "not_for_me_url": link("not-for-me"),
+        "save_url": link("save"),
+        "booked_url": link("booked"),
+        "reply_url": build_reply_url(token) if tracked and token else "#",
+    }
+
+
+def _sections(picks: list[dict]) -> list[dict]:
+    """The picks grouped under their headings, in issue order, empty ones left out."""
+    from .compose import SECTIONS
+
+    if not any(p["section"] or p["is_top"] for p in picks):
+        # An issue from before sections: one untitled group, as it was sent.
+        return [{"key": "picks", "emoji": "", "title": "", "picks": picks}] if picks else []
+    groups = []
+    for key, emoji, title in SECTIONS:
+        members = [p for p in picks if ("top" if p["is_top"] else p["section"]) == key]
+        if members:
+            groups.append({"key": key, "emoji": emoji, "title": title, "picks": members})
+    return groups
+
+
+def _render(reader, *, week_start, week_end, intro, programme, closing, picks,
+            tracked: bool) -> tuple[str, str, str]:
+    """Subject, HTML and text for one culture week, stored or composed."""
     from siteconfig.models import SiteConfig
 
+    from .compose import week_label
+
     config = SiteConfig.load()
-    reader = issue.reader
-    from .models import PICK_ORDER
-
-    recs = list(issue.recommendations.select_related("opportunity").order_by(*PICK_ORDER))
-
-    rec_contexts = []
-    for rec in recs:
-        rec_contexts.append(
-            {
-                "opportunity": rec.opportunity,
-                "rationale": rec.rationale,
-                "rationale_html": _paragraphs(rec.rationale),
-                "verdict": rec.verdict,
-                "fit_display": rec.fit_display,
-                "dates": _date_range(rec.opportunity),
-                "booking_url": build_booking_url(rec),
-                "more_like_this_url": build_feedback_url(rec.feedback_token, "more-like-this"),
-                "not_for_me_url": build_feedback_url(rec.feedback_token, "not-for-me"),
-                "save_url": build_feedback_url(rec.feedback_token, "save"),
-                "booked_url": build_feedback_url(rec.feedback_token, "booked"),
-            }
-        )
+    week = week_label(week_start, week_end) if week_start and week_end else ""
+    top = [p for p in picks if p["is_top"]]
+    first_token = next((p["_token"] for p in picks if p.get("_token")), None)
 
     context = {
         "reader": reader,
         "site_config": config,
-        "issue_dates": _issue_dates(recs),
-        "recommendations": rec_contexts,
+        "week_label": week,
+        "issue_dates": week or _issue_dates_from_views(picks),
+        "title": f"{_possessive(reader)}culture week",
+        "intro": intro,
+        "intro_html": _paragraphs(intro),
+        "programme": programme or [],
+        "closing": closing,
+        "sections": _sections(picks),
+        "recommendations": picks,
+        "strongest": top,
+        "has_critics": any(p["reviews"] for p in picks),
+        "reply_url": build_reply_url(first_token, about_week=True) if tracked and first_token else "#",
         "unsubscribe_url": build_unsubscribe_url(reader),
     }
 
@@ -241,16 +327,16 @@ def render_newsletter(issue) -> tuple[str, str, str]:
         subject = config.subject_template.format(
             name=f"{first_name}, " if first_name else "",
             first_name=first_name,
-            count=len(recs),
-            plural="" if len(recs) == 1 else "s",
+            possessive=_possessive(reader),
+            week=week,
+            count=len(picks),
+            plural="" if len(picks) == 1 else "s",
         )
     except (KeyError, IndexError, ValueError):
         # An editor can mistype a placeholder - a broken subject template
         # must not stop the newsletter going out.
-        logger.warning("Bad subject_template %r - using the default",
-                       config.subject_template)
-        subject = (f"{first_name + ', ' if first_name else ''}{len(recs)} "
-                   f"thing{'' if len(recs) == 1 else 's'} worth your time")
+        logger.warning("Bad subject_template %r - using the default", config.subject_template)
+        subject = f"{_possessive(reader)}culture week" + (f": {week}" if week else "")
 
     from siteconfig.emails import EmailTemplate, render_email
 
@@ -259,6 +345,47 @@ def render_newsletter(issue) -> tuple[str, str, str]:
         ("emails/newsletter.html", "emails/newsletter.txt"),
     )
     return subject_override or subject, html_body, text_body
+
+
+def _issue_dates_from_views(picks) -> str:
+    class _R:  # the old helper reads rec.opportunity
+        def __init__(self, opportunity):
+            self.opportunity = opportunity
+    return _issue_dates([_R(p["opportunity"]) for p in picks])
+
+
+def render_newsletter(issue) -> tuple[str, str, str]:
+    """Return (subject, html_body, text_body) for a stored NewsletterIssue."""
+    from .models import PICK_ORDER
+
+    recs = list(issue.recommendations.select_related("opportunity")
+                .prefetch_related("opportunity__reviews").order_by(*PICK_ORDER))
+    picks = []
+    for rec in recs:
+        view = _pick_view(
+            opportunity=rec.opportunity, rationale=rec.rationale, hook=rec.verdict,
+            caveat=rec.caveat, rating=rec.rating, section=rec.section, is_top=rec.is_top,
+            timing=rec.timing, timing_label=rec.timing_label, token=rec.feedback_token,
+            tracked=True, position=rec.position)
+        view["_token"] = rec.feedback_token
+        picks.append(view)
+    return _render(issue.reader, week_start=issue.week_start, week_end=issue.week_end,
+                   intro=issue.intro, programme=issue.programme, closing=issue.closing,
+                   picks=picks, tracked=True)
+
+
+def render_composed(composed, tracked: bool = False) -> tuple[str, str, str]:
+    """Render a composed issue that hasn't been stored - a preview or a draft."""
+    picks = []
+    for pick in composed.picks:
+        picks.append(_pick_view(
+            opportunity=pick.opportunity, rationale=pick.rationale, hook=pick.hook,
+            caveat=pick.caveat, rating=pick.stars, section=pick.section, is_top=pick.is_top,
+            timing=pick.timing, timing_label=pick.timing_label, token=pick.token,
+            tracked=tracked, position=pick.position))
+    return _render(composed.reader, week_start=composed.week_start, week_end=composed.week_end,
+                   intro=composed.intro, programme=composed.programme, closing=composed.closing,
+                   picks=picks, tracked=tracked)
 
 
 def send_newsletter(issue, dry_run: bool = False) -> str | None:

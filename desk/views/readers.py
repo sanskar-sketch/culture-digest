@@ -10,7 +10,8 @@ from desk.permissions import staff_required
 from desk.utils import filter_options, paginate, search
 from opportunities.models import Category
 from recommendations.models import Recommendation
-from recommendations.sending import preview_issue_for_reader, send_issue_for_reader
+from recommendations import drafts
+from recommendations.models import IssueDraft
 from readers.models import Reader
 
 BULK_ACTIONS = (
@@ -149,26 +150,23 @@ def reader_list(request):
 @staff_required
 def reader_form(request, pk):
     instance = get_object_or_404(Reader, pk=pk)
-    preview = None
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "preview":
-            try:
-                preview = preview_issue_for_reader(instance)
-            except Exception as exc:
-                messages.error(request, f"Preview failed — {exc}")
-                return redirect("desk:readers_change", pk=pk)
-            if not preview.get("ok"):
-                messages.warning(request, preview.get("message") or "Nothing to preview.")
-                return redirect("desk:readers_change", pk=pk)
-            form = ReaderForm(instance=instance)
+            # Written in the background: a whole week takes longer than a
+            # page may. The page shows it once it's ready.
+            drafts.build(instance, pool=None, user=request.user)
+            return redirect(reverse("desk:readers_change", args=[pk]) + "?preview=1")
         elif action == "send":
-            try:
-                result = send_issue_for_reader(instance, dry_run=False)
-                level = messages.success if result.sent else messages.warning
-                level(request, result.message)
-            except Exception as exc:
-                messages.error(request, f"Send failed — {exc}")
+            drafts.send_to([instance], pool=None, user=request.user)
+            draft = drafts.latest(instance)
+            if draft and draft.status == IssueDraft.Status.SENT:
+                messages.success(request, draft.message)
+            elif draft and draft.status in (IssueDraft.Status.EMPTY, IssueDraft.Status.FAILED):
+                messages.warning(request, draft.message)
+            else:
+                messages.success(request, f"Sending {instance.email} their culture week in the "
+                                          "background. It appears in their history below when it goes.")
             return redirect("desk:readers_change", pk=pk)
         else:
             form = ReaderForm(request.POST, instance=instance)
@@ -188,10 +186,17 @@ def reader_form(request, pk):
 
     issues = instance.issues.prefetch_related("recommendations__opportunity").order_by("-created_at")[:20]
 
+    draft = drafts.latest(instance) if request.GET.get("preview") else None
+    preview = drafts.preview(draft) if draft else None
+    if draft and draft.status in (IssueDraft.Status.EMPTY, IssueDraft.Status.FAILED):
+        messages.warning(request, draft.message)
+
     context = {
         "page_title": instance.name or instance.email,
         "breadcrumbs": [("Users", reverse("desk:readers_list")), (instance.email, None)],
         "preview": preview,
+        "draft": draft,
+        "writing": bool(draft and draft.status in (IssueDraft.Status.BUILDING, IssueDraft.Status.SENDING)),
         "form": form,
         "instance": instance,
         "completeness": _profile_completeness(instance),

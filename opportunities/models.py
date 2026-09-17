@@ -18,7 +18,17 @@ class Category(models.TextChoices):
     FOOD = "food", "Food & drink"
     EVENT = "event", "Event"
     UNUSUAL = "unusual", "Unusual experience"
+    # Things you don't go to: a book out this week, a new album, a series
+    # starting. A culture week is as much these as it is nights out.
+    BOOK = "book", "Books"
+    LISTEN = "listen", "New music"
+    WATCH = "watch", "TV & streaming"
     OTHER = "other", "Other"
+
+
+# The categories that are releases rather than places to go. Their date is
+# when they come out, they have no venue, and nobody travels to them.
+RELEASE_CATEGORIES = {Category.BOOK, Category.LISTEN, Category.WATCH}
 
 
 class Tag(models.Model):
@@ -186,6 +196,14 @@ class Opportunity(models.Model):
     def __str__(self):
         return self.title
 
+    @property
+    def is_release(self) -> bool:
+        return self.category in RELEASE_CATEGORIES
+
+    def verified_reviews(self):
+        """Critic reviews we can stand behind, for putting in front of a reader."""
+        return [r for r in self.reviews.all() if r.is_verified]
+
     def save(self, *args, **kwargs):
         if not self.slug:
             # A recurring night, or an AI find of something already listed,
@@ -198,3 +216,67 @@ class Opportunity(models.Model):
                 n += 1
             self.slug = slug
         super().save(*args, **kwargs)
+
+
+class CriticReview(models.Model):
+    """One publication's review of one listing: who, how many stars, where.
+
+    The newsletter puts two ratings side by side - how strongly we think a
+    reader should consider something, and what the critics said - and the
+    second is only worth anything if it is real. So a review is a link to
+    the actual page, one per publication, and it reaches a reader only once
+    it is verified: either the page itself was fetched and shows that rating,
+    or an editor checked it. Ratings are never averaged into a consensus.
+
+    `stars` blank means the publication reviewed it without a star rating,
+    which is worth saying and must not be turned into a number.
+    """
+
+    class Verified(models.TextChoices):
+        NO = "", "Not checked yet"
+        PAGE = "page", "Confirmed on the review page"
+        EDITOR = "editor", "Checked by an editor"
+
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, related_name="reviews")
+    publication = models.CharField(max_length=80, help_text="e.g. The Guardian, Time Out.")
+    stars = models.DecimalField(
+        max_digits=2, decimal_places=1, null=True, blank=True,
+        help_text="Out of 5, halves allowed. Blank if the review has no star rating.")
+    url = models.URLField(max_length=500, help_text="The review itself, not a search page.")
+    quote = models.CharField(
+        max_length=300, blank=True,
+        help_text="A short line copied exactly from the review, if you want one quoted.")
+    verified = models.CharField(max_length=10, choices=Verified.choices, blank=True, default="")
+    found_by_ai = models.BooleanField(default=False)
+    check_note = models.CharField(
+        max_length=200, blank=True,
+        help_text="What the automatic check found, for whoever verifies it by hand.")
+    checked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["publication"]
+        constraints = [
+            models.UniqueConstraint(fields=["opportunity", "publication"],
+                                    name="one_review_per_publication"),
+        ]
+
+    def __str__(self):
+        return f"{self.publication} on {self.opportunity}"
+
+    @property
+    def is_verified(self) -> bool:
+        return bool(self.verified)
+
+    @property
+    def stars_display(self) -> str:
+        return stars_text(self.stars)
+
+
+def stars_text(value) -> str:
+    """★★★★½ for 4.5. Empty for no rating."""
+    if value is None or value == "":
+        return ""
+    halves = int(round(float(value) * 2))
+    halves = max(0, min(10, halves))
+    return "★" * (halves // 2) + ("½" if halves % 2 else "")

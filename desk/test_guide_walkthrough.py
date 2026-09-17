@@ -183,15 +183,27 @@ class GuideWalkthrough(TestCase):
                     booking_url="https://example.com", mainstream_to_unusual=3,
                     intimate_to_large_scale=2, status=Opportunity.Status.PUBLISHED)
         data.update(kw)
-        return Opportunity.objects.create(**data)
+        listing = Opportunity.objects.create(**data)
+        listing.tags.add(self._jazz())
+        return listing
+
+    def _jazz(self):
+        return Tag.objects.get_or_create(slug="jazz", defaults={"name": "jazz"})[0]
+
+    def _jazz_reader(self, **kw):
+        """A reader the listings genuinely suit: their interest and category.
+        A category alone no longer clears the FOR YOU floor."""
+        reader = Reader.objects.create(email="ada@example.com", location="London",
+                                       interest_categories=["music"], **kw)
+        reader.interest_tags.add(self._jazz())
+        return reader
 
     def test_09_preview_newsletter_is_a_dry_run_that_leaves_no_trace(self):
         for i in range(3):
             self._published_listing(f"Gig {i}")
-        reader = Reader.objects.create(email="ada@example.com", location="London",
-                                       interest_categories=["music"])
+        reader = self._jazz_reader()
         response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
-                                    {"action": "preview"})
+                                    {"action": "preview"}, follow=True)
         self.assertTrue(response.context["preview"]["ok"])
         # Nothing recorded, nothing sent, nothing put on cooldown.
         self.assertEqual(NewsletterIssue.objects.count(), 0)
@@ -199,24 +211,22 @@ class GuideWalkthrough(TestCase):
 
     def test_10_too_few_matches_says_skipped_and_why(self):
         self._published_listing("Only one")
-        reader = Reader.objects.create(email="ada@example.com", location="London",
-                                       interest_categories=["music"])
+        reader = self._jazz_reader()
         # One match is enough out of the box; only a raised minimum skips.
         response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
-                                    {"action": "preview"})
+                                    {"action": "preview"}, follow=True)
         self.assertTrue(response.context["preview"]["ok"])
         self._save_config(min_recommendations=2)
         response = follow(self.client, reverse("desk:readers_change", args=[reader.pk]),
                           {"action": "preview"})
         said = " ".join(messages_in(response))
-        self.assertIn("Skipped: only 1 strong match", said)
+        self.assertIn("Skipped: Only 1 pick reached", said)
         self.assertIn("needs 2", said)
 
     def test_11_sending_for_real_records_an_issue_you_can_open(self):
         for i in range(3):
             self._published_listing(f"Gig {i}")
-        reader = Reader.objects.create(email="ada@example.com", location="London",
-                                       interest_categories=["music"])
+        reader = self._jazz_reader()
         response = follow(self.client, reverse("desk:readers_change", args=[reader.pk]),
                           {"action": "send"})
         self.assertIn("Sent", " ".join(messages_in(response)))
@@ -269,16 +279,15 @@ class GuideWalkthrough(TestCase):
     def test_14_recommendations_per_send_changes_what_a_preview_builds(self):
         for i in range(6):
             self._published_listing(f"Gig {i}")
-        reader = Reader.objects.create(email="ada@example.com", location="London",
-                                       interest_categories=["music"])
+        reader = self._jazz_reader()
         self._save_config(recommendations_per_send=2, min_recommendations=1)
         response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
-                                    {"action": "preview"})
+                                    {"action": "preview"}, follow=True)
         self.assertEqual(len(response.context["preview"]["picks"]), 2)
 
         self._save_config(recommendations_per_send=5, min_recommendations=1)
         response = self.client.post(reverse("desk:readers_change", args=[reader.pk]),
-                                    {"action": "preview"})
+                                    {"action": "preview"}, follow=True)
         self.assertEqual(len(response.context["preview"]["picks"]), 5)
 
     def test_15_cooldown_stops_the_same_listing_coming_round_again(self):

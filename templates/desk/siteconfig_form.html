@@ -18,8 +18,14 @@
   </div>
 
   <div class="d-fieldset" data-tab-panel="Sending">
-    <p class="d-fieldset-desc">How many picks go out, to whom, and how often the same thing may reappear.</p>
+    <p class="d-fieldset-desc">The shape of each reader's culture week: what opens it, how full each section gets, how good a pick has to be, and how often the same thing may reappear.</p>
+    {% include "desk/_field.html" with field=form.min_for_you_stars %}
+    {% include "desk/_field.html" with field=form.top_picks_count %}
+    {% include "desk/_field.html" with field=form.max_per_section %}
     {% include "desk/_field.html" with field=form.recommendations_per_send %}
+    {% include "desk/_field.html" with field=form.book_ahead_max %}
+    {% include "desk/_field.html" with field=form.book_ahead_days %}
+    {% include "desk/_field.html" with field=form.carry_forward_saved %}
     {% include "desk/_field.html" with field=form.min_recommendations %}
     {% include "desk/_field.html" with field=form.cooldown_days %}
     {% include "desk/_field.html" with field=form.email_from %}
@@ -80,6 +86,7 @@
     {% include "desk/_field.html" with field=form.ai_model %}
     {% include "desk/_field.html" with field=form.ai_timeout_seconds %}
     {% include "desk/_field.html" with field=form.ai_send_budget_seconds %}
+    {% include "desk/_field.html" with field=form.ai_issue_timeout_seconds %}
   </div>
 
   <div class="d-fieldset" data-tab-panel="Shipped wording">

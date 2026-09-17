@@ -87,7 +87,7 @@ class SendFlowTests(TestCase):
         response = self.client.post(reverse("desk:send"), {
             "r": f"{self.ada.pk},{self.bo.pk}", "action": "preview",
             "preview_reader": self.ada.pk,
-            "event": [self.gigs[0].pk, self.gigs[1].pk]})
+            "event": [self.gigs[0].pk, self.gigs[1].pk]}, follow=True)
         preview = response.context["preview"]
         self.assertTrue(preview["ok"], preview.get("message"))
         titles = {p["title"] for p in preview["picks"]}
@@ -194,7 +194,7 @@ class UserRowPanelTests(TestCase):
 
 @plain_static
 class EditThePreviewTests(TestCase):
-    """The editor can rewrite AI's lines, and the rewrite is what goes out."""
+    """The editor reads a user's culture week, changes it, and sends exactly that."""
 
     def setUp(self):
         cache.clear()
@@ -209,103 +209,102 @@ class EditThePreviewTests(TestCase):
         self.base = {"r": str(self.ada.pk), "preview_reader": self.ada.pk,
                      "event": [self.gig.pk, self.other.pk]}
 
-    def _preview(self):
-        return self.client.post(reverse("desk:send"), {**self.base, "action": "preview"})
+    def _post(self, **data):
+        return self.client.post(reverse("desk:send"), {**self.base, **data}, follow=True)
 
-    def test_the_preview_offers_each_line_to_edit(self):
+    def _preview(self, **data):
+        return self._post(action="preview", **data)
+
+    def test_the_preview_offers_every_part_of_each_pick_to_edit(self):
         page = self._preview()
-        self.assertContains(page, f'name="rationale_{self.gig.pk}"')
+        for field in ("rationale", "hook", "caveat", "stars"):
+            self.assertContains(page, f'name="{field}_{self.gig.pk}"')
+        self.assertContains(page, 'name="intro"')
         self.assertContains(page, "Apply edits")
         self.assertFalse(any(p["edited"] for p in page.context["preview"]["picks"]))
 
     def test_applying_edits_shows_them_in_the_preview_and_marks_them(self):
-        page = self.client.post(reverse("desk:send"), {
-            **self.base, "action": "save_edits",
-            f"rationale_{self.gig.pk}": "Forty seats, no amplification. Go.",
-            f"verdict_{self.gig.pk}": "GO."})
+        self._preview()
+        page = self._post(action="save_edits",
+                          **{f"rationale_{self.gig.pk}": "Forty seats, no amplification. Go.",
+                             f"hook_{self.gig.pk}": "My best jazz bet for you this week."})
         self.assertContains(page, "Edits kept for ada@example.com")
         picks = {p["title"]: p for p in page.context["preview"]["picks"]}
         self.assertEqual(picks["Trio residency"]["rationale"], "Forty seats, no amplification. Go.")
         self.assertTrue(picks["Trio residency"]["edited"])
         self.assertFalse(picks["Big band"]["edited"])
         self.assertIn("Forty seats, no amplification", page.context["preview"]["html"])
-        self.assertEqual(NewsletterIssue.objects.count(), 0)  # still only a preview
+        self.assertIn("My best jazz bet for you this week.", page.context["preview"]["html"])
+        self.assertEqual(NewsletterIssue.objects.count(), 0)  # still only a draft
+
+    def test_a_changed_rating_is_what_the_email_shows(self):
+        self._preview()
+        page = self._post(action="save_edits", **{f"stars_{self.other.pk}": "4.5"})
+        picks = {p["title"]: p for p in page.context["preview"]["picks"]}
+        self.assertEqual(picks["Big band"]["stars"], 4.5)
+        self.assertIn("★★★★½", page.context["preview"]["html"])
 
     def test_edits_survive_previewing_someone_else_and_coming_back(self):
         bo = Reader.objects.create(email="bo@example.com", location="London",
                                    interest_categories=["music"])
         bo.interest_tags.add(self.jazz)
-        both = {**self.base, "r": f"{self.ada.pk},{bo.pk}"}
-        self.client.post(reverse("desk:send"), {**both, "action": "save_edits",
-                                                 f"rationale_{self.gig.pk}": "Ada's line."})
-        self.client.post(reverse("desk:send"), {**both, "action": "preview", "preview_reader": bo.pk})
-        page = self.client.post(reverse("desk:send"), {**both, "action": "preview"})
+        both = {"r": f"{self.ada.pk},{bo.pk}"}
+        self._preview(**both)
+        self._post(action="save_edits", **both, **{f"rationale_{self.gig.pk}": "Ada's line."})
+        self._preview(**both, preview_reader=bo.pk)
+        page = self._preview(**both)
         picks = {p["title"]: p for p in page.context["preview"]["picks"]}
         self.assertEqual(picks["Trio residency"]["rationale"], "Ada's line.")
-        # Bo's own preview was untouched by Ada's edit.
-        page = self.client.post(reverse("desk:send"), {**both, "action": "preview", "preview_reader": bo.pk})
+        # Bo's own draft was untouched by Ada's edit.
+        page = self._preview(**both, preview_reader=bo.pk)
         self.assertFalse(any(p["edited"] for p in page.context["preview"]["picks"]))
 
-    def test_the_send_uses_the_edited_line_and_does_not_ask_ai_for_it(self):
-        self.client.post(reverse("desk:send"), {**self.base, "action": "save_edits",
-                                                 f"rationale_{self.gig.pk}": "My words, not AI's."})
-        with mock.patch("recommendations.matching.build_rationale",
-                        wraps=__import__("recommendations.matching", fromlist=["x"]).build_rationale) as build:
-            response = self.client.post(reverse("desk:send"), {**self.base, "action": "send"}, follow=True)
+    def test_the_send_sends_the_draft_as_read_without_writing_it_again(self):
+        self._preview()
+        self._post(action="save_edits", **{f"rationale_{self.gig.pk}": "My words, not AI's."})
+        with mock.patch("recommendations.compose.compose") as compose_again:
+            response = self._post(action="send")
+        compose_again.assert_not_called()
         self.assertContains(response, "Sent to 1 user")
         recs = {r.opportunity.title: r for r in NewsletterIssue.objects.get().recommendations.all()}
         self.assertEqual(recs["Trio residency"].rationale, "My words, not AI's.")
-        asked_for = {c.args[0].opportunity.title for c in build.call_args_list}
-        self.assertNotIn("Trio residency", asked_for)   # edited: not asked
-        self.assertIn("Big band", asked_for)            # untouched: asked
-        # spent: nothing waits for a second send
-        self.assertEqual(self.client.session.get("send_edits", {}), {})
 
-    def test_back_to_ais_words_drops_the_edits(self):
-        self.client.post(reverse("desk:send"), {**self.base, "action": "save_edits",
-                                                 f"rationale_{self.gig.pk}": "Mine."})
-        page = self.client.post(reverse("desk:send"), {**self.base, "action": "discard_edits"})
-        self.assertContains(page, "Back to AI")
+    def test_a_user_without_a_draft_has_theirs_written_then_sent(self):
+        response = self._post(action="send")
+        self.assertContains(response, "Sent to 1 user")
+        issue = NewsletterIssue.objects.get()
+        self.assertIsNotNone(issue.sent_at)
+        self.assertEqual(issue.recommendations.count(), 2)
+
+    def test_write_it_again_drops_the_edits(self):
+        self._preview()
+        self._post(action="save_edits", **{f"rationale_{self.gig.pk}": "Mine."})
+        page = self._post(action="discard_edits")
+        self.assertContains(page, "again from scratch")
         self.assertFalse(any(p["edited"] for p in page.context["preview"]["picks"]))
 
-    def test_an_emptied_line_is_not_an_edit(self):
-        page = self.client.post(reverse("desk:send"), {**self.base, "action": "save_edits",
-                                                        f"rationale_{self.gig.pk}": "   "})
-        self.assertFalse(any(p["edited"] for p in page.context["preview"]["picks"]))
+    def test_an_emptied_box_keeps_what_was_written(self):
+        self._preview()
+        page = self._post(action="save_edits", **{f"rationale_{self.gig.pk}": "   "})
+        picks = {p["title"]: p for p in page.context["preview"]["picks"]}
+        self.assertTrue(picks["Trio residency"]["rationale"].strip())
+        self.assertFalse(picks["Trio residency"]["edited"])
 
     def test_posting_every_box_marks_only_the_changed_one_as_edited(self):
         """A browser submits all the boxes; only a changed one is an edit."""
         page = self._preview()
-        picks = {p["title"]: p for p in page.context["preview"]["picks"]}
-        data = {**self.base, "action": "save_edits"}
-        for p in picks.values():
+        data = {"action": "save_edits"}
+        for p in page.context["preview"]["picks"]:
             data[f"rationale_{p['event_id']}"] = p["rationale"]
-            data[f"verdict_{p['event_id']}"] = p["verdict"]
-            data[f"original_{p['event_id']}"] = p["rationale"]
-            data[f"original_verdict_{p['event_id']}"] = p["verdict"]
+            data[f"hook_{p['event_id']}"] = p["hook"]
+            data[f"caveat_{p['event_id']}"] = p["caveat"]
+            data[f"stars_{p['event_id']}"] = str(p["stars"])
         data[f"rationale_{self.gig.pk}"] = "Changed by hand."
-        page = self.client.post(reverse("desk:send"), data)
+        page = self._post(**data)
         after = {p["title"]: p for p in page.context["preview"]["picks"]}
         self.assertTrue(after["Trio residency"]["edited"])
         self.assertFalse(after["Big band"]["edited"])
-        self.assertEqual(set(self.client.session["send_edits"][str(self.ada.pk)]), {str(self.gig.pk)})
 
-    def test_emptying_a_box_hands_that_line_back_to_ai(self):
-        self.client.post(reverse("desk:send"), {**self.base, "action": "save_edits",
-                                                 f"rationale_{self.gig.pk}": "Mine.",
-                                                 f"original_{self.gig.pk}": "AI's."})
-        self.assertIn(str(self.gig.pk), self.client.session["send_edits"][str(self.ada.pk)])
-        self.client.post(reverse("desk:send"), {**self.base, "action": "save_edits",
-                                                 f"rationale_{self.gig.pk}": "",
-                                                 f"original_{self.gig.pk}": "Mine."})
-        self.assertEqual(self.client.session["send_edits"][str(self.ada.pk)], {})
-
-    def test_re_applying_an_edit_unchanged_keeps_it(self):
-        """The box shows the edit as its own 'original'; saving again must not lose it."""
-        self.client.post(reverse("desk:send"), {**self.base, "action": "save_edits",
-                                                 f"rationale_{self.gig.pk}": "Mine.",
-                                                 f"original_{self.gig.pk}": "AI's."})
-        self.client.post(reverse("desk:send"), {**self.base, "action": "save_edits",
-                                                 f"rationale_{self.gig.pk}": "Mine.",
-                                                 f"original_{self.gig.pk}": "Mine."})
-        self.assertEqual(self.client.session["send_edits"][str(self.ada.pk)][str(self.gig.pk)]["rationale"], "Mine.")
+    def test_editing_before_anything_is_written_says_to_preview_first(self):
+        page = self._post(action="save_edits", **{f"rationale_{self.gig.pk}": "Too soon."})
+        self.assertContains(page, "press Preview one first")

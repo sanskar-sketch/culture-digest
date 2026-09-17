@@ -10,14 +10,18 @@
   </div>
 </div>
 
-{% if preview %}
+{% if writing %}
+<div class="d-card" style="margin-bottom:14px;">
+  <p style="margin:0;font-size:14px;"><strong>Writing {{ instance.email }}'s culture week.</strong> AI is choosing, rating and writing up each pick - it takes about a minute. This page refreshes itself.</p>
+</div>
+{% elif preview %}
 {% comment %}
-Preview used to answer with a sentence. It shows the email now - built
-exactly as the send would build it, then thrown away.
+The week as a send would write it, kept as a draft: pressing Send newsletter
+now sends this, not a fresh one.
 {% endcomment %}
 <div class="d-card" style="margin-bottom:14px;">
   <p style="font-size:13px;margin:0 0 6px;"><strong>Subject:</strong> {{ preview.subject }}</p>
-  <p style="font-size:12px;color:var(--d-muted);margin:0;">What {{ instance.email }} would get right now. Nothing was sent or recorded. To change the words before sending, use <a href="{% url 'desk:send' %}?r={{ instance.pk }}">Suggest events &amp; send</a>.</p>
+  <p style="font-size:12px;color:var(--d-muted);margin:0;">What {{ instance.email }} would get right now. Nothing was sent. Send newsletter now sends exactly this. To change ratings or words first, use <a href="{% url 'desk:send' %}?r={{ instance.pk }}">Suggest events &amp; send</a>.</p>
 </div>
 <div class="d-card" style="margin-bottom:18px;">
   <iframe srcdoc="{{ preview.html|force_escape }}" class="d-preview-frame"></iframe>
@@ -102,3 +106,5 @@ exactly as the send would build it, then thrown away.
   {% endfor %}
 </div>
 {% endblock %}
+
+{% block extrabody %}{% if writing %}<script>setTimeout(function () { window.location.reload(); }, 5000);</script>{% endif %}{% endblock %}

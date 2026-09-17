@@ -596,21 +596,21 @@ class AITimeBudgetTests(TestCase):
         self.assertIsNone(result)
         client.assert_not_called()
 
-    def test_a_send_stops_calling_ai_once_the_budget_is_spent(self):
-        reader = make_reader()
-        for i in range(4):
-            make_opportunity(title=f"Opportunity {i}")
-
-        # Patch the client, not write_rationale - the budget check lives
-        # inside write_rationale, so mocking it would skip what we're testing.
-        set_config(ai_send_budget_seconds=0)
-        with mock.patch.object(ai, "_client") as client:
+    def test_a_whole_week_is_written_with_the_long_background_timeout(self):
+        """One call writes the issue, off the request, so it gets the issue
+        ceiling rather than the per-page one."""
+        jazz = make_tag("jazz")
+        reader = make_reader(interest_categories=["music"])
+        reader.interest_tags.add(jazz)
+        for i in range(3):
+            make_opportunity(title=f"Opportunity {i}").tags.add(jazz)
+        set_config(ai_timeout_seconds=8, ai_issue_timeout_seconds=150)
+        with mock.patch.object(ai, "_client", side_effect=RuntimeError("down")) as client:
             result = send_issue_for_reader(reader, dry_run=True)
-
-        self.assertGreaterEqual(result.match_count, 2)
-        client.assert_not_called()
-        # And the issue still got rationales - from the template.
-        self.assertTrue(all(r.rationale for r in Recommendation.objects.all()) or True)
+        self.assertEqual(client.call_args.args[0], 150)
+        # AI failing costs the words, not the send.
+        self.assertEqual(result.match_count, 3)
+        self.assertIn("Dry run", result.message)
 
 
 class EditableConfigTests(TestCase):
@@ -642,8 +642,10 @@ class EditableConfigTests(TestCase):
         self.assertEqual(len(matching.top_matches_for_reader(reader)), 5)
 
     def test_min_recommendations_decides_whether_a_reader_is_skipped(self):
-        reader = make_reader()
-        make_opportunity(title="Only one")
+        jazz = make_tag("jazz")
+        reader = make_reader(interest_categories=["music"])
+        reader.interest_tags.add(jazz)
+        make_opportunity(title="Only one").tags.add(jazz)
 
         set_config(min_recommendations=2)
         self.assertFalse(send_issue_for_reader(reader, dry_run=True).sent)
@@ -698,7 +700,7 @@ class EditableConfigTests(TestCase):
 
         set_config(subject_template="{nonsense} picks")
         subject, _, _ = emailing.render_newsletter(issue)
-        self.assertIn("worth your time", subject)
+        self.assertIn("Ada\u2019s culture week", subject)
 
     def test_site_name_flows_into_the_newsletter(self):
         reader = make_reader()

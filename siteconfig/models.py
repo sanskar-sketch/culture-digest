@@ -52,10 +52,29 @@ class SiteConfig(models.Model):
 
     # --- Sending --------------------------------------------------------
     recommendations_per_send = models.PositiveSmallIntegerField(
-        default=4, validators=[MinValueValidator(1)],
-        help_text="How many picks go in one newsletter. The brief calls for a "
-                  "small number with high confidence, not volume.",
+        default=20, validators=[MinValueValidator(1)],
+        help_text="The most picks one culture week can hold, across every section. "
+                  "A cap, not a target: sections with nothing good enough are left "
+                  "out rather than padded.",
     )
+    top_picks_count = models.PositiveSmallIntegerField(
+        default=5, validators=[MinValueValidator(1)],
+        help_text="How many picks open the issue, written up in full. No more than "
+                  "two from any one category.")
+    max_per_section = models.PositiveSmallIntegerField(
+        default=4, validators=[MinValueValidator(1)],
+        help_text="The most picks in any one section below the top, e.g. Live music.")
+    min_for_you_stars = models.DecimalField(
+        max_digits=2, decimal_places=1, default=3,
+        help_text="The lowest FOR YOU rating, out of 5, that makes it into an issue.")
+    book_ahead_max = models.PositiveSmallIntegerField(
+        default=2, help_text="How many things further off go in Book ahead. 0 turns it off.")
+    book_ahead_days = models.PositiveSmallIntegerField(
+        default=120, help_text="How far ahead Book ahead looks, in days.")
+    carry_forward_saved = models.BooleanField(
+        default=True,
+        help_text="Bring back things a reader pressed Save on while they are still on, "
+                  "even inside the cooldown - more urgently as they near closing.")
     min_recommendations = models.PositiveSmallIntegerField(
         default=1, validators=[MinValueValidator(1)],
         help_text="Below this many strong matches, a reader is skipped entirely "
@@ -138,10 +157,11 @@ class SiteConfig(models.Model):
 
     subject_template = models.CharField(
         max_length=200,
-        default="{name}{count} thing{plural} worth your time",
-        help_text="Placeholders: {name} (their first name plus a comma, or empty), "
-                  "{first_name} (bare), {count}, and {plural} (an 's' unless there is "
-                  "exactly one pick - so 'thing{plural}' reads correctly either way).",
+        default="{possessive}culture week: {week}",
+        help_text="Placeholders: {possessive} (\"Maya's \", or \"Your \" with no name), "
+                  "{week} (e.g. Thursday 17–Wednesday 23 September), {name} (their "
+                  "first name plus a comma, or empty), {first_name} (bare), {count}, and "
+                  "{plural} (an 's' unless there is exactly one pick).",
     )
 
     # --- Matching weights ----------------------------------------------
@@ -207,6 +227,10 @@ class SiteConfig(models.Model):
         help_text="Total AI time for one newsletter. Once spent, remaining picks "
                   "use the template.",
     )
+    ai_issue_timeout_seconds = models.FloatField(
+        default=180.0,
+        help_text="Ceiling on writing one whole culture week. It runs in the "
+                  "background, never inside a page, so it can take its time.")
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -240,7 +264,7 @@ class SiteConfig(models.Model):
         """Seed the singleton from the environment, so an existing deployment
         keeps behaving exactly as it did before this model existed."""
         return {
-            "recommendations_per_send": getattr(settings, "RECOMMENDATIONS_PER_SEND", 4),
+            "recommendations_per_send": getattr(settings, "RECOMMENDATIONS_PER_SEND", 20),
             "cooldown_days": getattr(settings, "RECOMMENDATION_COOLDOWN_DAYS", 60),
             "ai_model": getattr(settings, "OPENAI_MODEL", ""),
             "ai_timeout_seconds": getattr(settings, "OPENAI_TIMEOUT_SECONDS", 8.0),

@@ -169,6 +169,11 @@ if "test" in sys.argv[1:2] or os.environ.get("PYTEST_VERSION"):
     SENDGRID_API_KEY = ""
     OPENAI_API_KEY = ""
 
+# Issue drafts are written on a background thread in production. A test's
+# database lives inside one transaction another thread can't see, so tests
+# write them inline.
+DRAFTS_INLINE = "test" in sys.argv[1:2] or bool(os.environ.get("PYTEST_VERSION"))
+
 # Per-call ceiling, and a total allowance for one newsletter send. Sends can
 # be triggered from the admin, i.e. inside a web request, and a request that
 # outlives gunicorn's timeout gets its worker killed - taking out every other
@@ -178,7 +183,7 @@ OPENAI_TIMEOUT_SECONDS = float(os.environ.get("OPENAI_TIMEOUT_SECONDS", "8"))
 AI_SEND_BUDGET_SECONDS = float(os.environ.get("AI_SEND_BUDGET_SECONDS", "15"))
 
 # Max number of recommendations included in a single newsletter send.
-RECOMMENDATIONS_PER_SEND = int(os.environ.get("RECOMMENDATIONS_PER_SEND", "4"))
+RECOMMENDATIONS_PER_SEND = int(os.environ.get("RECOMMENDATIONS_PER_SEND", "20"))
 
 # Don't recommend the same opportunity to a reader twice within this window.
 RECOMMENDATION_COOLDOWN_DAYS = int(os.environ.get("RECOMMENDATION_COOLDOWN_DAYS", "60"))

@@ -63,14 +63,16 @@ class PreviewShowsTheEmailTests(DeskTestCase):
     def setUp(self):
         super().setUp()
         jazz = Tag.objects.create(name="Jazz nights", slug="jazz-nights")
-        self.reader = Reader.objects.create(email="ada@example.com", location="London")
+        # An interest and the category: a match strong enough to clear ★★★.
+        self.reader = Reader.objects.create(email="ada@example.com", location="London",
+                                            interest_categories=["music"])
         self.reader.interest_tags.add(jazz)
         for i in range(3):
             event(f"Gig {i}").tags.add(jazz)
 
     def test_preview_renders_the_email_on_the_page(self):
         response = self.client.post(reverse("desk:readers_change", args=[self.reader.pk]),
-                                    {"action": "preview"})
+                                    {"action": "preview"}, follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(response.context["preview"])
         self.assertTrue(response.context["preview"]["ok"])
@@ -84,8 +86,7 @@ class PreviewShowsTheEmailTests(DeskTestCase):
         self.assertEqual(Recommendation.objects.count(), 0)
 
     def test_a_reader_with_nothing_to_send_is_told_rather_than_shown_a_blank(self):
-        with mock.patch("recommendations.matching.top_matches_for_reader",
-                        return_value=[]):
+        with mock.patch("recommendations.compose.gather", return_value=[]):
             response = self.client.post(reverse("desk:readers_change",
                                                 args=[self.reader.pk]),
                                         {"action": "preview"}, follow=True)
@@ -373,7 +374,7 @@ class TheInterestYouPickedNarrowsTheSendTests(DeskTestCase):
     def test_the_narrowing_survives_a_preview(self):
         page = self.client.post(reverse("desk:send"), {
             "r": self.reader.pk, "t": "comedy-nights", "action": "preview",
-            "event": [self.standup.pk]})
+            "event": [self.standup.pk]}, follow=True)
         self.assertEqual([row["event"].title for row in page.context["rows"]],
                          ["Stand-up night"])
         self.assertEqual(page.context["tags_raw"], "comedy-nights")

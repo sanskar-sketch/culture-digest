@@ -23,14 +23,14 @@ from desk.permissions import staff_required
 from opportunities import research
 from opportunities.models import Opportunity, Tag
 from readers.models import Reader
-from recommendations import matching
-from recommendations.sending import preview_issue_for_reader, send_issue_for_reader
+from recommendations import drafts, matching
+from recommendations.models import IssueDraft
 from siteconfig.models import SiteConfig
 
-# How many events to consider per user when building the suggestions.
-PER_USER = 8
-# How many suggestions arrive pre-ticked.
-PRETICKED = 6
+# How many suggestions arrive pre-ticked. The composer still chooses, per
+# user, what reaches the FOR YOU floor and fits the sections; ticking is the
+# editor's shortlist, so it starts generous.
+PRETICKED = 30
 
 
 def _ids(raw) -> list[int]:
@@ -40,24 +40,6 @@ def _ids(raw) -> list[int]:
         if piece.isdigit():
             out.append(int(piece))
     return out
-
-
-SESSION_KEY = "send_edits"
-
-
-def _edits(request) -> dict:
-    """Per-user edits to AI's lines, kept until the send goes out.
-
-    Keyed by reader id, then by event id. In the session rather than the
-    database: they belong to this editor's sitting, and a send that never
-    happens should leave nothing behind.
-    """
-    return request.session.get(SESSION_KEY, {})
-
-
-def _save_edits(request, edits: dict) -> None:
-    request.session[SESSION_KEY] = edits
-    request.session.modified = True
 
 
 def _readers(request):
@@ -92,8 +74,9 @@ def suggestions(readers, pool=None):
     them would get comes first.
     """
     per_event = defaultdict(lambda: {"suits": [], "best": 0.0})
+    per_user = SiteConfig.load().recommendations_per_send
     for reader in readers:
-        for match in matching.top_matches_for_reader(reader, limit=PER_USER, pool=pool):
+        for match in matching.top_matches_for_reader(reader, limit=per_user, pool=pool):
             row = per_event[match.opportunity.pk]
             row["suits"].append(reader)
             row["best"] = max(row["best"], match.score)
@@ -137,6 +120,19 @@ def send(request):
                           "events in circulation that suit a user on area, budget and dates are "
                           "offered. Their other picks are below.")
 
+    # Reading one user's draft: the ticked events are the ones it was
+    # written from, so what's ticked and what's shown always agree.
+    preview_reader = draft = preview = None
+    wanted = request.GET.get("preview")
+    if wanted:
+        preview_reader = next((r for r in readers if str(r.pk) == wanted), None)
+        if preview_reader:
+            draft = drafts.latest(preview_reader)
+            preview = drafts.preview(draft) if draft else None
+            if draft and draft.pool is not None:
+                chosen = set(draft.pool)
+
+    config = SiteConfig.load()
     return render(request, "desk/send.html", {
         "page_title": f"Send to {len(readers)} user{'' if len(readers) == 1 else 's'}",
         "breadcrumbs": [("Users", reverse("desk:readers_list")), ("Send", None)],
@@ -145,11 +141,15 @@ def send(request):
         "rows": rows,
         "narrowing": narrowing,
         "tags_raw": tags_raw,
-        "per_send": SiteConfig.load().recommendations_per_send,
-        "preview": None,
-        "preview_reader": None,
+        "per_send": config.recommendations_per_send,
+        "min_stars": config.min_for_you_stars,
+        "preview": preview,
+        "draft": draft,
+        "preview_reader": preview_reader,
+        "writing": bool(draft and draft.status in (IssueDraft.Status.BUILDING, IssueDraft.Status.SENDING)),
+        "star_choices": [x / 2 for x in range(2, 11)],
         "chosen": chosen,
-        "edited_readers": [r for r in readers if _edits(request).get(str(r.pk))],
+        "drafted_readers": [r for r in readers if (d := drafts.latest(r)) and d.status == IssueDraft.Status.READY],
     })
 
 
@@ -175,81 +175,65 @@ def _act(request, readers, raw):
         return redirect(back)
 
     chosen_events = [int(x) for x in request.POST.getlist("event") if str(x).isdigit()]
+    wanted = request.POST.get("preview_reader")
+    reader = next((r for r in readers if str(r.pk) == wanted), readers[0])
+    at_preview = f"{back}&preview={reader.pk}"
+
+    if action == "save_edits":
+        draft = drafts.latest(reader)
+        if not draft or draft.status != IssueDraft.Status.READY:
+            messages.warning(request, "There's no finished draft to edit for "
+                                      f"{reader.email} - press Preview one first.")
+            return redirect(at_preview)
+        drafts.apply_edits(draft, request.POST)
+        messages.success(request, f"Edits kept for {reader.email}. This is exactly what "
+                                  "they'll get when you press Write & send.")
+        return redirect(at_preview)
+
+    if action == "discard_edits":
+        drafts.build(reader, pool=chosen_events or (drafts.latest(reader) or IssueDraft()).pool,
+                     user=request.user)
+        messages.info(request, f"Writing {reader.email}'s week again from scratch.")
+        return redirect(at_preview)
+
     if not chosen_events:
         messages.warning(request, "Tick at least one event.")
         return redirect(back)
 
-    edits = _edits(request)
-    wanted = request.POST.get("preview_reader")
-    reader = next((r for r in readers if str(r.pk) == wanted), readers[0])
-
-    if action in ("save_edits", "discard_edits"):
-        if action == "discard_edits":
-            edits.pop(str(reader.pk), None)
-            messages.info(request, f"Back to AI's words for {reader.email}.")
-        else:
-            # A browser posts every box, edited or not. A line becomes an
-            # edit only when it differs from what was shown; once edited it
-            # stays an edit whatever is posted, because AI's original words
-            # are gone. An emptied box hands that one line back to AI.
-            mine = dict(edits.get(str(reader.pk), {}))
-            for key, value in request.POST.items():
-                if not (key.startswith("rationale_") and key[10:].isdigit()):
-                    continue
-                event_id = key[10:]
-                rationale = value.strip()
-                verdict = (request.POST.get(f"verdict_{event_id}") or "").strip()
-                original = (request.POST.get(f"original_{event_id}") or "").strip()
-                original_verdict = (request.POST.get(f"original_verdict_{event_id}") or "").strip()
-                if not rationale:
-                    mine.pop(event_id, None)
-                elif event_id in mine or rationale != original or verdict != original_verdict:
-                    mine[event_id] = {"rationale": rationale, "verdict": verdict}
-            edits[str(reader.pk)] = mine
-            messages.success(request, f"Edits kept for {reader.email}. Your lines are sent word for word "
-                                      "when you press Write & send; AI writes the rest again then.")
-        _save_edits(request, edits)
-        action = "preview"
-
     if action == "preview":
-        preview = preview_issue_for_reader(reader, pool=chosen_events,
-                                           overrides=edits.get(str(reader.pk)))
-        rows = suggestions(readers, pool=pool)
-        return render(request, "desk/send.html", {
-            "page_title": f"Send to {len(readers)} user{'' if len(readers) == 1 else 's'}",
-            "breadcrumbs": [("Users", reverse("desk:readers_list")), ("Send", None)],
-            "readers": readers, "raw": raw, "rows": rows,
-            "narrowing": narrowing, "tags_raw": tags_raw,
-            "per_send": SiteConfig.load().recommendations_per_send,
-            "preview": preview, "preview_reader": reader, "chosen": set(chosen_events),
-            "edited_readers": [r for r in readers if edits.get(str(r.pk))],
-        })
+        # The week already written from these events - with any edits - is
+        # kept. Write it again is its own button.
+        existing = drafts.latest(reader)
+        if not (existing and existing.pool == sorted(set(chosen_events)) and existing.status in
+                (IssueDraft.Status.READY, IssueDraft.Status.BUILDING)):
+            drafts.build(reader, pool=chosen_events, user=request.user)
+        return redirect(at_preview)
 
     if action == "send":
-        sent = skipped = failed = 0
-        for reader in readers:
-            try:
-                result = send_issue_for_reader(reader, pool=chosen_events,
-                                               overrides=edits.get(str(reader.pk)))
-            except Exception as exc:
-                failed += 1
-                messages.error(request, f"{reader.email}: send failed — {exc}")
+        drafts.send_to(readers, pool=chosen_events, user=request.user)
+        sent = pending = 0
+        for r in readers:
+            draft = drafts.latest(r)
+            if draft is None:
                 continue
-            if result.sent:
+            if draft.status == IssueDraft.Status.SENT:
                 sent += 1
-                edits.pop(str(reader.pk), None)  # spent
+            elif draft.status in (IssueDraft.Status.EMPTY, IssueDraft.Status.FAILED):
+                messages.warning(request, f"{r.email}: {draft.message}")
             else:
-                skipped += 1
-                messages.warning(request, f"{reader.email}: {result.message}")
-        _save_edits(request, edits)
+                pending += 1
         if sent:
             messages.success(request, f"Sent to {sent} user{'' if sent == 1 else 's'}, each "
-                                      "their own email from the events you chose.")
-        if not sent and not failed:
+                                      "their own culture week from the events you chose.")
+        if pending:
+            messages.success(request, (
+                f"Sending to {pending} user{'' if pending == 1 else 's'} in the background. "
+                "Anyone whose week you read goes exactly as you left it; the rest are written "
+                "first, about a minute each. Each appears under every newsletter sent as it goes."))
+        if not sent and not pending:
             messages.warning(request, "Nobody was sent anything - the chosen events weren't "
                                       "a strong enough match for them. Tick more, or press "
                                       "Find events with AI.")
         return redirect("desk:readers_list")
 
     return redirect(back)
-
