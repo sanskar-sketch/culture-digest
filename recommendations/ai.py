@@ -33,8 +33,10 @@ import json
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from django.conf import settings
+from django.db import connections
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -514,40 +516,66 @@ Anything else they told us: {reader.notes or "(nothing written)"}
 # 3b. Writing a whole culture week
 # --------------------------------------------------------------------------
 #
-# One call for the whole issue rather than one per pick: the editor has to
-# see the week at once to say which things are the strongest bets, to plan
-# the days, and to avoid saying the same thing twenty times.
+# Two passes. First the picks, a few at a time: asked for fifteen write-ups
+# in one go, a model writes the ones it finds interesting and quietly skips
+# the rest, so each batch is checked and anything skipped is asked for
+# again. Then the frame - intro, a line on each section, the plan for the
+# week, the strongest bets - written once the picks are rated and arranged,
+# so it describes the issue the reader actually gets.
 
-ISSUE_SCHEMA = {
+PICK_BATCH = 5
+# Batches are written side by side, so a reader's week takes about as long
+# as its slowest batch rather than all of them end to end.
+PICK_WORKERS = 3
+
+_PICK_PROPERTIES = {
+    "event_id": {"type": "integer"},
+    "for_you_stars": {
+        "type": "number",
+        "description": "FOR YOU rating, 1 to 5 in steps of 0.5.",
+    },
+    "hook": {
+        "type": "string",
+        "description": "One sentence: the editor's call on it.",
+    },
+    "what_it_is": {"type": "string"},
+    "why_for_you": {"type": "string"},
+    "caveat": {
+        "type": "string",
+        "description": "Worth knowing before going, or empty.",
+    },
+}
+
+PICKS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "picks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": _PICK_PROPERTIES,
+                "required": list(_PICK_PROPERTIES),
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["picks"],
+    "additionalProperties": False,
+}
+
+FRAME_SCHEMA = {
     "type": "object",
     "properties": {
         "intro": {
             "type": "string",
             "description": "The editor's note that opens the issue. Two to four sentences.",
         },
-        "picks": {
+        "section_notes": {
             "type": "array",
             "items": {
                 "type": "object",
-                "properties": {
-                    "event_id": {"type": "integer"},
-                    "for_you_stars": {
-                        "type": "number",
-                        "description": "FOR YOU rating, 1 to 5 in steps of 0.5.",
-                    },
-                    "hook": {
-                        "type": "string",
-                        "description": "One sentence: the editor's call on it.",
-                    },
-                    "what_it_is": {"type": "string"},
-                    "why_for_you": {"type": "string"},
-                    "caveat": {
-                        "type": "string",
-                        "description": "Worth knowing before going, or empty.",
-                    },
-                },
-                "required": ["event_id", "for_you_stars", "hook", "what_it_is",
-                             "why_for_you", "caveat"],
+                "properties": {"section": {"type": "string"}, "note": {"type": "string"}},
+                "required": ["section", "note"],
                 "additionalProperties": False,
             },
         },
@@ -555,23 +583,52 @@ ISSUE_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
-                "properties": {"day": {"type": "string"}, "plan": {"type": "string"}},
-                "required": ["day", "plan"],
+                "properties": {
+                    "day": {"type": "string"},
+                    "event_ids": {"type": "array", "items": {"type": "integer"}},
+                    "plan": {"type": "string"},
+                },
+                "required": ["day", "event_ids", "plan"],
                 "additionalProperties": False,
             },
         },
+        "strongest": {
+            "type": "array",
+            "items": {"type": "integer"},
+            "description": "event_ids of the two or three strongest bets, best first.",
+        },
         "closing": {"type": "string"},
     },
-    "required": ["intro", "picks", "programme", "closing"],
+    "required": ["intro", "section_notes", "programme", "strongest", "closing"],
     "additionalProperties": False,
 }
 
-ISSUE_SYSTEM = f"""You are the editor of a personalised weekly culture newsletter, writing
+_EDITOR = f"""You are the editor of a personalised weekly culture newsletter, writing
 one reader's culture week. You are not a listings site. You are a very good
 culture editor who knows this reader, reads widely, and tells them which
 things are actually worth their time - and which aren't.
 
-{UNTRUSTED_NOTE}
+{UNTRUSTED_NOTE}"""
+
+_VOICE = """VOICE
+
+First person, British English, conversational and specific, with opinions
+and dry wit. Address them as "you". Don't write their name - it's in the
+title. Don't open a write-up with the item's title; it's already the
+heading. Concrete beats general: the venue's size, who they've played with,
+the page count, the one idea underneath it. No hype and no filler: no
+"immerse yourself", "dive in", "unmissable", "a must-see", "treat",
+"tailored to your tastes", "cultural offerings", "something for everyone",
+"hits the right notes", no puns, no exclamation marks. Shorter is better
+than padded.
+
+FACTS
+
+Every date, price, venue, name, running time and award must come from what
+you are given. If a detail isn't there, leave it out. A reader may book on
+the strength of this."""
+
+PICKS_SYSTEM = f"""{_EDITOR}
 
 TWO RATINGS, NEVER CONFUSED
 
@@ -581,6 +638,12 @@ TWO RATINGS, NEVER CONFUSED
   one star of it, and use the whole range honestly. Something a critic
   loved can be a three-star idea for this person, and a modest film can be
   a five-star one for them.
+- Three stars means you would genuinely tell them about it. Below three it
+  isn't sent, and that's the point: nothing is padded. If the only link is
+  a broad interest they ticked (new albums, TV drama) and nothing they've
+  said points to this particular thing, rate it 2.5 or lower. If you find
+  yourself writing "not a real recommendation", "more adjacent than
+  dead-on" or "I wouldn't push it", the rating has to say so too.
 - Critic ratings belong to the publications. You are given the verified
   reviews for each item. You may mention them. You may never invent a
   review, a star rating, a quote, or a publication's opinion, and never
@@ -591,24 +654,44 @@ TWO RATINGS, NEVER CONFUSED
 The critic tells them whether it's good. You tell them whether it's good
 for them.
 
+WHAT THEY'VE TOLD US COMES FIRST
+
+Check every item against what they've said isn't for them and against
+their replies. If an item is the thing they don't want, rate it down as far
+as you're allowed. If it only brushes against it - a night of a classic
+album's music for someone who's gone off tribute acts - say so plainly in
+the caveat and say whether the difference is real (these are established
+musicians in their own right, say). Never describe an item as the opposite
+of what it is to make it fit.
+
 FOR EACH ITEM
 
 - hook: one sentence, your call on it, in your own voice. For example
   "This is probably my best live-music bet for you this week.", "This one
-  is much more unusual.", "I'm flagging it rather than recommending it."
+  is much more unusual.", "I'm flagging it rather than recommending it.",
+  "The sleeper pick." Never a summary of the item. The hooks are read one
+  after another down the issue, and you are writing part of it: the whole
+  shortlist is listed so you can compare. Don't call something your best
+  bet when a stronger one is elsewhere, and never mention batches, the
+  shortlist or scores - the reader sees one issue.
 - what_it_is: what it actually is, concretely - who, what happens, what
   makes this one distinct - from the listing only. Two to four sentences
-  for depth "full", one or two for "short".
+  for depth "full", one or two for "short". Critic stars and verified
+  quotes are printed beside and beneath your words: don't repeat them.
 - why_for_you: why it suits this reader in particular. Name the signal:
   something they said in their own words, a reply they sent, a past pick
   they liked or turned down, something they saved, the interests they
   chose. Draw the real distinction when there is one (the original artist
   rather than a tribute night; new work with roots in a history they love;
   a cheap punt in a small room). One to three sentences. Never flattery.
-- caveat: honest things worth knowing - that the timing makes it now or
-  never, that it runs for months so there's no rush, that it's long, that
-  it's new and unreviewed so it may be worth waiting, that it's a gamble.
-  Only from the listing and its timing. Empty if there is nothing.
+  If the honest answer is "only because it's a new album", rate it down.
+- caveat: something that would change whether or how they go - it's
+  closing this week; it's long, harrowing, expensive or far; it's new and
+  unreviewed so it may be worth waiting; it's a gamble; it runs for months
+  so book when reviews are in. Empty when there's nothing of that kind.
+  Never pad it: "available any time", "no rush" for a record or a
+  streaming series, repeating the date or the critics' stars is not a
+  caveat. Empty means an empty string, not "None".
 - Use the timing given ("Final week: closes Sat 19 Sep", "Book ahead") -
   urgency is part of the recommendation. Don't restate dates already given
   unless it matters.
@@ -617,36 +700,39 @@ FOR EACH ITEM
 - A "wildcard" item is outside what they picked, because they asked to be
   surprised: say so, and why it might be worth the gamble.
 
-FOR THE ISSUE
+{_VOICE}
+
+Write exactly one entry for every item you are given, keyed by its
+event_id - including the ones you'd rate low."""
+
+FRAME_SYSTEM = f"""{_EDITOR}
+
+The picks for this reader's week are written and rated. Write what frames
+them. You are given each pick with its FOR YOU stars, the section it sits
+in, its timing and dates, and the words already written for it.
 
 - intro: two to four sentences opening the week. How good a week it is for
-  them, honestly. If their replies or feedback have changed what you're
-  choosing, say what changed ("I've leant further towards the original
-  artists after your note about tribute nights"). If a section is thin,
-  it's fine to say so - never pretend a weak week is a strong one. Do not
-  list the items.
-- programme: "If I were programming your week" - a short day-by-day plan
-  using only items given, each on a day it is actually on (or any day for
-  releases and things with no fixed date), fitted to when they say they're
-  free. Three to seven entries. Day like "Thursday 17" or "Any evening".
-- closing: one or two sentences naming the strongest two or three bets -
-  the ones you'd most hate them to miss.
+  them, honestly, and what makes it so - you may name the one or two
+  things that make it. If their replies or feedback have changed what
+  you're choosing, say what changed ("I've leant further towards original
+  artists after your note about tribute nights"). Never pretend a weak week
+  is a strong one. Don't list the picks.
+- section_notes: for a section only when there is something worth saying
+  about it as a whole - "There isn't a blockbuster album this Friday, but
+  there are two I'd test.", "Both of these close soon." One sentence each,
+  keyed by the section's key. Most sections need none.
+- programme: "If I were programming your week" - a short day-by-day plan,
+  three to seven entries, fitted to when they say they're free. Use only
+  picks in this week's sections, not ones marked book ahead, each on a
+  day it is actually on: a gig on its date, an exhibition any day it's
+  open, a record or series "Any evening". Give the event_ids each entry
+  uses. Day like "Thursday 17", "Saturday 19" or "Any evening".
+- strongest: the two or three picks you'd be most annoyed to hear they'd
+  missed, best first, by event_id. Usually from the top of the issue.
+- closing: one or two sentences on those strongest bets and why - the ones
+  you'd most hate them to miss. Don't just list them.
 
-VOICE
-
-First person, British English, conversational and specific, with opinions
-and dry wit. Address them as "you". Don't write their name - it's in the
-title. Don't open a write-up with the item's title; it's already the
-heading. No hype: no "immerse yourself", no "dive into", no "unmissable",
-no exclamation marks. Shorter is better than padded.
-
-FACTS
-
-Every date, price, venue, name, running time and award must come from the
-listing you are given. If a detail isn't there, leave it out. A reader may
-book on the strength of this.
-
-Write an entry for every item given, keyed by event_id."""
+{_VOICE}"""
 
 
 def _reader_context(reader) -> str:
@@ -723,7 +809,6 @@ def _item_for_writing(pick, depth: str) -> dict:
         "where": where or ("online / at home" if opp.is_online else "not given"),
         "price": opp.price_display or opp.get_price_tier_display(),
         "description": opp.description,
-        "editorial_note": opp.editorial_note or "",
         "interests": [t.name for t in opp.tags.all()],
         "verified_critic_reviews": reviews,
         "score_stars": pick.stars,
@@ -734,11 +819,16 @@ def _item_for_writing(pick, depth: str) -> dict:
     }
 
 
-def write_issue(reader, issue, picks) -> dict | None:
-    """Write a whole culture week: rating, words for every pick, intro, plan.
+def _week_heading(issue) -> str:
+    return f"The week: {issue.week_label} (today is {issue.week_start:%A %-d %B %Y})."
 
-    Returns the parsed response, or None to fall back to the template. Runs
-    in the background - it is given the long timeout, never a page's.
+
+def write_picks(reader, issue, picks) -> list[dict] | None:
+    """Rate and write up every pick for this reader.
+
+    Returns one row per pick the model wrote, or None if AI is off or its
+    first answer failed - the template then writes the whole issue. A pick
+    skipped twice is simply missing from the rows.
     """
     from siteconfig.models import SiteConfig
 
@@ -749,22 +839,84 @@ def write_issue(reader, issue, picks) -> dict | None:
     ranked = sorted((p for p in picks if not p.saved and p.timing != "book_ahead"),
                     key=lambda p: (-p.stars, -p.score))
     full = {p.event_id for p in ranked[: config.top_picks_count + 2]}
-    items = [_item_for_writing(p, "full" if p.event_id in full else "short") for p in picks]
+    items = {p.event_id: _item_for_writing(p, "full" if p.event_id in full else "short")
+             for p in picks}
+    shortlist = json.dumps([{"event_id": i["event_id"], "title": i["title"],
+                             "category": i["category"], "score_stars": i["score_stars"]}
+                            for i in items.values()], default=str)
+    context = _reader_context(reader)
 
-    user = f"""The week: {issue.week_label} (today is {issue.week_start:%A %-d %B %Y}).
+    def ask(ids):
+        batch = [items[i] for i in ids]
+        user = (f"{_week_heading(issue)}\n\nThe reader:\n{context}\n\n"
+                f"This week's whole shortlist, for comparison:\n{shortlist}\n\n"
+                f"Write up these {len(batch)} items, one entry each, as JSON:\n"
+                f"{json.dumps(batch, indent=1, default=str)}")
+        try:
+            # Room for a reasoning model's thinking as well as the words.
+            return _call(PICKS_SYSTEM, user, PICKS_SCHEMA, "culture_week_picks",
+                         max_tokens=16000, feature="write_rationales",
+                         timeout=config.ai_issue_timeout_seconds)
+        finally:
+            connections.close_all()  # this thread's, if it opened any
 
-The reader:
-{_reader_context(reader)}
+    written: dict[int, dict] = {}
+    order = list(items)
+    for attempt in range(2):
+        wanted = [i for i in order if i not in written]
+        batches = [wanted[k:k + PICK_BATCH] for k in range(0, len(wanted), PICK_BATCH)]
+        with ThreadPoolExecutor(max_workers=min(PICK_WORKERS, len(batches))) as pool:
+            results = list(pool.map(ask, batches))
+        if attempt == 0 and all(result is None for result in results):
+            return None  # AI is failing, not skipping
+        for ids, result in zip(batches, results):
+            for row in (result or {}).get("picks") or []:
+                caveat = (row.get("caveat") or "").strip()
+                if caveat.lower().rstrip(".") in ("none", "n/a", "nothing"):
+                    row["caveat"] = ""
+                if row.get("event_id") in ids and (row.get("what_it_is") or "").strip():
+                    written.setdefault(row["event_id"], row)
+        if len(written) == len(items):
+            break
+    if len(written) < len(items):
+        logger.warning("AI left %d of %d picks unwritten for reader %s",
+                       len(items) - len(written), len(items), reader.pk)
+    return [written[i] for i in order if i in written]
 
-The items for this week, as JSON:
-{json.dumps(items, indent=1, default=str)}"""
 
-    result = _call(ISSUE_SYSTEM, user, ISSUE_SCHEMA, "culture_week",
-                   max_tokens=16000, feature="write_rationales",
-                   timeout=config.ai_issue_timeout_seconds)
-    if not result or not result.get("picks"):
+def write_frame(reader, issue, picks) -> dict | None:
+    """Intro, section notes, the plan for the week and the strongest bets,
+    for picks already rated, written and arranged."""
+    from siteconfig.models import SiteConfig
+
+    from .compose import SECTION_TITLES
+
+    if not is_enabled("write_rationales") or not picks:
         return None
-    return result
+    rows = []
+    for pick in picks:
+        opp = pick.opportunity
+        section = "top" if pick.is_top else pick.section
+        rows.append({
+            "event_id": pick.event_id,
+            "title": opp.title,
+            "section": section,
+            "section_heading": SECTION_TITLES.get(section, ("", section))[1],
+            "for_you_stars": pick.stars,
+            "category": opp.get_category_display(),
+            "timing": pick.timing_label or pick.timing,
+            "dates": f"{opp.start_date or 'no start date'} to {opp.end_date or 'no end date'}",
+            "where": opp.location_name or ("at home" if opp.is_online else ""),
+            "hook": pick.hook,
+            "write_up": pick.rationale,
+            "caveat": pick.caveat,
+        })
+    user = (f"{_week_heading(issue)}\n\nThe reader:\n{_reader_context(reader)}\n\n"
+            f"The picks, in the order they appear, as JSON:\n"
+            f"{json.dumps(rows, indent=1, default=str)}")
+    return _call(FRAME_SYSTEM, user, FRAME_SCHEMA, "culture_week_frame",
+                 max_tokens=12000, feature="write_rationales",
+                 timeout=SiteConfig.load().ai_issue_timeout_seconds)
 
 
 # --------------------------------------------------------------------------
@@ -834,8 +986,9 @@ Hard rules:
   `sources`. A listing with no source is worthless - leave it out instead.
 - Never invent a title, a date, a price, a venue or a booking URL. If the
   sources do not give a field, return an empty string for it.
-- booking_url must be a page you actually found. Not a guess at what a venue's
-  URL probably is.
+- booking_url must be a page you actually found, for this specific event - the
+  venue's or box office's page for it. Not a guess at what a URL probably is,
+  and not a site's front page.
 - Prefer things with a fixed date or a run that is still on. Skip anything that
   has finished.
 - Only use category values, price tiers and tag slugs from the lists given.
@@ -1010,8 +1163,9 @@ Hard rules:
   `sources`. A release with no source is worthless - leave it out.
 - The release date must fall in the window you are given, and be stated by a
   source. Never guess a date.
-- booking_url is a real page where a reader can buy, stream or read about it.
-  Never invent a URL.
+- booking_url is the real page for this specific release where a reader can
+  buy, stream or read about it - not a channel's or shop's front page. Never
+  invent a URL.
 - location_name is the publisher, label, channel or streaming service.
 - Prefer genuinely distinctive work - original artists doing something new,
   well-reviewed or significant books and series - over filler. Five good

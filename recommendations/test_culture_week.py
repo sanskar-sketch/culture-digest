@@ -191,40 +191,105 @@ class WritingTests(TestCase):
         self.gig = event("Gig", tags=[self.jazz])
         self.other = event("Other gig", tags=[self.jazz])
 
-    def written(self, **extra):
-        return {
-            "intro": "A strong week for you.",
-            "picks": [
-                {"event_id": self.gig.pk, "for_you_stars": 5, "hook": "Go.",
-                 "what_it_is": "A trio.", "why_for_you": "You said small rooms.",
-                 "caveat": "Two hours."},
-            ],
-            "programme": [{"day": "Friday 18", "plan": "The gig."}, {"day": "x", "plan": ""}],
-            "closing": "Gig first.",
-            **extra,
-        }
+    def row(self, e, stars=5, **kw):
+        return {"event_id": e.pk, "for_you_stars": stars, "hook": "Go.", "what_it_is": "A trio.",
+                "why_for_you": "You said small rooms.", "caveat": "Two hours.", **kw}
+
+    def frame(self, **kw):
+        return {"intro": "A strong week for you.", "section_notes": [], "programme": [],
+                "strongest": [self.gig.pk], "closing": "Gig first.", **kw}
+
+    def compose_with(self, rows, frame=None, **kw):
+        with mock.patch.object(ai, "write_picks", return_value=rows), \
+                mock.patch.object(ai, "write_frame", return_value=frame):
+            return compose.compose(self.ada, **kw)
 
     def test_ai_writes_the_week_and_may_move_a_rating_by_one_star_only(self):
-        with mock.patch.object(ai, "write_issue", return_value=self.written()):
-            issue = compose.compose(self.ada)
+        issue = self.compose_with([self.row(self.gig), self.row(self.other, stars=3.5)], self.frame())
         gig = next(p for p in issue.picks if p.opportunity == self.gig)
         self.assertEqual(gig.stars, 4.5)       # scored 3.5, asked 5, held to +1
         self.assertEqual(gig.rationale, "A trio.\n\nYou said small rooms.")
         self.assertEqual((gig.hook, gig.caveat), ("Go.", "Two hours."))
-        self.assertEqual(issue.intro, "A strong week for you.")
-        self.assertEqual(issue.programme, [{"day": "Friday 18", "plan": "The gig."}])
-        # A pick the model skipped still has words.
-        other = next(p for p in issue.picks if p.opportunity == self.other)
-        self.assertTrue(other.rationale)
+        self.assertEqual((issue.intro, issue.closing), ("A strong week for you.", "Gig first."))
+        self.assertEqual(issue.strongest, [self.gig.pk])
         self.assertTrue(issue.written_by_ai)
 
-    def test_a_pick_ai_rates_below_the_floor_is_dropped(self):
-        written = self.written()
-        written["picks"].append({"event_id": self.other.pk, "for_you_stars": 2.5, "hook": "",
-                                 "what_it_is": "x", "why_for_you": "y", "caveat": ""})
-        with mock.patch.object(ai, "write_issue", return_value=written):
-            issue = compose.compose(self.ada)
+    def test_a_pick_ai_would_not_write_is_left_out_not_sent_in_other_words(self):
+        issue = self.compose_with([self.row(self.gig)], self.frame())
         self.assertEqual([p.opportunity for p in issue.picks], [self.gig])
+        self.assertIn("AI didn't write up 1 more, so it was left out.", issue.message)
+
+    def test_a_pick_ai_rates_below_the_floor_is_dropped(self):
+        issue = self.compose_with([self.row(self.gig), self.row(self.other, stars=2.5)])
+        self.assertEqual([p.opportunity for p in issue.picks], [self.gig])
+
+    def test_without_ai_every_pick_goes_out_in_plain_words_to_the_reader(self):
+        issue = compose.compose(self.ada, use_ai=False)
+        self.assertEqual(len(issue.picks), 2)
+        words = issue.picks[0].rationale
+        self.assertTrue(words.startswith("About "))
+        self.assertIn("Why it's here: shared interest in jazz", words)
+        for desk_words in ("their", "Researched by AI", "We picked this"):
+            self.assertNotIn(desk_words, words)
+
+    def test_only_picks_above_the_floor_go_to_the_top(self):
+        issue = self.compose_with([self.row(self.gig), self.row(self.other, stars=3)])
+        self.assertEqual([p.opportunity for p in issue.top], [self.gig])
+
+    def test_the_plan_keeps_only_days_things_are_really_on(self):
+        today = timezone.localdate()
+        on_day = today + timedelta(days=2)
+        self.gig.start_date = on_day
+        self.gig.save()
+        ahead = event("Later gig", tags=[self.jazz], start_date=today + timedelta(days=20))
+        wrong_day = today + timedelta(days=3)
+        frame = self.frame(programme=[
+            {"day": f"Monday {on_day.day}", "event_ids": [self.gig.pk], "plan": "The gig."},
+            {"day": f"Tuesday {wrong_day.day}", "event_ids": [self.gig.pk], "plan": "The gig again."},
+            {"day": "Any evening", "event_ids": [self.other.pk], "plan": "The other one."},
+            {"day": "Friday 99", "event_ids": [self.other.pk], "plan": "Nowhere."},
+            {"day": f"{wrong_day:%A}", "event_ids": [self.gig.pk], "plan": "By name, wrong day."},
+            {"day": "Sunday", "event_ids": [], "plan": "A rest."},
+            {"day": "Any evening", "event_ids": [ahead.pk], "plan": "Too soon."},
+        ], section_notes=[{"section": "top", "note": "Two good ones."},
+                          {"section": "film", "note": "No films in this issue."}],
+           strongest=[999, self.other.pk, self.gig.pk, self.other.pk])
+        issue = self.compose_with([self.row(self.gig), self.row(self.other), self.row(ahead)], frame,
+                                  today=today)
+        self.assertEqual(issue.programme, [
+            {"day": f"{on_day:%A} {on_day.day}", "plan": "The gig."},
+            {"day": "Any evening", "plan": "The other one."},
+        ])
+        self.assertEqual(issue.section_notes, {"top": "Two good ones."})
+        self.assertEqual(issue.strongest, [self.other.pk, self.gig.pk])
+
+    @override_settings(OPENAI_API_KEY="test-key")
+    def test_picks_are_written_in_small_batches_and_skipped_ones_asked_for_again(self):
+        config(max_per_section=10)
+        for n in range(6):
+            event(f"More jazz {n}", tags=[self.jazz])
+        shy = self.other.pk
+        asks, prompts = [], []
+
+        def answer(system, user, schema, name, **kw):
+            if name != "culture_week_picks":
+                return None
+            prompts.append(user)
+            items = json.loads(user.split("as JSON:\n", 1)[1])
+            ids = [i["event_id"] for i in items]
+            asks.append(ids)
+            skip = shy if len(asks) <= 2 else None
+            return {"picks": [self.row(Opportunity(pk=i), stars=4, caveat="None.")
+                              for i in ids if i != skip]}
+
+        with mock.patch.object(ai, "_call", side_effect=answer):
+            issue = compose.compose(self.ada)
+        self.assertTrue(all(len(ids) <= ai.PICK_BATCH for ids in asks))
+        self.assertEqual(asks[-1], [shy])
+        self.assertEqual(len(issue.picks), 8)
+        self.assertEqual({p.caveat for p in issue.picks}, {""})
+        self.assertTrue(all("More jazz 5" in user for user in prompts))
+        self.assertTrue(issue.written_by_ai)
 
     @override_settings(OPENAI_API_KEY="test-key")
     def test_the_prompt_carries_only_verified_reviews_and_the_readers_replies(self):
@@ -282,9 +347,9 @@ class StoringAndRenderingTests(TestCase):
         subject, html, text = emailing.render_newsletter(stored)
         self.assertIn("Ada’s culture week:", subject)
         self.assertIn(compose.week_label(stored.week_start, stored.week_end), subject)
-        for part in ("The ones I&#x27;d put at the top", "Filtered more tightly this week.",
+        for part in ("The one I&#x27;d put at the top", "Filtered more tightly this week.",
                      "FOR YOU", "★★★★½", "Time Out ★★★★½", "Final week: closes",
-                     "If I were programming your week", "My strongest bets this week",
+                     "If I were programming your week", "My strongest bet this week",
                      "Fun and profound", "Tell me what you thought of this week"):
             self.assertIn(part, html)
         # An unverified review is never printed.
@@ -369,6 +434,18 @@ GUARDIAN_PAGE = """<html><head><title>Gig review</title>
 <p>Published 2/5/2026</p></body></html>"""
 
 
+GUARDIAN_BLOCK_PAGE = """<html><head><style>
+.dcr-full{display:flex;background-color:var(--star-rating-background);}
+.dcr-none{display:flex;background-color:var(--star-rating-empty-background);}
+</style></head><body><h1>Ancient Infinity Orchestra review</h1>
+<div><span class="dcr-full"></span><span class="dcr-full"></span><span class="dcr-full"></span>
+<span class="dcr-full"></span><span class="dcr-none"></span></div>
+""" + ("<p>filler</p>" * 400) + """<aside>63 Up review
+<span class="dcr-full"></span><span class="dcr-full"></span><span class="dcr-none"></span>
+<span class="dcr-none"></span><span class="dcr-none"></span></aside>
+<script>{"starRating":2}</script></body></html>"""
+
+
 class ReviewCheckTests(TestCase):
     def setUp(self):
         self.gig = event("Ancient Infinity Orchestra")
@@ -418,10 +495,62 @@ class ReviewCheckTests(TestCase):
         self.assertEqual(r.verified, CriticReview.Verified.EDITOR)
 
     def test_rating_formats_and_a_date_that_is_not_one(self):
-        self.assertEqual(reviews.ratings_on_page("<p>4 out of 5 stars</p>"), [4.0])
-        self.assertEqual(reviews.ratings_on_page("<span>★★★☆☆</span>"), [3.0])
-        self.assertEqual(reviews.ratings_on_page("<p>Rating: 3.5/5</p>"), [3.5])
-        self.assertEqual(reviews.ratings_on_page("<p>on 2/5 we went</p>"), [])
+        self.assertEqual(reviews.ratings_on_page("<p>4 out of 5 stars</p>"), ([], [4.0]))
+        self.assertEqual(reviews.ratings_on_page("<p>3.5 out of 5</p>"), ([], [3.5]))
+        self.assertEqual(reviews.ratings_on_page("<span>★★★☆☆</span>"), ([], [3.0]))
+        self.assertEqual(reviews.ratings_on_page("<p>Rating: 3.5/5</p>"), ([], [3.5]))
+        self.assertEqual(reviews.ratings_on_page("<p>on 2/5 we went</p>"), ([], []))
+
+    def test_the_guardians_own_rating_block_not_a_card_for_another_review(self):
+        page = GUARDIAN_BLOCK_PAGE
+        self.assertEqual(reviews.ratings_on_page(page)[0], [4.0])
+        r = reviews.check(self.review(stars=None, url="https://www.theguardian.com/tv/70-up-review"),
+                          fetcher=lambda url: (200, page))
+        self.assertEqual((r.verified, r.stars), (CriticReview.Verified.PAGE, Decimal("4")))
+
+    def test_a_quote_has_to_be_on_the_page(self):
+        page = ("<h1>Ancient Infinity Orchestra review</h1><p>It&#8217;s spiritual jazz \u2013 "
+                "made <em>now</em>, not recreated.</p><p>4 out of 5 stars</p>")
+        kept = reviews.check(self.review(quote="it’s spiritual jazz – made now…not recreated"),
+                             fetcher=lambda url: (200, page))
+        self.assertEqual(kept.quote, "it’s spiritual jazz – made now…not recreated")
+        page_typo = "<h1>Ancient Infinity Orchestra</h1><p>corpse-in the-basement thriller</p><p>4 out of 5 stars</p>"
+        tidied = reviews.check(self.review(quote="corpse‑in‑the‑basement thriller"),
+                               fetcher=lambda url: (200, page_typo))
+        self.assertEqual(tidied.quote, "corpse‑in‑the‑basement thriller")
+        invented = reviews.check(self.review(quote="A triumph of the form"),
+                                 fetcher=lambda url: (200, page))
+        self.assertEqual(invented.quote, "")
+        self.assertIn("isn't on the page", invented.check_note)
+        self.assertEqual(invented.verified, CriticReview.Verified.PAGE)  # the stars still check out
+
+    def test_radio_times_rating_block(self):
+        page = ('<script>{"introduction":[[{"type":"editorial-ratings","data":{"starRatingValue":"4",'
+                '"ratingValue":"4","isHalfStar":true}}]],"related":[{"type":"editorial-ratings",'
+                '"data":{"starRatingValue":"2"}}]}</script>')
+        self.assertEqual(reviews.ratings_on_page(page)[0], [4.0])
+
+    def test_links_readers_can_open(self):
+        self.assertEqual(reviews.public_url("https://tollbit.radiotimes.com/tv/drama/x-review/"),
+                         "https://www.radiotimes.com/tv/drama/x-review/")
+        self.assertEqual(reviews.public_url("https://nme.com/r?id=3&utm_source=openai"),
+                         "https://nme.com/r?id=3")
+        self.assertEqual(reviews.public_url("https://example.com/a"), "https://example.com/a")
+        opp = event("Forever Home")
+        saved = reviews.save_found(opp, [{"publication": "radio times", "stars": 4,
+                                          "url": "https://tollbit.radiotimes.com/tv/drama/forever-home-review/"}],
+                                   fetcher=lambda url: (200, "<h1>Forever Home review</h1><p>A star rating of 4 out of 5.</p>"))
+        self.assertEqual((saved[0].publication, saved[0].url, saved[0].verified),
+                         ("Radio Times", "https://www.radiotimes.com/tv/drama/forever-home-review/",
+                          CriticReview.Verified.PAGE))
+
+    def test_rating_text_only_confirms_what_ai_already_said(self):
+        page = "<h1>Ancient Infinity Orchestra</h1><p>3.5 out of 5</p><p>4 out of 5</p>"
+        confirmed = reviews.check(self.review(stars=Decimal("3.5")), fetcher=lambda url: (200, page))
+        self.assertEqual(confirmed.verified, CriticReview.Verified.PAGE)
+        unsure = reviews.check(self.review(stars=None), fetcher=lambda url: (200, page))
+        self.assertEqual(unsure.verified, "")
+        self.assertIn("check it's this review's rating", unsure.check_note)
 
     def test_found_reviews_are_stored_once_per_publication_and_checked(self):
         found = [
@@ -449,6 +578,76 @@ class ReleaseDraftsTests(TestCase):
         self.assertTrue(book.is_online)
         self.assertEqual(book.location_area, "UK")
         self.assertEqual(book.status, Opportunity.Status.DRAFT)
+
+
+class ResearchLinkTests(TestCase):
+    """A reader should land on the page for the thing, and it should open."""
+
+    def row(self, **kw):
+        data = {"title": "70 Up", "description": "The last one.", "category": "watch",
+                "price_tier": "free", "price_display": "", "location_name": "ITV1",
+                "location_area": "UK", "booking_url": "https://www.itv.com/",
+                "start_date": timezone.localdate().isoformat(), "end_date": "",
+                "mainstream_to_unusual": 2, "intimate_to_large_scale": 3, "tags": [],
+                "sources": [{"title": "ITVX", "url": "https://www.itv.com/watch/70-up/abc"}]}
+        data.update(kw)
+        return {"listings": [data]}
+
+    def test_a_front_page_link_gives_way_to_the_page_for_the_item(self):
+        created = research.save_drafts(self.row())
+        self.assertEqual(created[0].booking_url, "https://www.itv.com/watch/70-up/abc")
+
+    def test_a_front_page_is_kept_rather_than_swapped_for_a_forum_thread(self):
+        created = research.save_drafts(self.row(sources=[
+            {"title": "r/television", "url": "https://www.reddit.com/r/television/comments/1/70_up/"},
+            {"title": "Schedules", "url": "https://www.tvzoneuk.com/post/dates"}]))
+        self.assertEqual(created[0].booking_url, "https://www.itv.com/")
+
+    def test_a_dead_link_is_not_replaced_by_a_forum_thread(self):
+        payload = self.row(booking_url="https://www.itv.com/gone", sources=[
+            {"title": "r/television", "url": "https://www.reddit.com/r/television/comments/1/"}])
+        with mock.patch.object(research, "link_status",
+                               side_effect=lambda url: 404 if url.endswith("gone") else 200):
+            self.assertEqual(research.save_drafts(payload, check_links=True), [])
+
+    def test_a_site_search_is_not_the_page_for_the_item(self):
+        self.assertTrue(research._is_homepage("https://designmuseum.org/search?page=1&q=past"))
+        self.assertTrue(research._is_homepage("https://www.itv.com/"))
+        self.assertFalse(research._is_homepage("https://www.itv.com/watch/70-up/abc"))
+        self.assertFalse(research._is_homepage(
+            "https://events.nationaltheatre.org.uk/events/95366?promo=16225YO"))
+
+    def test_no_venue_is_left_blank_not_a_dash(self):
+        created = research.save_drafts(self.row(location_name="—"))
+        self.assertEqual(created[0].location_name, "")
+
+    def test_links_come_without_ai_gateways_or_tracking(self):
+        created = research.save_drafts(self.row(
+            booking_url="https://www.itv.com/watch/70-up/abc?utm_source=openai"))
+        self.assertEqual(created[0].booking_url, "https://www.itv.com/watch/70-up/abc")
+
+    def test_something_already_over_is_not_saved(self):
+        past = (timezone.localdate() - timedelta(days=5)).isoformat()
+        self.assertEqual(research.save_drafts(self.row(category="music", start_date=past,
+                                                       end_date=past)), [])
+
+    def test_a_dead_link_is_replaced_by_a_working_source_or_the_find_is_dropped(self):
+        payload = self.row(booking_url="https://www.itv.com/gone",
+                           sources=[{"title": "a", "url": "https://www.itv.com/watch/70-up/abc"}])
+        with mock.patch.object(research, "link_status",
+                               side_effect=lambda url: 404 if url.endswith("gone") else 200):
+            created = research.save_drafts(payload, check_links=True)
+        self.assertEqual(created[0].booking_url, "https://www.itv.com/watch/70-up/abc")
+        self.assertIn("dead", created[0].editorial_note)
+        Opportunity.objects.all().delete()
+        with mock.patch.object(research, "link_status", return_value=404):
+            self.assertEqual(research.save_drafts(payload, check_links=True), [])
+
+    def test_a_link_we_could_not_open_is_kept_with_a_note(self):
+        with mock.patch.object(research, "link_status", return_value=403):
+            created = research.save_drafts(self.row(booking_url="https://www.itv.com/x"),
+                                           check_links=True)
+        self.assertIn("didn't open", created[0].editorial_note)
 
 
 class DraftTests(TestCase):

@@ -25,7 +25,7 @@ import threading
 import urllib.error
 import urllib.request
 from decimal import Decimal
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from django.db import close_old_connections
 from django.utils import timezone
@@ -45,7 +45,7 @@ PUBLICATIONS = {
     "Financial Times": ("ft.com",),
     "Evening Standard": ("standard.co.uk",),
     "The Telegraph": ("telegraph.co.uk",),
-    "The Independent": ("independent.co.uk",),
+    "The Independent": ("independent.co.uk", "the-independent.com"),
     "The Stage": ("thestage.co.uk",),
     "i": ("inews.co.uk",),
     "Financial Times Weekend": ("ft.com",),
@@ -58,6 +58,7 @@ PUBLICATIONS = {
     "Sight and Sound": ("bfi.org.uk",),
     "WhatsOnStage": ("whatsonstage.com",),
     "Broadway World": ("broadwayworld.com",),
+    "Radio Times": ("radiotimes.com",),
 }
 
 _ALIASES = {
@@ -71,10 +72,30 @@ _ALIASES = {
     "daily telegraph": "The Telegraph",
     "independent": "The Independent", "the independent": "The Independent",
     "the stage": "The Stage", "stage": "The Stage",
+    "radiotimes": "Radio Times", "radio times": "Radio Times",
 }
 
 USER_AGENT = ("Mozilla/5.0 (compatible; TheEtherReviewCheck/1.0; "
               "+https://culture-digest.onrender.com)")
+
+
+def public_url(url: str) -> str:
+    """The link as a reader should get it.
+
+    Web search sometimes hands back a publisher's paid gateway for AI
+    crawlers (tollbit.radiotimes.com), which answers a person with an error,
+    or tags the link with its own utm_ tracking. Both come off.
+    """
+    url = (url or "").strip()
+    if not url.startswith("http"):
+        return url
+    parsed = urlparse(url)
+    host = parsed.netloc
+    if host.lower().startswith("tollbit."):
+        host = "www." + host[len("tollbit."):]
+    query = urlencode([(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+                       if not k.lower().startswith("utm_")])
+    return urlunparse(parsed._replace(netloc=host, query=query))
 
 
 def canonical_publication(name: str) -> str:
@@ -110,8 +131,9 @@ def fetch(url: str, timeout: float = 12.0) -> tuple[int, str]:
 
 
 _JSONLD = re.compile(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', re.S | re.I)
-# "4 out of 5 stars", or "Rating: 4/5". A bare "2/5" is too often a date.
-_OUT_OF_FIVE = re.compile(r'\b([0-5](?:\.5)?)\s*out of\s*5\s*stars?\b', re.I)
+# "4 out of 5 stars", "3.5 out of 5", or "Rating: 4/5". A bare "2/5" is too
+# often a date.
+_OUT_OF_FIVE = re.compile(r'\b([0-5](?:\.5)?)\s*out of\s*(?:5|five)\b', re.I)
 _RATING_SLASH = re.compile(r'rating[^0-9<]{0,20}([0-5](?:\.5)?)\s*(?:/|out of)\s*5\b', re.I)
 _STAR_GLYPHS = re.compile(r'(★{1,5})(☆{0,4})')
 
@@ -144,17 +166,56 @@ def _ratings_in_jsonld(page: str) -> list[float]:
     return found
 
 
-def ratings_on_page(page: str) -> list[float]:
-    """Every star rating the page states, most trustworthy source first."""
-    ratings = _ratings_in_jsonld(page)
+# Radio Times puts the review's own rating at the head of the article data.
+_EDITORIAL_RATING = re.compile(
+    r'"introduction":\[\[\{"type":"editorial-ratings","data":\{"starRatingValue":"([0-5](?:\.5)?)"')
+
+
+def _guardian_stars(page: str) -> list[float]:
+    """The Guardian draws a review's rating as five circles, filled or empty,
+    styled by classes whose CSS names its star-rating colours. The first set
+    of five on the page is the article's own; later ones belong to cards for
+    other reviews, which is why the page's embedded "starRating" data can't
+    be trusted - on a 70 Up review it belonged to a 2019 review of 63 Up."""
+    filled = set(re.findall(r'\.([\w-]+)\{[^}]*background-color:var\(--star-rating-background\)', page))
+    empty = set(re.findall(r'\.([\w-]+)\{[^}]*background-color:var\(--star-rating-empty-background\)', page))
+    if not filled:
+        return []
+    body = page[page.find("<body"):] if "<body" in page else page
+    run, last = [], None
+    for match in re.finditer(r'class="([^"]*)"', body):
+        classes = set(match.group(1).split())
+        kind = "F" if classes & filled else "E" if classes & empty else None
+        if kind is None:
+            continue
+        if last is not None and match.start() - last > 3000:
+            break  # the first set has ended
+        run.append(kind)
+        last = match.start()
+        if len(run) == 5:
+            return [float(run.count("F"))]
+    return []
+
+
+def ratings_on_page(page: str) -> tuple[list[float], list[float]]:
+    """(structured, textual) star ratings on the page.
+
+    Structured ratings - the page's own review markup, the Guardian's rating
+    block - say what this review gave. Textual ones ("3.5 out of 5") can
+    belong to anything on the page, so they only ever confirm a rating we
+    already have.
+    """
+    structured = _ratings_in_jsonld(page) + _guardian_stars(page) + [
+        float(m.group(1)) for m in _EDITORIAL_RATING.finditer(page)][:1]
     text = re.sub(r"<[^>]+>", " ", page)
+    textual = []
     for pattern in (_OUT_OF_FIVE, _RATING_SLASH):
         for match in pattern.finditer(text):
-            ratings.append(float(match.group(1)))
+            textual.append(float(match.group(1)))
     for full, empty in _STAR_GLYPHS.findall(text):
         if len(full) + len(empty) == 5:
-            ratings.append(float(len(full)))
-    return ratings
+            textual.append(float(len(full)))
+    return structured, textual
 
 
 def about_this(page: str, opportunity: Opportunity) -> bool:
@@ -193,24 +254,61 @@ def check(review: CriticReview, fetcher=fetch) -> CriticReview:
         review.check_note = "The page doesn't seem to be about this event."
         return review
 
-    ratings = ratings_on_page(page)
-    if ratings:
-        stated = ratings[0]
+    missing_quote = bool(review.quote) and not quote_on_page(review.quote, page)
+    if missing_quote:
+        review.quote = ""
+    _rate_from_page(review, page)
+    if missing_quote:
+        review.check_note += " The quote AI gave isn't on the page, so it was taken out."
+    return review
+
+
+def _plain(text: str) -> str:
+    """Text as words only: no tags, one kind of quote mark and dash, one space."""
+    text = re.sub(r"<[^>]+>", " ", html.unescape(text))
+    text = text.translate(str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "–": " ",
+                                         "—": " ", "‑": " ", "-": " ", "\u00a0": " ",
+                                         "\u202f": " ", "\u00ad": None, "\u200b": None}))
+    # Hyphens count as spaces: "corpse-in the-basement" on the page is the
+    # same words as "corpse-in-the-basement" in the quote.
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def quote_on_page(quote: str, page: str) -> bool:
+    """Is every part of the quote really on the page? An ellipsis joins parts."""
+    body = _plain(page)
+    parts = [_plain(part).strip(" '\".,;:-") for part in re.split(r"…|\.\.\.", quote)]
+    parts = [part for part in parts if len(part.split()) >= 2]
+    return bool(parts) and all(part in body for part in parts)
+
+
+def _rate_from_page(review: CriticReview, page: str) -> None:
+    structured, textual = ratings_on_page(page)
+    if structured:
+        stated = structured[0]
         if review.stars is not None and float(review.stars) != stated:
             review.check_note = f"AI said {float(review.stars):g} stars; the page says {stated:g}."
         else:
             review.check_note = f"The page shows {stated:g} stars."
         review.stars = Decimal(str(stated))
         review.verified = CriticReview.Verified.PAGE
-        return review
+        return
+
+    if review.stars is not None and float(review.stars) in textual:
+        review.check_note = f"The page shows {float(review.stars):g} out of 5."
+        review.verified = CriticReview.Verified.PAGE
+        return
 
     if review.stars is not None:
-        review.check_note = (f"AI said {float(review.stars):g} stars but the page shows no rating "
-                             "we can read. Check it by hand.")
-        return review
+        review.check_note = (f"AI said {float(review.stars):g} stars but the page doesn't show that "
+                             "rating in a way we can read. Check it by hand.")
+        return
+    if textual:
+        review.check_note = (f"The page mentions {textual[0]:g} out of 5 - check it's this "
+                             "review's rating, then verify.")
+        return
     review.check_note = ("The review is real but no star rating was found on the page. "
                          "Verify it if it genuinely has none.")
-    return review
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +321,7 @@ def save_found(opportunity: Opportunity, found: list[dict], fetcher=fetch) -> li
     have = set(opportunity.reviews.values_list("publication", flat=True))
     for row in found:
         publication = canonical_publication(row.get("publication", ""))[:80]
-        url = (row.get("url") or "").strip()
+        url = public_url(row.get("url") or "")
         if not publication or not url.startswith("http") or publication in have:
             continue
         stars = row.get("stars")

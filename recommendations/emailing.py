@@ -213,10 +213,9 @@ def build_reply_url(token, about_week: bool = False) -> str:
 
 
 def _possessive(reader) -> str:
+    """Chris’s, James’s - the house style gives every name its ’s."""
     first = reader.name.split(" ")[0] if reader.name else ""
-    if not first:
-        return "Your "
-    return f"{first}’ " if first.endswith("s") else f"{first}’s "
+    return f"{first}’s " if first else "Your "
 
 
 def _pick_view(*, opportunity, rationale, hook, caveat, rating, section, is_top, timing,
@@ -242,7 +241,9 @@ def _pick_view(*, opportunity, rationale, hook, caveat, rating, section, is_top,
             "quote": review.quote,
         })
 
-    where = opportunity.location_name or ("" if opportunity.is_release else opportunity.location_area)
+    # Research sometimes writes a dash for "no venue"; that's no venue.
+    where = (opportunity.location_name.strip(" -—–")
+             or ("" if opportunity.is_release else opportunity.location_area))
     return {
         "opportunity": opportunity,
         "title": opportunity.title,
@@ -277,23 +278,44 @@ def _pick_view(*, opportunity, rationale, hook, caveat, rating, section, is_top,
     }
 
 
-def _sections(picks: list[dict]) -> list[dict]:
+_NUMBERS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven",
+            8: "eight", 9: "nine", 10: "ten"}
+
+
+def _sections(picks: list[dict], notes: dict | None = None) -> list[dict]:
     """The picks grouped under their headings, in issue order, empty ones left out."""
     from .compose import SECTIONS
 
     if not any(p["section"] or p["is_top"] for p in picks):
         # An issue from before sections: one untitled group, as it was sent.
-        return [{"key": "picks", "emoji": "", "title": "", "picks": picks}] if picks else []
+        return [{"key": "picks", "emoji": "", "title": "", "note": "", "picks": picks}] if picks else []
     groups = []
     for key, emoji, title in SECTIONS:
         members = [p for p in picks if ("top" if p["is_top"] else p["section"]) == key]
-        if members:
-            groups.append({"key": key, "emoji": emoji, "title": title, "picks": members})
+        if not members:
+            continue
+        if key == "top":
+            # "The five I'd put at the top", or "The one I'd put at the top".
+            title = f"The {_NUMBERS.get(len(members), len(members))} I'd put at the top"
+        groups.append({"key": key, "emoji": emoji, "title": title,
+                       "note": (notes or {}).get(key, ""), "picks": members})
     return groups
 
 
+def _strongest(picks: list[dict], chosen_ids) -> list[dict]:
+    """The strongest bets: the editor's choice, or else the best of the top."""
+    from .compose import STRONGEST_MAX
+
+    by_id = {p["opportunity"].pk: p for p in picks}
+    chosen = [by_id[i] for i in (chosen_ids or []) if i in by_id]
+    if not chosen:
+        chosen = sorted((p for p in picks if p["is_top"] and (p["rating"] or 0) >= 4),
+                        key=lambda p: -(p["rating"] or 0))
+    return chosen[:STRONGEST_MAX]
+
+
 def _render(reader, *, week_start, week_end, intro, programme, closing, picks,
-            tracked: bool) -> tuple[str, str, str]:
+            tracked: bool, section_notes=None, strongest=None) -> tuple[str, str, str]:
     """Subject, HTML and text for one culture week, stored or composed."""
     from siteconfig.models import SiteConfig
 
@@ -301,7 +323,7 @@ def _render(reader, *, week_start, week_end, intro, programme, closing, picks,
 
     config = SiteConfig.load()
     week = week_label(week_start, week_end) if week_start and week_end else ""
-    top = [p for p in picks if p["is_top"]]
+    strongest = _strongest(picks, strongest)
     first_token = next((p["_token"] for p in picks if p.get("_token")), None)
 
     context = {
@@ -314,9 +336,11 @@ def _render(reader, *, week_start, week_end, intro, programme, closing, picks,
         "intro_html": _paragraphs(intro),
         "programme": programme or [],
         "closing": closing,
-        "sections": _sections(picks),
+        "sections": _sections(picks, section_notes),
         "recommendations": picks,
-        "strongest": top,
+        "strongest": strongest,
+        "strongest_heading": ("My strongest bet this week" if len(strongest) == 1 else
+                              f"My strongest {_NUMBERS.get(len(strongest), len(strongest))} bets this week"),
         "has_critics": any(p["reviews"] for p in picks),
         "reply_url": build_reply_url(first_token, about_week=True) if tracked and first_token else "#",
         "unsubscribe_url": build_unsubscribe_url(reader),
@@ -371,6 +395,7 @@ def render_newsletter(issue) -> tuple[str, str, str]:
         picks.append(view)
     return _render(issue.reader, week_start=issue.week_start, week_end=issue.week_end,
                    intro=issue.intro, programme=issue.programme, closing=issue.closing,
+                   section_notes=issue.section_notes, strongest=issue.strongest,
                    picks=picks, tracked=True)
 
 
@@ -385,6 +410,7 @@ def render_composed(composed, tracked: bool = False) -> tuple[str, str, str]:
             tracked=tracked, position=pick.position))
     return _render(composed.reader, week_start=composed.week_start, week_end=composed.week_end,
                    intro=composed.intro, programme=composed.programme, closing=composed.closing,
+                   section_notes=composed.section_notes, strongest=composed.strongest,
                    picks=picks, tracked=tracked)
 
 

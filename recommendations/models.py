@@ -37,6 +37,11 @@ class NewsletterIssue(models.Model):
     programme = models.JSONField(
         default=list, blank=True,
         help_text="If I were programming your week: [{day, plan}].")
+    section_notes = models.JSONField(
+        default=dict, blank=True,
+        help_text="A line under a section heading, by section key: 'There isn't a big album this week…'")
+    strongest = models.JSONField(
+        default=list, blank=True, help_text="Event ids of the strongest bets, best first.")
     closing = models.TextField(blank=True, help_text="The closing line: the strongest bets.")
 
     class Meta:

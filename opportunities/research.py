@@ -22,12 +22,16 @@ from __future__ import annotations
 
 import logging
 import threading
+import urllib.error
+import urllib.request
 from datetime import datetime
+from urllib.parse import parse_qsl, urlparse
 
 from django.db import close_old_connections
 from django.utils.text import slugify
 
 from .models import RELEASE_CATEGORIES, Category, Opportunity, Tag
+from .reviews import public_url
 
 logger = logging.getLogger(__name__)
 
@@ -66,22 +70,78 @@ def _unique_slug(title: str) -> str:
     return slug
 
 
+def _is_homepage(url: str) -> bool:
+    """netflix.com, itv.com/ or a site search - not the page for this thing."""
+    parsed = urlparse(url)
+    if parsed.path in ("", "/") and not parsed.query:
+        return True
+    return ("/search" in parsed.path.lower()
+            or any(k in ("q", "query", "s", "search") for k, _ in parse_qsl(parsed.query)))
+
+
+# Where facts can be found but a reader shouldn't be sent.
+_NOT_FOR_READERS = ("reddit.com", "x.com", "twitter.com", "facebook.com", "instagram.com",
+                    "tiktok.com", "quora.com", "threads.net")
+
+
+def _site(url: str) -> str:
+    host = urlparse(url).netloc.lower().split(":")[0]
+    return host[4:] if host.startswith("www.") else host
+
+
+def _for_readers(url: str) -> bool:
+    site = _site(url)
+    return not any(site == d or site.endswith("." + d) for d in _NOT_FOR_READERS)
+
+
+def _same_site(a: str, b: str) -> bool:
+    x, y = _site(a), _site(b)
+    return bool(x) and (x == y or x.endswith("." + y) or y.endswith("." + x))
+
+
+# What research writes when it has no venue.
+_NO_PLACE = {"-", "—", "–", "n/a", "na", "none", "unknown", "tbc", "tba", "not given"}
+
+
+def link_status(url: str, timeout: float = 8.0) -> int:
+    """The HTTP status a reader would get, or 0 if it couldn't be reached."""
+    request = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; TheEtherLinkCheck/1.0)", "Accept": "text/html"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - http(s) only
+            response.read(512)
+            return response.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
+    except Exception:
+        return 0
+
+
 def _already_have(row) -> bool:
     """Same booking link, or same title - either means we have it."""
-    url = (row.get("booking_url") or "").strip()
+    url = public_url(row.get("booking_url") or "")
     if url and Opportunity.objects.filter(booking_url=url).exists():
         return True
     title = (row.get("title") or "").strip()
     return bool(title) and Opportunity.objects.filter(title__iexact=title).exists()
 
 
-def save_drafts(payload: dict, interest: Tag | None = None) -> list[Opportunity]:
-    """Create draft listings from a research payload. Returns what was created."""
+def save_drafts(payload: dict, interest: Tag | None = None,
+                check_links: bool = False) -> list[Opportunity]:
+    """Create draft listings from a research payload. Returns what was created.
+
+    With `check_links`, each link is opened first: one that is gone (404 or
+    410) is replaced by a working source page or the find is dropped, and
+    what the check found is noted for whoever reviews it.
+    """
+    from django.utils import timezone
+
+    today = timezone.localdate()
     created = []
     for row in payload.get("listings") or []:
         title = (row.get("title") or "").strip()
-        booking_url = (row.get("booking_url") or "").strip()
-        sources = [s for s in (row.get("sources") or [])
+        booking_url = public_url(row.get("booking_url") or "")
+        sources = [{**s, "url": public_url(str(s["url"]))} for s in (row.get("sources") or [])
                    if isinstance(s, dict) and str(s.get("url", "")).startswith("http")]
 
         # The three things that make a listing worth having at all.
@@ -89,10 +149,41 @@ def save_drafts(payload: dict, interest: Tag | None = None) -> list[Opportunity]
             continue
         if not booking_url.startswith("http"):
             # Without somewhere to send a reader it is not yet a listing;
-            # fall back to the page the facts came from.
-            booking_url = sources[0]["url"]
+            # fall back to the page the facts came from, if it's one a
+            # reader could be sent to.
+            booking_url = next((s["url"] for s in sources if _for_readers(s["url"])), "")
+            if not booking_url:
+                continue
+        if _is_homepage(booking_url):
+            # A reader sent to a channel's front page has to go looking. A
+            # page on the same site for this thing is better; a forum thread
+            # or a schedule blog elsewhere is not.
+            specific = next((s["url"] for s in sources if not _is_homepage(s["url"])
+                             and _same_site(s["url"], booking_url)), None)
+            if specific:
+                booking_url = specific
+        # Research is told to skip what's over; this makes sure of it.
+        last_day = _date(row.get("end_date")) or _date(row.get("start_date"))
+        if last_day and last_day < today and (row.get("category") or "") not in RELEASE_CATEGORIES:
+            continue
         if _already_have(row):
             continue
+
+        link_note = ""
+        if check_links:
+            status = link_status(booking_url)
+            if status in (404, 410):
+                working = next((s["url"] for s in sources if s["url"] != booking_url
+                                and _for_readers(s["url"]) and not _is_homepage(s["url"])
+                                and 0 < link_status(s["url"]) < 400), None)
+                if not working:
+                    logger.info("Dropped %r: its link is gone (HTTP %s)", title, status)
+                    continue
+                booking_url, link_note = working, " The link AI gave was dead; this is its source page."
+            elif status == 0 or status >= 400:
+                link_note = f" The link didn't open for us (HTTP {status or 'no answer'}) - check it."
+            if _is_homepage(booking_url):
+                link_note += " The link is a site's front page or search, not this item's page - find the right one."
 
         category = _choice(row.get("category"), Category.choices, Category.OTHER)
         opportunity = Opportunity.objects.create(
@@ -102,12 +193,13 @@ def save_drafts(payload: dict, interest: Tag | None = None) -> list[Opportunity]
             # A book, an album, a series: nobody travels to it.
             is_online=category in RELEASE_CATEGORIES,
             description=(row.get("description") or "").strip(),
-            editorial_note="Researched by AI. Check the date, the price and that it "
-                           "is still on before publishing.",
+            editorial_note=("Researched by AI. Check the date, the price and that it "
+                            "is still on before publishing." + link_note),
             price_tier=_choice(row.get("price_tier"), Opportunity.PriceTier.choices,
                                Opportunity.PriceTier.MODERATE),
             price_display=(row.get("price_display") or "").strip()[:60],
-            location_name=(row.get("location_name") or "").strip()[:200],
+            location_name=("" if (row.get("location_name") or "").strip().lower() in _NO_PLACE
+                           else (row.get("location_name") or "").strip())[:200],
             location_area=((row.get("location_area") or "").strip()
                            or ("UK" if category in RELEASE_CATEGORIES else ""))[:120],
             booking_url=booking_url[:500],
@@ -138,7 +230,7 @@ def run(interest: Tag, area: str = "", count: int = 5) -> dict:
                                    category_hint=interest.category or "")
     if payload is None:
         return {"created": [], "notes": "", "ok": False}
-    created = save_drafts(payload, interest=interest)
+    created = save_drafts(payload, interest=interest, check_links=True)
     return {"created": created, "notes": payload.get("notes", ""),
             "dropped": payload.get("dropped", 0), "ok": True}
 
@@ -245,7 +337,7 @@ def run_releases(kinds=("book", "listen", "watch"), count: int = 6) -> dict:
         payload = ai.research_releases(kind, start, end, reader_interests_for(kind), count=count)
         if payload is None:
             continue
-        created += save_drafts(payload)
+        created += save_drafts(payload, check_links=True)
         if payload.get("notes"):
             notes.append(f"{kind}: {payload['notes']}")
     return {"created": created, "notes": " ".join(notes)}

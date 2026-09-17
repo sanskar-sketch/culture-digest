@@ -6,9 +6,11 @@ the top, then what else is worth knowing section by section - live music,
 new music, theatre, art, film, watching at home, books - then what to book
 ahead, and a plan for the week.
 
-This module decides *what* goes in and *where*. The words come from
-`ai.write_issue`, which rates each pick for this reader and writes it up;
-without AI every pick still goes out, in the template's plainer words.
+This module decides *what* goes in and *where*. The words come from AI in
+two passes - `ai.write_picks` rates each pick for this reader and writes it
+up, then `ai.write_frame` writes the intro, the plan for the week and the
+strongest bets around the arranged issue. Without AI every pick still goes
+out, in plainer words.
 
 Three rules shape the selection:
 
@@ -26,6 +28,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 import uuid
 from collections import Counter
 from datetime import date, timedelta
@@ -85,6 +88,11 @@ SAVED_MAX = 3
 # AI may move a rating this far from what the matching scored. It knows
 # things the arithmetic doesn't; it doesn't get to overrule it outright.
 AI_STAR_LEEWAY = 1.0
+# The top of the issue is for things above the floor, not merely on it: a
+# three-star "worth knowing about" isn't one to put first.
+TOP_ABOVE_FLOOR = 0.5
+STRONGEST_MAX = 3
+PROGRAMME_MAX = 7
 
 
 def stars_for_score(score: float) -> float:
@@ -202,6 +210,8 @@ class ComposedIssue:
     picks: list[Pick]
     intro: str = ""
     programme: list = dataclasses.field(default_factory=list)
+    section_notes: dict = dataclasses.field(default_factory=dict)
+    strongest: list = dataclasses.field(default_factory=list)
     closing: str = ""
     written_by_ai: bool = False
     ok: bool = True
@@ -322,7 +332,7 @@ def arrange(picks: list[Pick], config, *, respect_floor: bool = True) -> list[Pi
     for pick in main:
         if len(top) >= config.top_picks_count:
             break
-        if pick.wildcard:
+        if pick.wildcard or pick.stars < floor + TOP_ABOVE_FLOOR:
             continue
         if per_category[pick.section] >= TOP_PER_CATEGORY:
             continue
@@ -365,25 +375,38 @@ def compose(reader, *, pool=None, overrides=None, today: date | None = None,
         issue.message = "Only 0 picks reached the FOR YOU floor for them."
         return issue
 
-    written = ai.write_issue(reader, issue, candidates) if use_ai else None
-    if written:
-        _apply_writing(issue, candidates, written)
+    rows = ai.write_picks(reader, issue, candidates) if use_ai else None
+    unwritten = 0
+    if rows:
+        written = _apply_writing(candidates, rows)
+        # A pick AI wouldn't write twice isn't sent in the template's words
+        # beside ones it did write: it reads as a different, lesser email.
+        unwritten = len(candidates) - len(written)
+        candidates = written
         issue.written_by_ai = True
     else:
         for pick in candidates:
-            pick.rationale, pick.hook = matching.build_rationale(
-                matching.Match(pick.opportunity, pick.score, pick.reasons), None)
+            pick.rationale, pick.hook = template_words(pick)
 
     apply_overrides(issue, candidates, overrides)
     issue.picks = arrange(candidates, config)
+    # A week too thin to send doesn't need an intro written for it.
+    if issue.written_by_ai and issue.picks and len(issue.picks) >= config.min_recommendations:
+        frame = ai.write_frame(reader, issue, issue.picks)
+        if frame:
+            apply_frame(issue, frame)
 
-    if len(issue.picks) < config.min_recommendations:
+    count = len(issue.picks)
+    if count < config.min_recommendations:
         issue.ok = False
-        issue.message = (f"Only {len(issue.picks)} pick{'' if len(issue.picks) == 1 else 's'} "
+        issue.message = (f"Only {count} pick{'' if count == 1 else 's'} "
                          f"reached {stars_label(config.min_for_you_stars)} for them "
                          f"(needs {config.min_recommendations}).")
     else:
-        issue.message = f"{len(issue.picks)} pick{'' if len(issue.picks) == 1 else 's'} this week."
+        issue.message = f"{count} pick{'' if count == 1 else 's'} this week."
+    if unwritten:
+        issue.message += (f" AI didn't write up {unwritten} more, so "
+                          f"{'it was' if unwritten == 1 else 'they were'} left out.")
     return issue
 
 
@@ -392,9 +415,27 @@ def stars_label(value) -> str:
     return stars_text(value) or "no stars"
 
 
-def _apply_writing(issue: ComposedIssue, picks: list[Pick], written: dict) -> None:
+_THEM = ((r"\bthey've\b", "you've"), (r"\bthey're\b", "you're"), (r"\btheir\b", "your"),
+         (r"\bthem\b", "you"), (r"\bthey\b", "you"))
+
+
+def template_words(pick: Pick) -> tuple[str, str]:
+    """(write-up, hook) without AI: what the listing says, and why it's here."""
+    what = (pick.opportunity.description or "").strip()
+    reasons = []
+    for reason in pick.reasons[:3]:
+        for pattern, repl in _THEM:
+            reason = re.sub(pattern, repl, reason)
+        reasons.append(reason)
+    why = f"Why it's here: {'; '.join(reasons)}." if reasons else ""
+    return "\n\n".join(part for part in (what, why) if part), ""
+
+
+def _apply_writing(picks: list[Pick], rows: list[dict]) -> list[Pick]:
+    """Take AI's ratings and words. Returns the picks it wrote, in order."""
     by_id = {p.event_id: p for p in picks}
-    for row in written.get("picks") or []:
+    done = set()
+    for row in rows:
         pick = by_id.get(row.get("event_id"))
         if pick is None:
             continue
@@ -409,18 +450,84 @@ def _apply_writing(issue: ComposedIssue, picks: list[Pick], written: dict) -> No
             asked = pick.stars
         low, high = pick.stars - AI_STAR_LEEWAY, pick.stars + AI_STAR_LEEWAY
         pick.stars = round_half(min(high, max(low, asked)))
-    # Anything the model skipped keeps the template's words rather than none.
-    for pick in picks:
-        if not pick.rationale:
-            pick.rationale, pick.hook = matching.build_rationale(
-                matching.Match(pick.opportunity, pick.score, pick.reasons), None)
-    issue.intro = (written.get("intro") or "").strip()
-    issue.closing = (written.get("closing") or "").strip()
-    issue.programme = [
-        {"day": str(row.get("day", "")).strip()[:40], "plan": str(row.get("plan", "")).strip()}
-        for row in (written.get("programme") or [])
-        if str(row.get("plan", "")).strip()
-    ][:8]
+        if pick.rationale:
+            done.add(pick.event_id)
+    return [p for p in picks if p.event_id in done]
+
+
+def apply_frame(issue: ComposedIssue, frame: dict) -> None:
+    """The intro, section notes, plan and strongest bets, kept only where
+    they fit the issue as arranged."""
+    by_id = {p.event_id: p for p in issue.picks}
+    issue.intro = (frame.get("intro") or "").strip()
+    issue.closing = (frame.get("closing") or "").strip()
+
+    present = {"top" if p.is_top else p.section for p in issue.picks}
+    issue.section_notes = {}
+    for row in frame.get("section_notes") or []:
+        key, note = str(row.get("section", "")).strip(), str(row.get("note", "")).strip()
+        if key in present and note and key not in issue.section_notes:
+            issue.section_notes[key] = note[:300]
+
+    issue.strongest = []
+    for event_id in frame.get("strongest") or []:
+        if event_id in by_id and event_id not in issue.strongest:
+            issue.strongest.append(event_id)
+    issue.strongest = issue.strongest[:STRONGEST_MAX]
+
+    issue.programme = []
+    for row in frame.get("programme") or []:
+        entry = programme_entry(issue, row, by_id)
+        if entry:
+            issue.programme.append(entry)
+    issue.programme = issue.programme[:PROGRAMME_MAX]
+
+
+_DAY_NUMBER = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\b")
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def programme_entry(issue: ComposedIssue, row: dict, by_id: dict) -> dict | None:
+    """One line of the plan, if it's true: it uses this week's picks, and a
+    named day is one they're actually on. The day is relabelled from the
+    calendar, so "Saturday 19" can't sit on a Sunday."""
+    plan = str(row.get("plan", "")).strip()
+    day = str(row.get("day", "")).strip()[:40]
+    ids = [i for i in (row.get("event_ids") or []) if i in by_id]
+    if not plan or not day or not ids:
+        return None
+    picks = [by_id[i] for i in ids]
+    if any(p.timing == "book_ahead" for p in picks):
+        return None
+
+    week = [issue.week_start + timedelta(days=n) for n in range(7)]
+    number = _DAY_NUMBER.search(day)
+    named = next((i for i, name in enumerate(_WEEKDAYS) if name in day.lower()), None)
+    if number:
+        when = next((d for d in week if d.day == int(number.group(1))), None)
+    elif named is not None:
+        when = next(d for d in week if d.weekday() == named)
+    else:
+        when = None  # "Any evening", "This weekend"
+    if (number or named is not None) and when is None:
+        return None
+    if when is not None:
+        if not all(is_on(pick.opportunity, when) for pick in picks):
+            return None
+        day = f"{when:%A} {when.day}"
+    return {"day": day, "plan": plan}
+
+
+def is_on(opportunity, when: date) -> bool:
+    """Can a reader do this on that day? Releases: any day once out."""
+    s, e = opportunity.start_date, opportunity.end_date
+    if opportunity.is_release:
+        return s is None or s <= when
+    if s is None:
+        return e is None or when <= e
+    if e is None:
+        return when == s
+    return s <= when <= e
 
 
 def apply_overrides(issue: ComposedIssue, picks: list[Pick], overrides) -> None:
@@ -456,7 +563,8 @@ def materialise(issue: ComposedIssue) -> NewsletterIssue:
     """Write a composed issue into the records, ready to send."""
     stored = NewsletterIssue.objects.create(
         reader=issue.reader, week_start=issue.week_start, week_end=issue.week_end,
-        intro=issue.intro, programme=issue.programme, closing=issue.closing)
+        intro=issue.intro, programme=issue.programme, section_notes=issue.section_notes,
+        strongest=issue.strongest, closing=issue.closing)
     for pick in issue.picks:
         Recommendation.objects.create(
             issue=stored, opportunity=pick.opportunity, score=pick.score,
@@ -471,6 +579,7 @@ def to_json(issue: ComposedIssue) -> dict:
     return {
         "week": [issue.week_start.isoformat(), issue.week_end.isoformat()],
         "intro": issue.intro, "programme": issue.programme, "closing": issue.closing,
+        "section_notes": issue.section_notes, "strongest": issue.strongest,
         "ok": issue.ok, "message": issue.message, "written_by_ai": issue.written_by_ai,
         "picks": [{
             "event_id": p.event_id, "score": p.score, "reasons": p.reasons,
@@ -504,5 +613,6 @@ def from_json(reader, data: dict) -> ComposedIssue:
     return ComposedIssue(
         reader=reader, week_start=start, week_end=end, picks=sorted(picks, key=lambda p: p.position),
         intro=data.get("intro", ""), programme=data.get("programme") or [],
+        section_notes=data.get("section_notes") or {}, strongest=data.get("strongest") or [],
         closing=data.get("closing", ""), written_by_ai=data.get("written_by_ai", False),
         ok=data.get("ok", True), message=data.get("message", ""))

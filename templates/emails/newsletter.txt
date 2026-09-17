@@ -7,7 +7,8 @@ FOR YOU ★ is how strongly I think you should consider it.{% if has_critics %} 
 {% endif %}{% for section in sections %}{% if section.title %}
 
 {{ section.emoji }} {{ section.title|upper }}
-{% endif %}{% for rec in section.picks %}
+{% if section.note %}{{ section.note }}
+{% endif %}{% endif %}{% for rec in section.picks %}
 {% if rec.is_top or section.key == "picks" %}{{ forloop.counter }}. {% endif %}{{ rec.title|upper }}
 {{ rec.category }}{% if rec.where %} · {{ rec.where }}{% endif %}{% if rec.price %} · {{ rec.price }}{% endif %}{% if rec.timing_label %} · {{ rec.timing_label }}{% elif rec.dates %} · {{ rec.dates }}{% endif %}
 FOR YOU {{ rec.stars }}{% for review in rec.reviews %} · {{ review.label }}{% endfor %}
@@ -33,8 +34,8 @@ Tell me why:     {{ rec.reply_url }}
 IF I WERE PROGRAMMING YOUR WEEK
 {% for row in programme %}{{ row.day }}: {{ row.plan }}
 {% endfor %}{% endif %}{% if strongest %}
-MY STRONGEST BETS THIS WEEK
-{% for rec in strongest %}{{ rec.title }} {{ rec.stars }}
+{{ strongest_heading|upper }}
+{% for rec in strongest %}{{ forloop.counter }}. {{ rec.title }} {{ rec.stars }}
 {% endfor %}{% if closing %}
 {{ closing }}
 {% endif %}{% endif %}
