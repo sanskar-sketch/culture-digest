@@ -14,6 +14,8 @@ is designed to stay stable while the internals get smarter.
 
 from __future__ import annotations
 
+import re
+
 import dataclasses
 from datetime import timedelta
 
@@ -61,23 +63,96 @@ class Match:
     reasons: list[str]
 
 
-def _price_distance(reader: Reader, opportunity: Opportunity) -> int:
+@dataclasses.dataclass
+class Prefs:
+    """What this reader will travel, spend and sit through - for this thing.
+
+    Their usual answers, unless they set an exception for one of the
+    interests this opportunity carries: someone will cross the city for a
+    gig and want the gallery round the corner. Where several of their
+    exceptions apply at once, the most willing one wins on travel and
+    budget (they said yes to it somewhere), and the taste dials average.
+    """
+
+    travel_radius: str = ""
+    budget: str = ""
+    mainstream_preference: int | None = None
+    scale_preference: int | None = None
+    exceptions: list = dataclasses.field(default_factory=list)
+
+
+TRAVEL_ORDER = [Reader.TravelRadius.LOCAL_ONLY, Reader.TravelRadius.WITHIN_CITY,
+                Reader.TravelRadius.REGIONAL, Reader.TravelRadius.ANYWHERE]
+BUDGET_ORDER = [Reader.Budget.FREE_CHEAP, Reader.Budget.MODERATE,
+                Reader.Budget.TREAT, Reader.Budget.NO_LIMIT]
+
+
+def _overrides_for(reader: Reader) -> dict:
+    """{tag id: InterestPreference} for this reader, read once."""
+    cached = getattr(reader, "_interest_overrides", None)
+    if cached is None:
+        cached = {p.tag_id: p for p in reader.interest_preferences.all() if p.is_set}
+        reader._interest_overrides = cached
+    return cached
+
+
+def _widest(values, order):
+    return max(values, key=order.index) if values else ""
+
+
+def preferences_for(reader: Reader, opportunity: Opportunity) -> Prefs:
+    """Resolve this reader's settings for this opportunity's interests."""
+    prefs = Prefs(travel_radius=reader.travel_radius, budget=reader.budget,
+                  mainstream_preference=reader.mainstream_preference,
+                  scale_preference=reader.scale_preference)
+    overrides = _overrides_for(reader)
+    if not overrides:
+        return prefs
+    applying = [overrides[t.id] for t in opportunity.tags.all() if t.id in overrides]
+    if not applying:
+        return prefs
+
+    prefs.exceptions = applying
+    if travel := _widest([p.travel_radius for p in applying if p.travel_radius], TRAVEL_ORDER):
+        prefs.travel_radius = travel
+    if budget := _widest([p.budget for p in applying if p.budget], BUDGET_ORDER):
+        prefs.budget = budget
+    for field in ("mainstream_preference", "scale_preference"):
+        dialled = [getattr(p, field) for p in applying if getattr(p, field) is not None]
+        if dialled:
+            setattr(prefs, field, round(sum(dialled) / len(dialled)))
+    return prefs
+
+
+def _price_distance(prefs: Prefs, opportunity: Opportunity) -> int:
     if opportunity.price_tier == Opportunity.PriceTier.FREE:
         return 0
-    if not reader.budget:
+    if not prefs.budget:
         # No stated budget preference - don't penalise on price at all.
         return 0
-    target_tier = BUDGET_TO_PRICE_TIER[reader.budget]
+    target_tier = BUDGET_TO_PRICE_TIER[prefs.budget]
     return abs(
         PRICE_TIER_ORDER.index(opportunity.price_tier) - PRICE_TIER_ORDER.index(target_tier)
     )
 
 
+def _place_parts(value: str) -> set[str]:
+    """{'camden', 'london'} from 'Camden, London'."""
+    return {part.strip().lower() for part in re.split(r"[,/|]", value or "") if part.strip()}
+
+
 def _location_matches(reader: Reader, opportunity: Opportunity) -> bool:
+    """Is this near enough to where they live?
+
+    Compared place by place, not as whole strings: a listing in 'Camden,
+    London' or 'Soho, London' is in London, and a reader who said they
+    stay inside their city was being cut off from every gig whose venue
+    research had named by its neighbourhood.
+    """
     if opportunity.is_online or not reader.location:
         # No stated home location - don't exclude on location at all.
         return True
-    return reader.location.strip().lower() == opportunity.location_area.strip().lower()
+    return bool(_place_parts(reader.location) & _place_parts(opportunity.location_area))
 
 
 def _feedback_tag_weights(reader: Reader, config) -> dict[int, float]:
@@ -119,13 +194,14 @@ def score_opportunity(
 
         config = SiteConfig.load()
 
+    prefs = preferences_for(reader, opportunity)
     location_ok = _location_matches(reader, opportunity)
     # No stated travel radius - default to permissive rather than excluding.
-    allows_mismatch = TRAVEL_RADIUS_ALLOWS_MISMATCH.get(reader.travel_radius, True)
+    allows_mismatch = TRAVEL_RADIUS_ALLOWS_MISMATCH.get(prefs.travel_radius, True)
     if not location_ok and not allows_mismatch:
         return None
 
-    price_distance = _price_distance(reader, opportunity)
+    price_distance = _price_distance(prefs, opportunity)
     if price_distance > config.max_price_distance:
         return None
 
@@ -136,7 +212,11 @@ def score_opportunity(
     reader_tag_ids = set(reader.interest_tags.values_list("id", flat=True))
     overlap = [t for t in opp_tags if t.id in reader_tag_ids]
     if overlap:
-        score += config.weight_tag_overlap * len(overlap)
+        # Diminishing returns. Counting every match in full let anything
+        # carrying a lot of tags - a new album tagged with its genre, its
+        # format and its month - outrank a gig that matches one interest
+        # squarely, until a week was nothing but records and boxsets.
+        score += config.weight_tag_overlap * (1 + 0.5 * min(len(overlap) - 1, 2))
         reasons.append("shared interest in " + ", ".join(t.name for t in overlap[:3]))
 
     # Broad category affinity - a weaker signal than a specific tag match,
@@ -176,16 +256,17 @@ def score_opportunity(
 
     score -= config.penalty_price_step * price_distance
     if price_distance == 0:
-        reasons.append("fits their usual budget")
+        reasons.append("fits what they'll spend on this" if prefs.exceptions
+                       else "fits their usual budget")
 
-    if reader.mainstream_preference is not None:
-        mainstream_gap = abs(reader.mainstream_preference - opportunity.mainstream_to_unusual)
+    if prefs.mainstream_preference is not None:
+        mainstream_gap = abs(prefs.mainstream_preference - opportunity.mainstream_to_unusual)
         score -= config.penalty_mainstream_gap * mainstream_gap
         if mainstream_gap <= 1:
             reasons.append("matches their mainstream/unusual taste")
 
-    if reader.scale_preference is not None:
-        scale_gap = abs(reader.scale_preference - opportunity.intimate_to_large_scale)
+    if prefs.scale_preference is not None:
+        scale_gap = abs(prefs.scale_preference - opportunity.intimate_to_large_scale)
         score -= config.penalty_scale_gap * scale_gap
         if scale_gap <= 1:
             reasons.append("the right scale for them (intimate vs. large-scale)")

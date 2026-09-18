@@ -131,3 +131,64 @@ class Reader(models.Model):
 
     def __str__(self):
         return self.name or self.email
+
+
+class InterestPreference(models.Model):
+    """One reader's exception for one interest.
+
+    Most people don't have a single budget or a single willingness to
+    travel: someone will cross London for a gig and want the gallery to be
+    twenty minutes away, or spend freely on theatre and nothing on food.
+    A blank field here means "same as my usual", so a reader only fills in
+    what actually differs.
+    """
+
+    reader = models.ForeignKey(
+        Reader, on_delete=models.CASCADE, related_name="interest_preferences")
+    tag = models.ForeignKey(
+        Tag, on_delete=models.CASCADE, related_name="reader_preferences")
+
+    travel_radius = models.CharField(
+        max_length=20, choices=Reader.TravelRadius.choices, blank=True,
+        help_text="How far they'll go for this one. Blank = their usual.")
+    budget = models.CharField(
+        max_length=20, choices=Reader.Budget.choices, blank=True,
+        help_text="What they'll spend on this one. Blank = their usual.")
+    scale_preference = models.PositiveSmallIntegerField(
+        choices=[(i, i) for i in range(1, 6)], null=True, blank=True,
+        help_text="1 = intimate, 5 = large-scale, for this interest. Blank = their usual.")
+    mainstream_preference = models.PositiveSmallIntegerField(
+        choices=[(i, i) for i in range(1, 6)], null=True, blank=True,
+        help_text="1 = mainstream, 5 = niche, for this interest. Blank = their usual.")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    FIELDS = ("travel_radius", "budget", "scale_preference", "mainstream_preference")
+
+    class Meta:
+        ordering = ["tag__name"]
+        constraints = [
+            models.UniqueConstraint(fields=["reader", "tag"], name="one_preference_per_interest"),
+        ]
+
+    def __str__(self):
+        return f"{self.reader}: {self.tag}"
+
+    @property
+    def is_set(self) -> bool:
+        """Does this say anything? An empty row is the same as no row."""
+        return any(getattr(self, field) not in (None, "") for field in self.FIELDS)
+
+    def summary(self) -> str:
+        """'anywhere in my city, happy to treat myself' - for editors and AI."""
+        parts = []
+        if self.travel_radius:
+            parts.append(self.get_travel_radius_display().lower())
+        if self.budget:
+            parts.append(self.get_budget_display().lower())
+        if self.scale_preference:
+            parts.append(f"scale {self.scale_preference}/5 (1 intimate, 5 large)")
+        if self.mainstream_preference:
+            parts.append(f"taste {self.mainstream_preference}/5 (1 mainstream, 5 niche)")
+        return ", ".join(parts)

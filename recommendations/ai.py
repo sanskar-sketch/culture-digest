@@ -750,6 +750,11 @@ def _reader_context(reader) -> str:
         f"Intimate (1) to large-scale (5): {reader.scale_preference or 'not specified'}",
         f"Open to the odd surprise: {'yes' if reader.open_to_surprise else 'no'}",
     ]
+    exceptions = [p for p in reader.interest_preferences.select_related("tag") if p.is_set]
+    if exceptions:
+        lines.append("Exceptions they set for particular interests (these override the answers "
+                     "above for anything carrying that interest):")
+        lines += [f"- {p.tag.name}: {p.summary()}" for p in exceptions]
     if reader.ai_taste_summary:
         lines.append(f"Our reading of their taste: {reader.ai_taste_summary}")
 
@@ -932,7 +937,9 @@ def write_frame(reader, issue, picks) -> dict | None:
 _LISTING_PROPERTIES = {
     "title": {"type": "string"},
     "description": {"type": "string", "description": "Two or three sentences a "
-                    "reader would find useful. Only what the sources say."},
+                    "reader would find useful. Only what the sources say. Facts "
+                    "about the thing itself: never a note to the editor, your "
+                    "own reasoning, or talk of the window or the request."},
     "category": {"type": "string"},
     "price_tier": {"type": "string"},
     "price_display": {"type": "string", "description": "As printed, e.g. '£12-£25'. "
@@ -1164,8 +1171,10 @@ Hard rules:
 - The release date must fall in the window you are given, and be stated by a
   source. Never guess a date.
 - booking_url is the real page for this specific release where a reader can
-  buy, stream or read about it - not a channel's or shop's front page. Never
-  invent a URL.
+  buy, stream or read about it - the title's own page on the service, label
+  or shop (netflix.com/title/..., itv.com/watch/..., a label or Bandcamp
+  release page, a publisher's book page). Never a front page, a site search,
+  or a "new this month" roundup listing many titles. Never invent a URL.
 - location_name is the publisher, label, channel or streaming service.
 - Prefer genuinely distinctive work - original artists doing something new,
   well-reviewed or significant books and series - over filler. Five good

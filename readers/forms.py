@@ -2,9 +2,101 @@ from django import forms
 
 from opportunities.models import Category, Tag
 
-from .models import Reader
+from .models import InterestPreference, Reader
 
 NO_PREFERENCE = ("", "No preference")
+SAME_AS_USUAL = ("", "Same as usual")
+
+SCALE_CHOICES = [(1, "Small rooms"), (2, "On the small side"), (3, "Either"),
+                 (4, "On the big side"), (5, "Big venues")]
+TASTE_CHOICES = [(1, "Mainstream"), (2, "Mostly mainstream"), (3, "Either"),
+                 (4, "Mostly unusual"), (5, "Unusual and niche")]
+
+# The settings a reader can vary interest by interest: everything the
+# matching actually uses, in the order they're shown.
+PREFERENCE_SETTINGS = (
+    ("travel_radius", "How far", Reader.TravelRadius.choices),
+    ("budget", "What I'd spend", Reader.Budget.choices),
+    ("scale_preference", "Scale", SCALE_CHOICES),
+    ("mainstream_preference", "Taste", TASTE_CHOICES),
+)
+NUMERIC_SETTINGS = {"scale_preference", "mainstream_preference"}
+
+
+def preference_field_name(tag_id, setting: str) -> str:
+    return f"pref_{tag_id}_{setting}"
+
+
+class InterestPreferenceFields:
+    """Per-interest travel, spend and taste settings on a reader form.
+
+    One set of fields per interest, every one optional: blank means "same
+    as my usual", so the reader only says what actually differs. Shared by
+    the signup questionnaire and the desk, so an editor sees exactly what
+    the reader chose.
+    """
+
+    def build_preference_fields(self, reader=None, tags=None):
+        self.preference_tags = list(tags if tags is not None else Tag.objects.all())
+        stored = {}
+        if reader is not None and reader.pk:
+            stored = {p.tag_id: p for p in reader.interest_preferences.all()}
+        for tag in self.preference_tags:
+            current = stored.get(tag.pk)
+            for setting, label, choices in PREFERENCE_SETTINGS:
+                name = preference_field_name(tag.pk, setting)
+                self.fields[name] = forms.ChoiceField(
+                    choices=[SAME_AS_USUAL, *choices], required=False,
+                    label=f"{label} for {tag.name}")
+                self.fields[name].widget.attrs["data-interest"] = tag.pk
+                if current is not None:
+                    self.initial.setdefault(name, getattr(current, setting) or "")
+
+    def preference_rows(self):
+        """[{tag, fields}] for the templates, in tag order."""
+        rows = []
+        for tag in getattr(self, "preference_tags", []):
+            rows.append({
+                "tag": tag,
+                "fields": [{"field": self[preference_field_name(tag.pk, setting)], "label": label}
+                           for setting, label, _ in PREFERENCE_SETTINGS],
+            })
+        return rows
+
+    def _preference_values(self, tag):
+        values = {}
+        for setting, _, _ in PREFERENCE_SETTINGS:
+            raw = (self.cleaned_data.get(preference_field_name(tag.pk, setting)) or "").strip()
+            values[setting] = (int(raw) if raw else None) if setting in NUMERIC_SETTINGS else raw
+        return values
+
+    def save_preferences(self, reader, *, merge: bool = False) -> int:
+        """Store the exceptions. Returns how many interests carry one.
+
+        `merge` is for a returning reader filling the signup form again:
+        it only ever adds or changes an answer, never blanks one, the same
+        way the rest of that form behaves.
+        """
+        chosen = set(reader.interest_tags.values_list("id", flat=True))
+        for tag in getattr(self, "preference_tags", []):
+            values = self._preference_values(tag)
+            said_something = any(v not in (None, "") for v in values.values())
+            if tag.pk not in chosen:
+                # Not one of their interests: an exception for it means nothing.
+                InterestPreference.objects.filter(reader=reader, tag=tag).delete()
+                continue
+            if merge and not said_something:
+                continue
+            if not said_something:
+                InterestPreference.objects.filter(reader=reader, tag=tag).delete()
+                continue
+            row, _ = InterestPreference.objects.get_or_create(reader=reader, tag=tag)
+            for setting, value in values.items():
+                if merge and value in (None, ""):
+                    continue
+                setattr(row, setting, value)
+            row.save()
+        return reader.interest_preferences.count()
 
 
 class TagCategoryCheckboxes(forms.CheckboxSelectMultiple):
@@ -23,7 +115,7 @@ class TagCategoryCheckboxes(forms.CheckboxSelectMultiple):
         return option
 
 
-class ReaderOnboardingForm(forms.ModelForm):
+class ReaderOnboardingForm(InterestPreferenceFields, forms.ModelForm):
     """Every field except email is optional by design - a reader should be
     able to sign up with as little or as much detail as they want, and
     refine their profile later."""
@@ -158,6 +250,7 @@ class ReaderOnboardingForm(forms.ModelForm):
             str(pk): category
             for pk, category in tags.queryset.values_list("pk", "category")
         }
+        self.build_preference_fields(reader=self.instance, tags=tags.queryset)
 
     def clean_email(self):
         return self.cleaned_data["email"].strip().lower()

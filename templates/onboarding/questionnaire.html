@@ -278,6 +278,44 @@
 
     <section class="wizard-step" hidden>
       <div class="container-narrow">
+        <span class="eyebrow">Interest by interest</span>
+        <h2>Any exceptions?</h2>
+        <p class="lede" style="margin-bottom:28px;">
+          Most people aren&rsquo;t the same about everything &mdash; you might cross town
+          for a gig and want the gallery round the corner, or spend freely on theatre
+          and nothing on a night out. Change anything that&rsquo;s different for one of
+          your interests. Leave the rest: they follow your usual answers.
+        </p>
+
+        <div id="interest-prefs">
+          {% for row in form.preference_rows %}
+          <div class="pref-row" data-pref-tag="{{ row.tag.pk }}" hidden>
+            <div class="pref-name">{{ row.tag.name }}</div>
+            <div class="pref-fields">
+              {% for item in row.fields %}
+              <label class="pref-field" for="{{ item.field.id_for_label }}">
+                <span>{{ item.label }}</span>
+                {{ item.field }}
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <p class="field-help" id="prefs-empty">
+          Pick a few interests earlier and they&rsquo;ll show up here.
+        </p>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="wizard-step" hidden>
+      <div class="container-narrow">
         <span class="eyebrow">In your own words</span>
         <h2>Anything we should know?</h2>
         <div style="margin-top:36px;">
@@ -423,9 +461,39 @@
 
       if (tagEmpty) tagEmpty.hidden = shown > 0;
       if (tagIntro) tagIntro.hidden = !shown;
+      // Unticking a tag here doesn't fire a change event of its own.
+      if (typeof syncPrefs === 'function') syncPrefs();
     }
     categoryInputs.forEach(function (i) { i.addEventListener('change', syncTags); });
+
+    // --- Exceptions: only ask about the interests they actually ticked.
+    var prefRows = Array.prototype.slice.call(form.querySelectorAll('[data-pref-tag]'));
+    var prefsEmpty = document.getElementById('prefs-empty');
+    var tagInputs = Array.prototype.slice.call(
+      form.querySelectorAll('input[name="interest_tags"]'));
+
+    function syncPrefs() {
+      var ticked = {};
+      tagInputs.forEach(function (input) {
+        if (input.checked) ticked[input.value] = true;
+      });
+      var shown = 0;
+      prefRows.forEach(function (row) {
+        var wanted = ticked[row.getAttribute('data-pref-tag')] === true;
+        row.hidden = !wanted;
+        if (wanted) shown++;
+        // An exception for something they no longer follow means nothing.
+        if (!wanted) {
+          Array.prototype.slice.call(row.querySelectorAll('select')).forEach(
+            function (select) { select.value = ''; });
+        }
+      });
+      if (prefsEmpty) prefsEmpty.hidden = shown > 0;
+    }
+    tagInputs.forEach(function (i) { i.addEventListener('change', syncPrefs); });
+
     syncTags();
+    syncPrefs();
 
     // --- Relevance: where you'd travel only matters if you'd travel at all.
     var radiusInputs = Array.prototype.slice.call(

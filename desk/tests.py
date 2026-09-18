@@ -427,6 +427,25 @@ class DropdownWordingTests(LoggedInTestCase):
         reader.refresh_from_db()
         self.assertEqual(reader.budget, "")
 
+    def test_an_editor_sees_and_changes_a_readers_per_interest_settings(self):
+        from readers.models import InterestPreference
+
+        jazz = Tag.objects.create(name="Late jazz", slug="late-jazz", category="music")
+        reader = Reader.objects.create(email="ada@example.com")
+        reader.interest_tags.add(jazz)
+        InterestPreference.objects.create(reader=reader, tag=jazz, budget="treat")
+        page = self.client.get(reverse("desk:readers_change", args=[reader.pk])).content.decode()
+        self.assertIn("Interest by interest", page)
+        self.assertIn(f'name="pref_{jazz.pk}_budget"', page)
+
+        data = {"email": reader.email, "is_active": "on", "interest_tags": [jazz.pk],
+                f"pref_{jazz.pk}_travel_radius": "anywhere", f"pref_{jazz.pk}_budget": ""}
+        response = self.client.post(reverse("desk:readers_change", args=[reader.pk]), data)
+        self.assertEqual(response.status_code, 302)
+        row = InterestPreference.objects.get(reader=reader, tag=jazz)
+        # The editor's form is the whole truth: a blank clears, unlike signup.
+        self.assertEqual((row.travel_radius, row.budget), ("anywhere", ""))
+
 
 @plain_static
 class AccessSectionTests(TestCase):

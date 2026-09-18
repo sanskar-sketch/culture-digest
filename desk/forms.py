@@ -5,6 +5,7 @@ from django.contrib.auth.forms import SetPasswordForm, UserCreationForm
 from django.contrib.auth.models import Group, Permission, User
 
 from opportunities.models import Category, Opportunity, Tag
+from readers.forms import InterestPreferenceFields
 from readers.models import Reader
 from siteconfig.emails import EmailTemplate
 from siteconfig.models import SiteConfig
@@ -131,7 +132,7 @@ READER_PROFILE_FIELDS = (
 )
 
 
-class ReaderForm(FriendlyChoices, forms.ModelForm):
+class ReaderForm(InterestPreferenceFields, FriendlyChoices, forms.ModelForm):
     EMPTY_LABELS = {
         "travel_radius": "Not set",
         "budget": "Not set",
@@ -165,6 +166,10 @@ class ReaderForm(FriendlyChoices, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["interest_tags"].queryset = Tag.objects.all()
+        # Only the interests this reader follows: an exception for anything
+        # else has no effect, and the list would be unreadable.
+        followed = (self.instance.interest_tags.all() if self.instance.pk else Tag.objects.none())
+        self.build_preference_fields(reader=self.instance, tags=followed)
 
 
 

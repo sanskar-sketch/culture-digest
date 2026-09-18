@@ -319,6 +319,44 @@
     }
     .bg-dark .field-help { color: var(--text-secondary-dark); }
 
+    /* one interest's own travel/spend/taste settings */
+    .pref-row {
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px 6px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    .pref-row[hidden] { display: none; }
+    .bg-dark .pref-row { background: rgba(255, 255, 255, 0.04); border-color: var(--hairline-dark); }
+    .pref-name { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+    .pref-fields { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pref-field { flex: 1 1 150px; min-width: 0; margin-bottom: 8px; }
+    .pref-field > span {
+      display: block;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .bg-dark .pref-field > span { color: var(--text-secondary-dark); }
+    .pref-field select {
+      width: 100%;
+      padding: 9px 10px;
+      font-size: 15px;
+      font-family: inherit;
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      background: #fff;
+      color: var(--text);
+    }
+    .bg-dark .pref-field select {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--hairline-dark);
+      color: var(--text-dark);
+    }
+
     .text-input {
       width: 100%;
       padding: 14px 16px;

@@ -171,7 +171,8 @@ def reader_form(request, pk):
         else:
             form = ReaderForm(request.POST, instance=instance)
             if form.is_valid():
-                form.save()
+                reader = form.save()
+                form.save_preferences(reader)
                 messages.success(request, f"Saved {instance.email}.")
                 return redirect("desk:readers_change", pk=pk)
     else:

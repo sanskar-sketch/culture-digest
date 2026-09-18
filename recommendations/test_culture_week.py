@@ -13,8 +13,8 @@ from django.utils import timezone
 
 from opportunities import research, reviews
 from opportunities.models import Category, CriticReview, Opportunity, Tag, stars_text
-from readers.models import Reader
-from recommendations import ai, compose, drafts, emailing
+from readers.models import InterestPreference, Reader
+from recommendations import ai, compose, drafts, emailing, matching
 from recommendations.models import (IssueDraft, LinkClick, NewsletterIssue, ReaderReply,
                                     Recommendation)
 from siteconfig.models import SiteConfig
@@ -181,6 +181,123 @@ class ChoosingTests(TestCase):
         self.ada.save()
         picks = compose.compose(self.ada, use_ai=False).picks
         self.assertEqual([p.opportunity.title for p in picks if p.wildcard], ["Odd thing"])
+
+
+class BreadthTests(TestCase):
+    """A week is a week, not twenty of whatever scores highest."""
+
+    def setUp(self):
+        cache.clear()
+        self.config = config(recommendations_per_send=6, max_per_section=4)
+        tags = [tag("new albums", "listen"), tag("jazz", "music"), tag("plays", "theatre")]
+        self.reader = reader(tags=tags, categories=("listen", "music", "theatre"))
+        # Releases carry more matching tags than a gig does, so on score
+        # alone they would take every slot.
+        for n in range(6):
+            event(f"Album {n}", tags=tags, category="listen")
+        self.gig = event("A gig", tags=[tags[1]], category="music")
+        self.play = event("A play", tags=[tags[2]], category="theatre")
+
+    def test_every_section_gives_up_its_best_before_one_gives_up_its_second(self):
+        picks = compose.shortlist(
+            compose.gather(self.reader, compose.issue_week(), self.config), self.config, self.reader)
+        titles = [p.opportunity.title for p in picks]
+        self.assertIn("A gig", titles)
+        self.assertIn("A play", titles)
+        self.assertEqual(len(titles), 6)
+        self.assertEqual(sum(1 for t in titles if t.startswith("Album")), 4)
+
+    def test_a_pile_of_tags_does_not_beat_a_square_match(self):
+        from recommendations import matching
+        many = matching.score_opportunity(self.reader, Opportunity.objects.get(title="Album 0"),
+                                          {}, self.config)
+        one = matching.score_opportunity(self.reader, self.gig, {}, self.config)
+        # Three matching tags still beat one, but by less than three times.
+        self.assertGreater(many.score, one.score)
+        self.assertLessEqual(many.score - one.score, self.config.weight_tag_overlap)
+
+
+class PlaceTests(TestCase):
+    """Where a thing is, as research actually writes it down."""
+
+    def setUp(self):
+        cache.clear()
+        self.jazz = tag("jazz", "music")
+        self.reader = reader(tags=[self.jazz], travel_radius=Reader.TravelRadius.WITHIN_CITY)
+
+    def picks(self, area):
+        event("A gig", tags=[self.jazz], location_area=area)
+        got = compose.gather(self.reader, compose.issue_week(), SiteConfig.load())
+        Opportunity.objects.all().delete()
+        return got
+
+    def test_a_neighbourhood_is_still_the_city(self):
+        for area in ("London", "Camden, London", "Soho, London", "london"):
+            self.assertEqual(len(self.picks(area)), 1, area)
+
+    def test_another_city_is_not(self):
+        self.assertEqual(self.picks("Manchester"), [])
+
+
+class PerInterestSettingsTests(TestCase):
+    """What a reader will travel and spend, interest by interest."""
+
+    def setUp(self):
+        cache.clear()
+        self.config = config()
+        self.jazz = tag("jazz", "music")
+        self.art = tag("contemporary art", "exhibition")
+        self.reader = reader(tags=[self.jazz, self.art], categories=("music", "exhibition"),
+                             travel_radius=Reader.TravelRadius.LOCAL_ONLY,
+                             budget=Reader.Budget.FREE_CHEAP)
+
+    def exception(self, tag_obj, **fields):
+        InterestPreference.objects.create(reader=self.reader, tag=tag_obj, **fields)
+        self.reader = Reader.objects.get(pk=self.reader.pk)   # drop the cached read
+
+    def score(self, opportunity):
+        return matching.score_opportunity(self.reader, opportunity, {}, self.config)
+
+    def test_a_pricey_gig_is_out_until_they_say_they_would_spend_it_on_jazz(self):
+        gig = event("Late set", tags=[self.jazz], price_tier="splurge")
+        self.assertIsNone(self.score(gig))
+        self.exception(self.jazz, budget=Reader.Budget.NO_LIMIT)
+        self.assertIsNotNone(self.score(gig))
+
+    def test_they_will_travel_for_jazz_but_not_for_art(self):
+        away_gig = event("Gig out of town", tags=[self.jazz], location_area="Margate")
+        away_show = event("Show out of town", tags=[self.art], category="exhibition",
+                          location_area="Margate")
+        self.exception(self.jazz, travel_radius=Reader.TravelRadius.ANYWHERE)
+        self.assertIsNotNone(self.score(away_gig))
+        self.assertIsNone(self.score(away_show))
+
+    def test_where_two_exceptions_meet_the_more_willing_one_wins(self):
+        both = event("Jazz in a gallery", tags=[self.jazz, self.art], price_tier="splurge")
+        self.exception(self.jazz, budget=Reader.Budget.NO_LIMIT)
+        self.exception(self.art, budget=Reader.Budget.FREE_CHEAP)
+        self.assertIsNotNone(self.score(both))
+
+    def test_the_taste_dials_average_where_two_apply(self):
+        self.exception(self.jazz, scale_preference=1)
+        self.exception(self.art, scale_preference=5)
+        prefs = matching.preferences_for(self.reader, event("Both", tags=[self.jazz, self.art]))
+        self.assertEqual(prefs.scale_preference, 3)
+
+    def test_an_interest_with_no_exception_keeps_their_usual_answers(self):
+        self.exception(self.jazz, budget=Reader.Budget.NO_LIMIT)
+        prefs = matching.preferences_for(self.reader, event("Show", tags=[self.art],
+                                                            category="exhibition"))
+        self.assertEqual((prefs.budget, prefs.travel_radius),
+                         (Reader.Budget.FREE_CHEAP, Reader.TravelRadius.LOCAL_ONLY))
+
+    def test_the_writer_is_told_about_the_exceptions(self):
+        self.exception(self.jazz, travel_radius=Reader.TravelRadius.ANYWHERE,
+                       budget=Reader.Budget.TREAT)
+        context = ai._reader_context(self.reader)
+        self.assertIn("Exceptions they set", context)
+        self.assertIn("jazz: i'll travel far for something special, happy to treat myself",
+                      context.lower())
 
 
 class WritingTests(TestCase):

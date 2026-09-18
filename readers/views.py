@@ -28,9 +28,12 @@ def onboarding_view(request):
     if request.method == "POST" and form.is_valid():
         if existing is None:
             reader = form.save()
+            form.save_preferences(reader)
             send_welcome(reader)
         else:
             reader = _merge_into(form, existing)
+            # Same rule as the rest of this form: add or change, never clear.
+            form.save_preferences(reader, merge=True)
         # What they typed into "anything we've missed" becomes a real
         # interest, off the request - see readers.interests.
         interests.start(reader)

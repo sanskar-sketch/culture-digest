@@ -124,3 +124,59 @@ class WelcomeEmailTests(TestCase):
         with mock.patch("sendgrid.SendGridAPIClient") as client:
             self.assertIsNone(send_welcome(reader))
         client.assert_not_called()
+
+
+class PerInterestSettingsTests(TestCase):
+    """A reader isn't the same about everything: they'll cross town for a gig
+    and want the gallery round the corner."""
+
+    def setUp(self):
+        from opportunities.models import Tag
+
+        self.jazz = Tag.objects.get_or_create(
+            slug="jazz", defaults={"name": "jazz", "category": "music"})[0]
+        self.art = Tag.objects.get_or_create(
+            slug="contemporary-art", defaults={"name": "contemporary art",
+                                               "category": "exhibition"})[0]
+
+    def signup(self, **extra):
+        data = {**FULL_PROFILE, "interest_tags": [self.jazz.pk, self.art.pk], **extra}
+        return self.client.post(reverse("readers:onboarding"), data)
+
+    def test_a_reader_can_set_travel_and_spend_for_one_interest(self):
+        self.signup(**{
+            f"pref_{self.jazz.pk}_travel_radius": "anywhere",
+            f"pref_{self.jazz.pk}_budget": "treat",
+            f"pref_{self.jazz.pk}_scale_preference": "1",
+            f"pref_{self.art.pk}_travel_radius": "local_only",
+        })
+        reader = Reader.objects.get(email="reader@example.com")
+        jazz = reader.interest_preferences.get(tag=self.jazz)
+        self.assertEqual((jazz.travel_radius, jazz.budget, jazz.scale_preference),
+                         ("anywhere", "treat", 1))
+        self.assertEqual(reader.interest_preferences.get(tag=self.art).travel_radius, "local_only")
+        # Their usual answers are untouched.
+        self.assertEqual((reader.travel_radius, reader.budget), ("regional", "moderate"))
+
+    def test_nothing_is_stored_for_an_interest_left_alone(self):
+        self.signup()
+        reader = Reader.objects.get(email="reader@example.com")
+        self.assertEqual(reader.interest_preferences.count(), 0)
+
+    def test_an_exception_for_an_interest_they_do_not_follow_is_dropped(self):
+        self.signup(interest_tags=[self.jazz.pk],
+                    **{f"pref_{self.art.pk}_budget": "no_limit"})
+        reader = Reader.objects.get(email="reader@example.com")
+        self.assertFalse(reader.interest_preferences.filter(tag=self.art).exists())
+
+    def test_signing_up_again_does_not_wipe_an_exception(self):
+        self.signup(**{f"pref_{self.jazz.pk}_travel_radius": "anywhere"})
+        self.client.post(reverse("readers:onboarding"), {"email": "reader@example.com"})
+        reader = Reader.objects.get(email="reader@example.com")
+        self.assertEqual(reader.interest_preferences.get(tag=self.jazz).travel_radius, "anywhere")
+
+    def test_the_signup_page_offers_the_settings(self):
+        page = self.client.get(reverse("readers:onboarding")).content.decode()
+        self.assertIn("Any exceptions?", page)
+        self.assertIn(f'name="pref_{self.jazz.pk}_travel_radius"', page)
+        self.assertIn("Same as usual", page)

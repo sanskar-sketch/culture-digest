@@ -288,21 +288,40 @@ def _rank_key(pick: Pick):
 
 
 def shortlist(picks: list[Pick], config, reader) -> list[Pick]:
-    """What gets written up: within the caps, best first."""
+    """What gets written up: a section at a time, best first.
+
+    Taking the top twenty by score would hand a whole issue to whichever
+    kind of thing scores highest that week - a run of new albums and
+    boxsets, and no gig, play or exhibition at all. So each section gives
+    up its best before any section gives up its second.
+    """
     ranked = sorted(picks, key=_rank_key)
-    chosen, per_section = [], Counter()
-    limits = {"saved": SAVED_MAX, "book_ahead": config.book_ahead_max}
-    total_cap = config.recommendations_per_send
+    queues: dict[str, list[Pick]] = {}
     for pick in ranked:
-        if len(chosen) >= total_cap:
-            break
+        queues.setdefault(pick.section, []).append(pick)
+    limits = {"saved": SAVED_MAX, "book_ahead": config.book_ahead_max}
+
+    def cap(section):
         # Up to two of a category can go to the top, which doesn't use up
         # its section below; `arrange` holds each section to its own cap.
-        cap = limits.get(pick.section, config.max_per_section + TOP_PER_CATEGORY)
-        if per_section[pick.section] >= cap:
-            continue
-        chosen.append(pick)
-        per_section[pick.section] += 1
+        return limits.get(section, config.max_per_section + TOP_PER_CATEGORY)
+
+    chosen, per_section = [], Counter()
+    total_cap = config.recommendations_per_send
+    sections = sorted(queues, key=lambda s: SECTION_ORDER.get(s, 99))
+    while len(chosen) < total_cap:
+        took = False
+        for section in sections:
+            if len(chosen) >= total_cap:
+                break
+            taken = per_section[section]
+            if taken >= cap(section) or taken >= len(queues[section]):
+                continue
+            chosen.append(queues[section][taken])
+            per_section[section] += 1
+            took = True
+        if not took:
+            break
 
     # Someone who asked to be surprised gets one thing from outside the
     # interests they picked - the best of those, if any is worth it.

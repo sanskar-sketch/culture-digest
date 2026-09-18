@@ -410,6 +410,15 @@ table.d-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .d-field:last-child { margin-bottom: 0; }
 .d-field label.d-label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 6px; }
 .d-field .d-help { display: block; font-size: 12.5px; color: var(--d-muted); margin-top: 6px; max-width: 62ch; }
+
+/* one interest's own travel/spend/taste settings */
+.pref-row { border: 1px solid var(--d-line); border-radius: 10px; padding: 12px 14px 4px; margin-bottom: 8px; }
+.pref-name { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.pref-fields { display: flex; flex-wrap: wrap; gap: 10px; }
+.pref-field { flex: 1 1 150px; min-width: 0; margin-bottom: 8px; }
+.pref-field > span { display: block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--d-muted); margin-bottom: 4px; }
+.pref-field select { width: 100%; padding: 7px 8px; font: inherit; font-size: 13.5px; border: 1px solid var(--d-line); border-radius: 8px; background: var(--d-surface); color: inherit; }
+.d-fieldset > p.d-help { display: block; font-size: 12.5px; color: var(--d-muted); max-width: 62ch; }
 .d-field .d-errors { color: var(--d-bad); font-size: 12.5px; margin: 0 0 6px; }
 .d-field.has-error input, .d-field.has-error select, .d-field.has-error textarea { border-color: var(--d-bad) !important; }
 
