@@ -188,7 +188,12 @@ def reader_form(request, pk):
         .values_list("feedback").annotate(n=Count("id"))
     )
     labels = dict(Recommendation.Feedback.choices)
-    feedback_breakdown = [(labels.get(k, k), n) for k, n in feedback_counts.items() if n]
+    feedback_breakdown = [(labels.get(k, k), n) for k, n in feedback_counts.items()
+                          if n and k != Recommendation.Feedback.NONE]
+    thumbs = Recommendation.objects.filter(issue__reader=instance, helpful__isnull=False)
+    helped, not_helped = thumbs.filter(helpful=True).count(), thumbs.filter(helpful=False).count()
+    if helped or not_helped:
+        feedback_breakdown += [("Did it help: \U0001F44D", helped), ("Did it help: \U0001F44E", not_helped)]
 
     issues = instance.issues.prefetch_related("recommendations__opportunity").order_by("-created_at")[:20]
 

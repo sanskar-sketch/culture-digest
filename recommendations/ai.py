@@ -826,6 +826,15 @@ def _reader_context(reader) -> str:
     for label, titles in by_kind.items():
         lines.append(f"Past picks they pressed '{label}' on: {'; '.join(titles)}")
 
+    thumbs = (Recommendation.objects.filter(issue__reader=reader, helpful__isnull=False)
+              .select_related("opportunity").order_by("-helpful_at")[:30])
+    helped = [f"{r.opportunity.title} ({r.opportunity.get_category_display()})" for r in thumbs if r.helpful]
+    didnt = [f"{r.opportunity.title} ({r.opportunity.get_category_display()})" for r in thumbs if not r.helpful]
+    if helped:
+        lines.append(f"Past picks they said helped (thumbs up): {'; '.join(helped)}")
+    if didnt:
+        lines.append(f"Past picks they said didn't help (thumbs down): {'; '.join(didnt)}")
+
     replies = ReaderReply.objects.filter(reader=reader).select_related(
         "recommendation__opportunity")[:12]
     reply_lines = []

@@ -47,6 +47,9 @@ TRAVEL_RADIUS_ALLOWS_MISMATCH = {
     Reader.TravelRadius.ANYWHERE: True,
 }
 
+HELPFUL_SHARE = 0.5
+
+
 def feedback_weights_from(config) -> dict:
     return {
         Recommendation.Feedback.MORE_LIKE_THIS: config.feedback_more_like_this,
@@ -222,12 +225,18 @@ def _feedback_tag_weights(reader: Reader, config) -> dict[int, float]:
     by_feedback = feedback_weights_from(config)
     past = (
         Recommendation.objects.filter(issue__reader=reader)
-        .exclude(feedback=Recommendation.Feedback.NONE)
+        .exclude(Q(feedback=Recommendation.Feedback.NONE) & Q(helpful__isnull=True))
         .select_related("opportunity")
         .prefetch_related("opportunity__tags")
     )
     for rec in past:
-        weight = by_feedback.get(rec.feedback)
+        weight = by_feedback.get(rec.feedback) or 0
+        # "Did this help?" counts for half as much as a button that says
+        # outright what they want more or less of: a thumbs is a lighter touch.
+        if rec.helpful is True:
+            weight += HELPFUL_SHARE * by_feedback[Recommendation.Feedback.MORE_LIKE_THIS]
+        elif rec.helpful is False:
+            weight += HELPFUL_SHARE * by_feedback[Recommendation.Feedback.NOT_FOR_ME]
         if not weight:
             continue
         for tag in rec.opportunity.tags.all():

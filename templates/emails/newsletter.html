@@ -74,7 +74,14 @@
                   {% if rec.caveat %}<p style="font-size:14px; line-height:1.6; margin:0 0 14px; color:#6e6e73;"><strong style="color:#1d1d1f;">Worth knowing:</strong> {{ rec.caveat }}</p>{% endif %}
                   <a href="{{ rec.booking_url }}" style="display:inline-block; background:#000000; color:#ffffff; text-decoration:none; padding:{% if rec.is_top %}11px 22px{% else %}9px 18px{% endif %}; border-radius:999px; font-size:13px; font-weight:500;">{% if rec.book_ahead %}Book{% else %}Details{% endif %} &rarr;</a>
                   {% for review in rec.reviews %}<a href="{{ review.url }}" style="display:inline-block; margin:6px 0 0 12px; color:#1d1d1f; font-size:13px; text-decoration:underline;">{{ review.publication }} review</a>{% endfor %}
-                  <div style="margin-top:16px; border-top:1px solid #eeeeef; padding-top:12px; font-size:12px; color:#86868b; line-height:1.8;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:16px;">
+                    <tr>
+                      <td style="font-size:13px; color:#4a4a4f; padding-right:10px;">Did this help?</td>
+                      <td style="padding-right:6px;"><a href="{{ rec.helped_url }}" title="Yes, it helped" style="display:inline-block; text-decoration:none; font-size:15px; line-height:1; padding:6px 12px; border:1px solid #e5e5ea; border-radius:999px; color:#1d1d1f;">&#128077;</a></td>
+                      <td><a href="{{ rec.not_helped_url }}" title="No, it didn't help" style="display:inline-block; text-decoration:none; font-size:15px; line-height:1; padding:6px 12px; border:1px solid #e5e5ea; border-radius:999px; color:#1d1d1f;">&#128078;</a></td>
+                    </tr>
+                  </table>
+                  <div style="margin-top:12px; border-top:1px solid #eeeeef; padding-top:12px; font-size:12px; color:#86868b; line-height:1.8;">
                     <a href="{{ rec.more_like_this_url }}" style="color:#86868b; text-decoration:none;">More like this</a>&nbsp;&middot;&nbsp;<a href="{{ rec.not_for_me_url }}" style="color:#86868b; text-decoration:none;">Not for me</a>&nbsp;&middot;&nbsp;<a href="{{ rec.save_url }}" style="color:#86868b; text-decoration:none;">Save</a>&nbsp;&middot;&nbsp;<a href="{{ rec.booked_url }}" style="color:#86868b; text-decoration:none;">I booked this</a>&nbsp;&middot;&nbsp;<a href="{{ rec.reply_url }}" style="color:#86868b; text-decoration:none;">Tell me why</a>
                   </div>
                 </td>

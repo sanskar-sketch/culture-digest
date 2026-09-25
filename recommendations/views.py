@@ -54,6 +54,33 @@ def feedback_view(request, token, action):
     )
 
 
+HELPFUL_ANSWERS = {"yes": True, "no": False}
+
+
+def helpful_view(request, token, answer):
+    """A thumbs up or down under a pick: did it help?
+
+    Stored on its own, beside the other buttons - pressing it never undoes
+    a Save or a Booked. Pressing again changes the answer.
+    """
+    if answer not in HELPFUL_ANSWERS:
+        raise Http404("Unknown answer")
+    recommendation = get_object_or_404(
+        Recommendation.objects.select_related("opportunity", "issue__reader"), feedback_token=token)
+    recommendation.helpful = HELPFUL_ANSWERS[answer]
+    recommendation.helpful_at = timezone.now()
+    recommendation.save(update_fields=["helpful", "helpful_at"])
+    _record(recommendation.issue.reader, request.path, LinkClick.Section.FEEDBACK,
+            recommendation=recommendation)
+    helped = recommendation.helpful
+    return render(request, "feedback/recorded.html", {
+        "recommendation": recommendation,
+        "feedback_label": "It helped" if helped else "It didn't help",
+        "reply_prompt": ("Anything to add? What made it useful helps most." if helped else
+                         "Anything to add? What would have made it useful helps most."),
+    })
+
+
 def booking_click_view(request, token):
     """Record that a reader opened a pick, then send them on to it."""
     recommendation = get_object_or_404(

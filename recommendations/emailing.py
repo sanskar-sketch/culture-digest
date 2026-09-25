@@ -200,6 +200,12 @@ def deliver(to_email: str, subject: str, text_body: str, html_body: str) -> str 
     return headers.get("X-Message-Id") or headers.get("x-message-id")
 
 
+def build_helpful_url(token, helped: bool) -> str:
+    path = reverse("recommendations:helpful",
+                   kwargs={"token": token, "answer": "yes" if helped else "no"})
+    return settings.SITE_BASE_URL.rstrip("/") + path
+
+
 def build_review_url(token, review) -> str:
     """A critic review's link, routed through us so the click is recorded."""
     path = reverse("recommendations:review-click",
@@ -274,6 +280,8 @@ def _pick_view(*, opportunity, rationale, hook, caveat, rating, section, is_top,
         "not_for_me_url": link("not-for-me"),
         "save_url": link("save"),
         "booked_url": link("booked"),
+        "helped_url": build_helpful_url(token, True) if tracked and token else "#",
+        "not_helped_url": build_helpful_url(token, False) if tracked and token else "#",
         "reply_url": build_reply_url(token) if tracked and token else "#",
     }
 

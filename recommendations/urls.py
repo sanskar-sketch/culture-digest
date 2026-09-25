@@ -11,5 +11,6 @@ urlpatterns = [
          name="review-click"),
     path("reply/<uuid:token>/", views.reply_view, name="reply"),
     path("c/<uuid:token>/", views.campaign_click_view, name="campaign-click"),
+    path("<uuid:token>/helped/<str:answer>/", views.helpful_view, name="helpful"),
     path("<uuid:token>/<str:action>/", views.feedback_view, name="feedback"),
 ]

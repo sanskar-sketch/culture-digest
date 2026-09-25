@@ -137,7 +137,7 @@ now sends this, not a fresh one.
     <a class="d-row-link" href="{% url 'desk:issues_change' issue.pk %}" style="flex:0 0 140px;">Issue #{{ issue.pk }}</a>
     <span style="flex:0 0 130px;color:var(--d-muted);">{{ issue.created_at|date:"j M Y" }}</span>
     <span style="flex:1;">
-      {% for rec in issue.recommendations.all %}{{ rec.opportunity.title }} — <em>{{ rec.get_feedback_display }}</em>{% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}
+      {% for rec in issue.recommendations.all %}{{ rec.opportunity.title }} — <em>{{ rec.get_feedback_display }}</em>{% if rec.helpful is True %} &#128077;{% elif rec.helpful is False %} &#128078;{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}
     </span>
   </div>
   {% empty %}

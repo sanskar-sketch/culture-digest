@@ -437,6 +437,69 @@ class SportSectionTests(TestCase):
         self.assertIn("Derby day", html)
 
 
+class DidItHelpTests(TestCase):
+    """A thumbs up or down under every pick, and what it teaches us."""
+
+    def setUp(self):
+        cache.clear()
+        self.config = config()
+        self.jazz = tag("jazz", "music")
+        self.ada = reader(tags=[self.jazz])
+        self.gig = event("Ancient Infinity Orchestra", tags=[self.jazz])
+        self.stored = compose.materialise(compose.compose(self.ada, use_ai=False))
+        self.rec = self.stored.recommendations.get()
+
+    def test_every_pick_in_the_email_asks_did_this_help(self):
+        _, html, text = emailing.render_newsletter(self.stored)
+        yes = reverse("recommendations:helpful", kwargs={"token": self.rec.feedback_token, "answer": "yes"})
+        no = reverse("recommendations:helpful", kwargs={"token": self.rec.feedback_token, "answer": "no"})
+        self.assertIn("Did this help?", html)
+        self.assertIn(yes, html)
+        self.assertIn(no, html)
+        self.assertIn("&#128077;", html)
+        self.assertIn("Did this help?", text)
+        self.assertIn(yes, text)
+
+    def test_a_preview_has_the_thumbs_but_no_live_links(self):
+        # A different reader: Ada's copy is already sent, and on cooldown.
+        bo = reader(email="bo@example.com", tags=[self.jazz])
+        _, html, _ = emailing.render_composed(compose.compose(bo, use_ai=False))
+        self.assertIn("Did this help?", html)
+        self.assertNotIn("/helped/", html)
+
+    def test_a_thumb_is_recorded_and_leaves_their_other_answer_alone(self):
+        self.rec.feedback = Recommendation.Feedback.SAVE
+        self.rec.save()
+        url = reverse("recommendations:helpful", kwargs={"token": self.rec.feedback_token, "answer": "no"})
+        page = self.client.get(url)
+        self.assertContains(page, "It didn&#x27;t help")
+        self.assertContains(page, "What would have made it useful")
+        self.rec.refresh_from_db()
+        self.assertEqual((self.rec.helpful, self.rec.feedback), (False, Recommendation.Feedback.SAVE))
+        self.client.get(url.replace("/no/", "/yes/"))   # changing their mind
+        self.rec.refresh_from_db()
+        self.assertTrue(self.rec.helpful)
+        self.assertEqual(self.client.get(url.replace("/no/", "/maybe/")).status_code, 404)
+
+    def test_thumbs_count_for_half_a_button_in_the_matching(self):
+        from recommendations import matching
+        self.rec.helpful = True
+        self.rec.save()
+        up = matching._feedback_tag_weights(self.ada, self.config)[self.jazz.pk]
+        self.assertAlmostEqual(up, 0.5 * self.config.feedback_more_like_this)
+        self.rec.helpful = False
+        self.rec.save()
+        down = matching._feedback_tag_weights(self.ada, self.config)[self.jazz.pk]
+        self.assertAlmostEqual(down, 0.5 * self.config.feedback_not_for_me)
+
+    def test_the_writer_is_told_what_helped_and_what_didnt(self):
+        self.rec.helpful = True
+        self.rec.helpful_at = timezone.now()
+        self.rec.save()
+        self.assertIn("Past picks they said helped (thumbs up): Ancient Infinity Orchestra",
+                      ai._reader_context(self.ada))
+
+
 class WritingTests(TestCase):
     def setUp(self):
         cache.clear()

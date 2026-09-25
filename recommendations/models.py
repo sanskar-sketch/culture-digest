@@ -93,6 +93,11 @@ class Recommendation(models.Model):
         max_length=20, choices=Feedback.choices, default=Feedback.NONE
     )
     feedback_at = models.DateTimeField(null=True, blank=True)
+    # "Did this help?" - thumbs up or down under every pick. Kept apart from
+    # `feedback` so a quick thumbs never overwrites a Save or a Booked.
+    helpful = models.BooleanField(
+        null=True, blank=True, help_text="Did this pick help them? Blank = not answered.")
+    helpful_at = models.DateTimeField(null=True, blank=True)
     feedback_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)

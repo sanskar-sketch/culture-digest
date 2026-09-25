@@ -19,6 +19,8 @@
           {% elif rec.feedback == "save" %}<span class="d-pill accent">Saved</span>
           {% elif rec.feedback == "not_for_me" %}<span class="d-pill bad">Not for me</span>
           {% else %}<span class="d-pill neutral">—</span>{% endif %}
+          {% if rec.helpful is True %}<span class="d-pill good" title="Said it helped">&#128077; Helped</span>
+          {% elif rec.helpful is False %}<span class="d-pill bad" title="Said it didn't help">&#128078; Didn't help</span>{% endif %}
         </td>
         <td>{{ rec.created_at|date:"j M Y" }}</td>
       </tr>

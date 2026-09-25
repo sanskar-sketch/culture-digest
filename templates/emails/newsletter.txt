@@ -24,6 +24,8 @@ Worth knowing: {{ rec.caveat }}
 Details: {{ rec.booking_url }}{% for review in rec.reviews %}
 {{ review.publication }} review: {{ review.url }}{% endfor %}
 
+Did this help?   Yes: {{ rec.helped_url }}
+                 No:  {{ rec.not_helped_url }}
 More like this:  {{ rec.more_like_this_url }}
 Not for me:      {{ rec.not_for_me_url }}
 Save:            {{ rec.save_url }}
