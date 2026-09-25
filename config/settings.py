@@ -155,6 +155,18 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # production, e.g. https://digest.example.com
 SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "http://127.0.0.1:8000")
 
+# Every button in every email is built from SITE_BASE_URL. On the host, an
+# address that only means "this computer" - left unset, or copied across
+# from a local .env - sends readers nowhere: one click lands on whatever
+# happens to be running on their own machine. There, use the site's own
+# public address instead.
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "0.0.0.0", "")
+if RENDER_EXTERNAL_HOSTNAME:
+    from urllib.parse import urlparse as _urlparse
+
+    if (_urlparse(SITE_BASE_URL).hostname or "") in LOCAL_HOSTS:
+        SITE_BASE_URL = f"https://{RENDER_EXTERNAL_HOSTNAME}"
+
 # SendGrid is used to send the newsletter emails. Unset = dry-run mode.
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 

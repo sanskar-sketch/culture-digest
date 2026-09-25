@@ -32,6 +32,11 @@ def link_warning(request) -> str:
     base = getattr(settings, "SITE_BASE_URL", "") or ""
     linked = urlparse(base).netloc.lower()
     here = request.get_host().lower()
+    local = (urlparse(base).hostname or "") in getattr(settings, "LOCAL_HOSTS", ())
+    if local and same_machine(linked) == same_machine(here):
+        return (f"Emails sent from here link to {base} - an address that only works on "
+                "this computer. Anyone else who clicks Details, a thumb or Tell me why gets "
+                "nothing. Send real emails from the live site.")
     if not linked or same_machine(linked) == same_machine(here):
         return ""
     scheme = "https" if request.is_secure() else "http"
