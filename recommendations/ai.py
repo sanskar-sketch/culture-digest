@@ -717,6 +717,10 @@ in, its timing and dates, and the words already written for it.
   you're choosing, say what changed ("I've leant further towards original
   artists after your note about tribute nights"). Never pretend a weak week
   is a strong one. Don't list the picks.
+  You are told which of their interests drew nothing worth sending this
+  week. Say so plainly where it matters to them - "nothing in photography
+  I'd send you this week" - rather than letting an interest quietly vanish.
+  Don't recite the whole list; one clause is enough.
 - section_notes: for a section only when there is something worth saying
   about it as a whole - "There isn't a blockbuster album this Friday, but
   there are two I'd test.", "Both of these close soon." One sentence each,
@@ -916,7 +920,12 @@ def write_frame(reader, issue, picks) -> dict | None:
             "write_up": pick.rationale,
             "caveat": pick.caveat,
         })
+    followed = list(reader.interest_tags.values_list("name", flat=True))
+    covered = {t.name for pick in picks for t in pick.opportunity.tags.all()}
+    missing = [name for name in followed if name not in covered]
     user = (f"{_week_heading(issue)}\n\nThe reader:\n{_reader_context(reader)}\n\n"
+            "Interests of theirs with nothing worth sending this week: "
+            f"{', '.join(missing) if missing else '(none - every interest is represented)'}\n\n"
             f"The picks, in the order they appear, as JSON:\n"
             f"{json.dumps(rows, indent=1, default=str)}")
     return _call(FRAME_SYSTEM, user, FRAME_SCHEMA, "culture_week_frame",

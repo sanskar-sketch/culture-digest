@@ -309,16 +309,36 @@ def shortlist(picks: list[Pick], config, reader) -> list[Pick]:
     chosen, per_section = [], Counter()
     total_cap = config.recommendations_per_send
     sections = sorted(queues, key=lambda s: SECTION_ORDER.get(s, 99))
+
+    def take(pick) -> bool:
+        if len(chosen) >= total_cap or pick in chosen:
+            return False
+        if per_section[pick.section] >= cap(pick.section):
+            return False
+        chosen.append(pick)
+        per_section[pick.section] += 1
+        return True
+
+    # Every interest they picked gets its best thing considered before any
+    # one interest gets a second. Someone who ticked photography and comedy
+    # as well as jazz should hear about all three when there's something
+    # worth hearing - sections alone can't promise that, since photography
+    # and painting share one.
+    wanted = set(reader.interest_tags.values_list("id", flat=True))
+    covered: set[int] = set()
+    for pick in ranked:
+        on_this = {t.id for t in pick.opportunity.tags.all()} & wanted
+        if on_this - covered and take(pick):
+            covered |= on_this
+
     while len(chosen) < total_cap:
         took = False
         for section in sections:
             if len(chosen) >= total_cap:
                 break
-            taken = per_section[section]
-            if taken >= cap(section) or taken >= len(queues[section]):
+            spare = next((p for p in queues[section] if p not in chosen), None)
+            if spare is None or not take(spare):
                 continue
-            chosen.append(queues[section][taken])
-            per_section[section] += 1
             took = True
         if not took:
             break

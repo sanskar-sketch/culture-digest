@@ -320,6 +320,53 @@ class PerInterestSettingsTests(TestCase):
                       context.lower())
 
 
+class EveryInterestTests(TestCase):
+    """Someone who ticked five things should hear about all five."""
+
+    def setUp(self):
+        cache.clear()
+        self.config = config(recommendations_per_send=6, max_per_section=4)
+        self.tags = {name: tag(name, cat) for name, cat in [
+            ("jazz", "music"), ("live gigs", "music"), ("photography", "exhibition"),
+            ("contemporary art", "exhibition"), ("comedy", "event")]}
+        self.reader = reader(tags=list(self.tags.values()),
+                             categories=("music", "exhibition", "other"))
+        # A rich seam of jazz, and one thing each for the rest.
+        for n in range(6):
+            event(f"Jazz night {n}", tags=[self.tags["jazz"]])
+        event("A big gig", tags=[self.tags["live gigs"]])
+        event("Photo show", tags=[self.tags["photography"]], category="exhibition")
+        event("Painting show", tags=[self.tags["contemporary art"]], category="exhibition")
+        event("Comedy night", tags=[self.tags["comedy"]], category="other")
+
+    def test_each_interest_gets_its_best_before_one_gets_a_second(self):
+        picks = compose.shortlist(
+            compose.gather(self.reader, compose.issue_week(), self.config), self.config, self.reader)
+        covered = {t.name for p in picks for t in p.opportunity.tags.all()}
+        self.assertEqual(covered, set(self.tags))
+        self.assertLessEqual(sum(1 for p in picks if p.opportunity.title.startswith("Jazz")), 2)
+
+    @override_settings(OPENAI_API_KEY="test-key")
+    def test_the_writer_is_told_which_interests_drew_nothing(self):
+        Opportunity.objects.filter(title__in=["Photo show", "Comedy night"]).delete()
+        def answer(system, user, schema, name, **kw):
+            if name != "culture_week_picks":
+                return None      # the frame falls back; we only want its prompt
+            items = json.loads(user.split("as JSON:\n", 1)[1])
+            return {"picks": [{"event_id": i["event_id"], "for_you_stars": 4, "hook": "Go.",
+                               "what_it_is": "A thing.", "why_for_you": "Yours.", "caveat": ""}
+                              for i in items]}
+
+        with mock.patch.object(ai, "_call", side_effect=answer) as call:
+            compose.compose(self.reader)
+        frames = [c for c in call.call_args_list if c.args[3] == "culture_week_frame"]
+        self.assertTrue(frames, "the frame is written once the picks are in")
+        user = frames[-1].args[1]
+        self.assertIn("Interests of theirs with nothing worth sending this week:", user)
+        self.assertIn("photography", user.split("The picks")[0])
+        self.assertIn("comedy", user.split("The picks")[0])
+
+
 class WritingTests(TestCase):
     def setUp(self):
         cache.clear()
