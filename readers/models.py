@@ -165,11 +165,15 @@ class InterestPreference(models.Model):
     mainstream_preference = models.PositiveSmallIntegerField(
         choices=[(i, i) for i in range(1, 6)], null=True, blank=True,
         help_text="1 = mainstream, 5 = niche, for this interest. Blank = their usual.")
+    availability = models.JSONField(
+        default=list, blank=True,
+        help_text="When they're free for this one, e.g. ['weekends']. Empty = their usual.")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    FIELDS = ("travel_radius", "budget", "scale_preference", "mainstream_preference")
+    FIELDS = ("travel_radius", "budget", "scale_preference", "mainstream_preference",
+              "availability")
 
     class Meta:
         ordering = ["category", "tag__name"]
@@ -211,4 +215,7 @@ class InterestPreference(models.Model):
             parts.append(f"scale {self.scale_preference}/5 (1 intimate, 5 large)")
         if self.mainstream_preference:
             parts.append(f"taste {self.mainstream_preference}/5 (1 mainstream, 5 niche)")
+        if self.availability:
+            labels = dict(Reader.Availability.choices)
+            parts.append("free " + ", ".join(labels.get(v, v).lower() for v in self.availability))
         return ", ".join(parts)

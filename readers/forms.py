@@ -21,6 +21,8 @@ PREFERENCE_SETTINGS = (
     ("mainstream_preference", "Taste", TASTE_CHOICES),
 )
 NUMERIC_SETTINGS = {"scale_preference", "mainstream_preference"}
+# Picked from a list rather than chosen one-of, so it needs its own widget.
+MULTI_SETTINGS = {"availability": ("When I'm free", Reader.Availability.choices)}
 
 
 def preference_field_name(key, setting: str) -> str:
@@ -75,6 +77,14 @@ class InterestPreferenceFields:
                 label=f"{label} for {what}")
             if current is not None:
                 self.initial.setdefault(name, getattr(current, setting) or "")
+        for setting, (label, choices) in MULTI_SETTINGS.items():
+            name = preference_field_name(key, setting)
+            self.fields[name] = forms.MultipleChoiceField(
+                choices=choices, required=False, widget=forms.CheckboxSelectMultiple,
+                label=f"{label} for {what}",
+                help_text="Leave all unticked for your usual answer.")
+            if current is not None:
+                self.initial.setdefault(name, getattr(current, setting) or [])
 
     def preference_rows(self):
         """[{key, name, kind, fields}] for the templates: categories, then interests."""
@@ -90,6 +100,8 @@ class InterestPreferenceFields:
             "key": key, "name": name, "kind": kind, "value": value,
             "fields": [{"field": self[preference_field_name(key, setting)], "label": label}
                        for setting, label, _ in PREFERENCE_SETTINGS],
+            "choices": [{"field": self[preference_field_name(key, setting)], "label": label}
+                        for setting, (label, _) in MULTI_SETTINGS.items()],
         }
 
     def _preference_values(self, key):
@@ -97,6 +109,8 @@ class InterestPreferenceFields:
         for setting, _, _ in PREFERENCE_SETTINGS:
             raw = (self.cleaned_data.get(preference_field_name(key, setting)) or "").strip()
             values[setting] = (int(raw) if raw else None) if setting in NUMERIC_SETTINGS else raw
+        for setting in MULTI_SETTINGS:
+            values[setting] = list(self.cleaned_data.get(preference_field_name(key, setting)) or [])
         return values
 
     def save_preferences(self, reader, *, merge: bool = False) -> int:
@@ -118,7 +132,7 @@ class InterestPreferenceFields:
 
     def _store(self, reader, key, lookup, *, kept: bool, merge: bool):
         values = self._preference_values(key)
-        said_something = any(v not in (None, "") for v in values.values())
+        said_something = any(v not in (None, "", []) for v in values.values())
         existing = InterestPreference.objects.filter(reader=reader, **lookup)
         if not kept:
             # Not something they follow: an exception for it means nothing.
@@ -130,7 +144,7 @@ class InterestPreferenceFields:
             return
         row = existing.first() or InterestPreference(reader=reader, **lookup)
         for setting, value in values.items():
-            if merge and value in (None, ""):
+            if merge and value in (None, "", []):
                 continue
             setattr(row, setting, value)
         row.save()

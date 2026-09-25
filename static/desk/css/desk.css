@@ -418,6 +418,10 @@ table.d-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pref-fields { display: flex; flex-wrap: wrap; gap: 10px; }
 .pref-field { flex: 1 1 150px; min-width: 0; margin-bottom: 8px; }
 .pref-field > span { display: block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--d-muted); margin-bottom: 4px; }
+.pref-when { margin: 2px 0 8px; }
+.pref-when > span { display: block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--d-muted); margin-bottom: 4px; }
+.pref-when ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.pref-when input { width: auto; margin-right: 4px; }
 .pref-field select { width: 100%; padding: 7px 8px; font: inherit; font-size: 13.5px; border: 1px solid var(--d-line); border-radius: 8px; background: var(--d-surface); color: inherit; }
 .d-fieldset > p.d-help { display: block; font-size: 12.5px; color: var(--d-muted); max-width: 62ch; }
 .d-field .d-errors { color: var(--d-bad); font-size: 12.5px; margin: 0 0 6px; }

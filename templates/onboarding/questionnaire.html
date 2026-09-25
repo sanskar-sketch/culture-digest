@@ -151,6 +151,10 @@
           <div class="other-field" id="other-travel" hidden>
             {{ form.other_travel }}
           </div>
+          <p class="field-help" style="margin-top:12px;">
+            This is your usual answer. If you&rsquo;d go further for one thing than another,
+            you can say so interest by interest in a couple of steps.
+          </p>
         </div>
 
         <div id="travel-destinations-field">
@@ -193,6 +197,10 @@
           <div class="other-field" id="other-budget" hidden>
             {{ form.other_budget }}
           </div>
+          <p class="field-help" style="margin-top:12px;">
+            Your usual budget. You can spend more on some things than others &mdash;
+            the next steps let you set that per interest.
+          </p>
         </div>
 
         <div>
@@ -299,6 +307,19 @@
               </label>
               {% endfor %}
             </div>
+            {% for item in row.choices %}
+            <div class="pref-when">
+              <span>{{ item.label }}</span>
+              <div class="chip-group">
+                {% for choice in item.field %}
+                <label class="chip chip-sm" for="{{ choice.id_for_label }}">
+                  {{ choice.tag }}
+                  <span>{{ choice.choice_label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
           </div>
           {% endfor %}
         </div>
@@ -490,6 +511,8 @@
         if (!wanted) {
           Array.prototype.slice.call(row.querySelectorAll('select')).forEach(
             function (select) { select.value = ''; });
+          Array.prototype.slice.call(row.querySelectorAll('input[type="checkbox"]')).forEach(
+            function (box) { box.checked = false; });
         }
       });
       if (prefsEmpty) prefsEmpty.hidden = shown > 0;

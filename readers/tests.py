@@ -190,9 +190,23 @@ class PerInterestSettingsTests(TestCase):
         reader = Reader.objects.get(email="reader@example.com")
         self.assertFalse(reader.interest_preferences.filter(category="theatre").exists())
 
+    def test_when_theyre_free_can_differ_by_interest(self):
+        self.signup(**{
+            f"pref_{self.jazz.pk}_availability": ["weekday_evenings"],
+            f"pref_{self.art.pk}_availability": ["weekends", "weekday_daytime"],
+        })
+        reader = Reader.objects.get(email="reader@example.com")
+        self.assertEqual(reader.interest_preferences.get(tag=self.jazz).availability,
+                         ["weekday_evenings"])
+        self.assertEqual(sorted(reader.interest_preferences.get(tag=self.art).availability),
+                         ["weekday_daytime", "weekends"])
+        self.assertIn("free weekday evenings",
+                      reader.interest_preferences.get(tag=self.jazz).summary())
+
     def test_the_signup_page_offers_the_settings(self):
         page = self.client.get(reverse("readers:onboarding")).content.decode()
         self.assertIn("Any exceptions?", page)
         self.assertIn(f'name="pref_{self.jazz.pk}_travel_radius"', page)
         self.assertIn('name="pref_cat_music_travel_radius"', page)
+        self.assertIn(f'name="pref_{self.jazz.pk}_availability"', page)
         self.assertIn("Same as usual", page)

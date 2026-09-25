@@ -726,7 +726,8 @@ in, its timing and dates, and the words already written for it.
   there are two I'd test.", "Both of these close soon." One sentence each,
   keyed by the section's key. Most sections need none.
 - programme: "If I were programming your week" - a short day-by-day plan,
-  three to seven entries, fitted to when they say they're free. Use only
+  three to seven entries, fitted to when they say they're free - including
+  any interest they gave its own answer for ("weekends only for galleries"). Use only
   picks in this week's sections, not ones marked book ahead, each on a
   day it is actually on: a gig on its date, an exhibition any day it's
   open, a record or series "Any evening". Give the event_ids each entry

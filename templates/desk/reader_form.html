@@ -84,6 +84,9 @@ now sends this, not a fresh one.
         </label>
         {% endfor %}
       </div>
+      {% for item in row.choices %}
+      <div class="pref-when"><span>{{ item.label }}</span>{{ item.field }}</div>
+      {% endfor %}
     </div>
     {% endfor %}
   </div>
