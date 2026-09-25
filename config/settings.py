@@ -21,6 +21,21 @@ SECRET_KEY = os.environ.get(
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
 
+# Outside debug, fail closed. Without its own secret key the site would sign
+# logins with the key printed above, which anyone can read in the repo; and
+# without a DATABASE_URL it would quietly start on a throwaway SQLite file,
+# empty, losing whatever was written to it at the next deploy. Refusing to
+# start - at build time, with a message saying what's missing - is kinder.
+_REQUIRED_IN_PRODUCTION = ("DJANGO_SECRET_KEY", "DATABASE_URL")
+if not DEBUG:
+    _missing = [name for name in _REQUIRED_IN_PRODUCTION if not os.environ.get(name)]
+    if _missing:
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured(
+            "Production settings are missing: " + ", ".join(_missing)
+            + ". Set them in the host's environment variables (DJANGO_DEBUG=false is on).")
+
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 CSRF_TRUSTED_ORIGINS = [
     o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o
