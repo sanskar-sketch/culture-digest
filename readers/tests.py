@@ -223,3 +223,32 @@ class PerInterestSettingsTests(TestCase):
         self.assertIn('name="pref_cat_music_travel_radius"', page)
         self.assertIn(f'name="pref_{self.jazz.pk}_availability"', page)
 
+
+
+class SportTests(TestCase):
+    """Sport is picked like anything else: the category, then the sports."""
+
+    def test_step_two_offers_sport_and_step_three_its_sports(self):
+        page = self.client.get(reverse("readers:onboarding")).content.decode()
+        self.assertIn('name="interest_categories" value="sport"', page)
+        from opportunities.models import Tag
+        cricket = Tag.objects.get(slug="cricket")
+        self.assertEqual(cricket.category, "sport")
+        self.assertIn(f'value="{cricket.pk}"', page)
+        self.assertIn('data-category="sport"', page)
+
+    def test_a_reader_can_follow_sport_and_pick_their_sports(self):
+        from opportunities.models import Tag
+        cricket, tennis = Tag.objects.get(slug="cricket"), Tag.objects.get(slug="tennis")
+        self.client.post(reverse("readers:onboarding"), {
+            **FULL_PROFILE, "interest_categories": ["sport", "music"],
+            "interest_tags": [cricket.pk, tennis.pk],
+            f"rank_{cricket.pk}": "1", f"rank_{tennis.pk}": "2"})
+        reader = Reader.objects.get(email="reader@example.com")
+        self.assertIn("sport", reader.interest_categories)
+        self.assertEqual([r["name"] for r in reader.ranked_interests()][:2], ["cricket", "tennis"])
+
+    def test_the_old_sport_interest_moved_under_sport_and_kept_its_address(self):
+        from opportunities.models import Tag
+        old = Tag.objects.get(slug="sport")
+        self.assertEqual((old.category, old.name), ("sport", "any live sport"))

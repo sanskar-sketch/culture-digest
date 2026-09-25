@@ -17,6 +17,7 @@ class Category(models.TextChoices):
     TALK = "talk", "Talk / lecture"
     FOOD = "food", "Food & drink"
     EVENT = "event", "Event"
+    SPORT = "sport", "Sport"
     UNUSUAL = "unusual", "Unusual experience"
     # Things you don't go to: a book out this week, a new album, a series
     # starting. A culture week is as much these as it is nights out.

@@ -57,6 +57,7 @@ SECTIONS = [
     ("book", "📚", "Books"),
     ("talk", "🎤", "Talks & ideas"),
     ("food", "🍽️", "Food & drink"),
+    ("sport", "🏟️", "Sport"),
     ("things", "✨", "Things to do"),
     ("book_ahead", "🚨", "Book ahead"),
 ]
@@ -73,6 +74,7 @@ CATEGORY_SECTION = {
     Category.BOOK: "book",
     Category.TALK: "talk",
     Category.FOOD: "food",
+    Category.SPORT: "sport",
 }
 
 # Score to FOR YOU stars, in halves. Absolute rather than relative to the

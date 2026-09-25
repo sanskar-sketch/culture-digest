@@ -424,6 +424,19 @@ class EveryInterestTests(TestCase):
         self.assertIn("comedy", user.split("The picks")[0])
 
 
+class SportSectionTests(TestCase):
+    def test_a_fixture_goes_out_under_sport(self):
+        cache.clear()
+        football = Tag.objects.get(slug="football")
+        fan = reader(tags=[football], categories=("sport",))
+        event("Derby day", tags=[football], category="sport",
+              start_date=timezone.localdate() + timedelta(days=2))
+        issue = compose.compose(fan, use_ai=False)
+        self.assertEqual([p.section for p in issue.picks], ["sport"])
+        _, html, _ = emailing.render_composed(issue)
+        self.assertIn("Derby day", html)
+
+
 class WritingTests(TestCase):
     def setUp(self):
         cache.clear()
