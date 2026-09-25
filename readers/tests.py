@@ -203,21 +203,42 @@ class PerInterestSettingsTests(TestCase):
         self.assertIn("free weekday evenings",
                       reader.interest_preferences.get(tag=self.jazz).summary())
 
-    def test_a_reader_puts_what_they_picked_in_order(self):
-        self.signup(interest_categories=["music", "exhibition", "theatre"], **{
-            f"rank_{self.art.pk}": "1", f"rank_{self.jazz.pk}": "2", "rank_cat_theatre": "3",
-        })
+    def ranked(self):
         reader = Reader.objects.get(email="reader@example.com")
-        order = [(p.label, p.rank) for p in reader.interest_preferences.select_related("tag")]
-        self.assertEqual(order, [("contemporary art", 1), ("jazz", 2), ("theatre (all of it)", 3)])
-        # A rank alone isn't an exception: their usual answers still apply.
+        return [(p.label, p.rank, p.love) for p in
+                reader.interest_preferences.select_related("tag").exclude(rank__isnull=True)]
+
+    def test_the_biggest_bubble_comes_first(self):
+        self.signup(interest_categories=["music", "exhibition", "theatre"], **{
+            f"love_{self.art.pk}": "9", f"love_{self.jazz.pk}": "6", "love_cat_theatre": "3",
+        })
+        self.assertEqual(self.ranked(), [("contemporary art", 1, 9), ("jazz", 2, 6),
+                                         ("theatre (all of it)", 3, 3)])
+        # How much it matters isn't an exception: their usual answers still apply.
+        reader = Reader.objects.get(email="reader@example.com")
         self.assertFalse(reader.interest_preferences.get(tag=self.jazz).is_set)
+
+    def test_an_unsized_interest_takes_its_categorys_size(self):
+        self.signup(interest_categories=["music", "exhibition"], **{
+            "love_cat_music": "10", f"love_{self.art.pk}": "4"})
+        # jazz was never sized itself, so it is as big as music.
+        self.assertEqual(self.ranked(), [("jazz", 1, 10), ("contemporary art", 2, 4)])
+
+    def test_leaving_every_bubble_alone_records_no_order(self):
+        self.signup(interest_categories=["music", "exhibition"])
+        self.assertEqual(self.ranked(), [])
 
     def test_the_signup_page_offers_the_settings(self):
         page = self.client.get(reverse("readers:onboarding")).content.decode()
-        self.assertIn("Put them in order.", page)
-        self.assertNotIn("Any exceptions?", page)
-        self.assertIn(f'name="rank_{self.jazz.pk}"', page)
+        self.assertIn("Make it yours.", page)
+        self.assertIn('id="universe"', page)
+        self.assertNotIn("Put them in order.", page)
+        self.assertIn(f'name="love_{self.jazz.pk}"', page)
+        # Steps 4 and 5 are gone; their questions live in the Me bubble.
+        self.assertNotIn("Where would you go, for something worth it?", page)
+        self.assertNotIn("Budget &amp; timing.", page)
+        for usual in ('name="travel_radius"', 'name="budget"', 'name="availability"'):
+            self.assertIn(usual, page)
         self.assertIn(">Usual<", page)
         self.assertIn(f'name="pref_{self.jazz.pk}_travel_radius"', page)
         self.assertIn('name="pref_cat_music_travel_radius"', page)
@@ -243,7 +264,7 @@ class SportTests(TestCase):
         self.client.post(reverse("readers:onboarding"), {
             **FULL_PROFILE, "interest_categories": ["sport", "music"],
             "interest_tags": [cricket.pk, tennis.pk],
-            f"rank_{cricket.pk}": "1", f"rank_{tennis.pk}": "2"})
+            f"love_{cricket.pk}": "10", f"love_{tennis.pk}": "7"})
         reader = Reader.objects.get(email="reader@example.com")
         self.assertIn("sport", reader.interest_categories)
         self.assertEqual([r["name"] for r in reader.ranked_interests()][:2], ["cricket", "tennis"])

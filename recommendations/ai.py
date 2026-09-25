@@ -820,9 +820,10 @@ def _reader_context(reader) -> str:
 
 def _ranked_interests(reader) -> str:
     """Everything they picked, in the order they ranked it where they did."""
-    ranked = [(p.rank, p.label) for p in reader.interest_preferences.select_related("tag")
-              if p.rank is not None]
-    ranked_labels = {label for _, label in ranked}
+    ranked = [(p.rank, p.label + (f" ({p.love_words})" if p.love_words else ""))
+              for p in reader.interest_preferences.select_related("tag") if p.rank is not None]
+    ranked_labels = {p.label for p in reader.interest_preferences.select_related("tag")
+                     if p.rank is not None}
     rest = [name for name in reader.interest_tags.values_list("name", flat=True)
             if name not in ranked_labels]
     if not ranked:

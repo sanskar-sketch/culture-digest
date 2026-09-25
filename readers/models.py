@@ -197,12 +197,23 @@ class InterestPreference(models.Model):
     rank = models.PositiveSmallIntegerField(
         null=True, blank=True,
         help_text="Where they put this among everything they picked: 1 = matters most.")
+    love = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="How much it matters to them, 1-10: the size of its bubble at signup. "
+                  "The rank is worked out from these.")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     FIELDS = ("travel_radius", "budget", "scale_preference", "mainstream_preference",
               "availability")
+    LOVE_WORDS = ((9, "loves it"), (7, "really likes it"), (4, "likes it"), (1, "a mild interest"))
+
+    @property
+    def love_words(self) -> str:
+        if self.love is None:
+            return ""
+        return next(words for floor, words in self.LOVE_WORDS if self.love >= floor)
 
     class Meta:
         ordering = ["rank", "category", "tag__name"]

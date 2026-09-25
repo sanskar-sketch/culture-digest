@@ -129,96 +129,80 @@
 
     <section class="wizard-step" hidden>
       <div class="container-narrow">
-        <span class="eyebrow">Getting around</span>
-        <h2>Where would you go, for something worth it?</h2>
+        <span class="eyebrow">Your culture universe</span>
+        <h2>Make it yours.</h2>
+        <p class="lede" style="margin-bottom:22px;">
+          The bigger the bubble, the more it matters &mdash; your weekly email leads with
+          your biggest. Tap a bubble to size it and say how you like it. Tap a category
+          to go inside it.
+        </p>
 
-        <div style="margin:36px 0 32px;">
-          <span class="field-label">{{ form.travel_radius.label }}</span>
-          <div class="chip-group">
-            {% for choice in form.travel_radius %}
-              {% if choice.data.value %}
-              <label class="chip" for="{{ choice.id_for_label }}">
-                {{ choice.tag }}
-                <span>{{ choice.choice_label }}</span>
-              </label>
-              {% endif %}
-            {% endfor %}
-            <label class="chip" data-other-toggle="#other-travel">
-              <input type="checkbox">
-              <span>Something else&hellip;</span>
-            </label>
+        <div class="universe" id="universe">
+          <div class="universe-bar">
+            <button type="button" class="universe-back" id="universe-back" hidden>&larr; Everything</button>
+            <span class="universe-title" id="universe-title">My culture</span>
+            <span class="universe-tip" id="universe-tip">Tap <strong>Me</strong> for your usual answers</span>
           </div>
-          <div class="other-field" id="other-travel" hidden>
-            {{ form.other_travel }}
+          <div class="universe-space" id="universe-space">
+            <svg class="universe-lines" id="universe-lines" aria-hidden="true"></svg>
           </div>
-          <p class="field-help" style="margin-top:12px;">
-            This is your usual answer. If you&rsquo;d go further for one thing than another,
-            you can say so interest by interest in a couple of steps.
-          </p>
+          <div class="universe-foot" id="universe-foot" hidden>
+            <label class="universe-add-label" for="universe-add">Something missing from <span id="universe-add-where"></span>?</label>
+            <div class="universe-add">
+              <input type="text" id="universe-add" placeholder="Add your own, e.g. UK jazz fusion" autocomplete="off">
+              <button type="button" class="btn btn-primary" id="universe-add-go">Add</button>
+            </div>
+            <p class="universe-added" id="universe-added" hidden></p>
+          </div>
+        </div>
+        <p class="field-help" id="prefs-empty" hidden style="margin-top:14px;">
+          Go back and pick what pulls you in &mdash; it shows up here as your universe.
+        </p>
+
+        <div id="universe-items" hidden>
+          <div class="u-item" data-u-kind="me" data-u-value="me" data-u-name="You, usually">
+            <div class="u-options">
+              <p class="field-help" style="margin:0 0 14px;">Your usual answers. Anything you set on a bubble wins over these.</p>
+              <div class="rank-option"><span class="rank-option-label">How far I'll go</span><div class="chip-group">{% for choice in form.travel_radius %}{% if choice.data.value %}<label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endif %}{% endfor %}</div></div>
+              <div class="rank-option"><span class="rank-option-label">Typical spend</span><div class="chip-group">{% for choice in form.budget %}{% if choice.data.value %}<label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endif %}{% endfor %}</div></div>
+              <div class="rank-option"><span class="rank-option-label">When I'm free</span><div class="chip-group">{% for choice in form.availability %}<label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}</div></div>
+            </div>
+          </div>
+          {% for row in form.preference_rows %}
+          <div class="u-item" data-u-kind="{{ row.kind }}" data-u-value="{{ row.value }}"
+               data-u-category="{{ row.category }}" data-u-name="{{ row.name }}">
+            {% if row.love_field %}{{ row.love_field }}{% endif %}
+            <div class="u-options">
+              {% for item in row.fields %}
+              <div class="rank-option">
+                <span class="rank-option-label">{{ item.label }}</span>
+                <div class="chip-group">{% for choice in item.field %}<label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}</div>
+              </div>
+              {% endfor %}
+              {% for item in row.choices %}
+              <div class="rank-option">
+                <span class="rank-option-label">{{ item.label }}<span class="pref-scope">&mdash; leave all unticked for your usual</span></span>
+                <div class="chip-group">{% for choice in item.field %}<label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
         </div>
 
-        <div id="travel-destinations-field">
-          <label class="field-label" for="{{ form.travel_destinations.id_for_label }}">
-            {{ form.travel_destinations.label }}
-          </label>
-          <p class="field-help">Cities or places you love, or would love to visit.</p>
-          {{ form.travel_destinations }}
-        </div>
-
-        <div class="wizard-nav">
-          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
-          <span class="spacer"></span>
-          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="wizard-step" hidden>
-      <div class="container-narrow">
-        <span class="eyebrow">Practicalities</span>
-        <h2>Budget &amp; timing.</h2>
-
-        <div style="margin:36px 0 32px;">
-          <span class="field-label">{{ form.budget.label }}</span>
-          <div class="chip-group">
-            {% for choice in form.budget %}
-              {% if choice.data.value %}
-              <label class="chip" for="{{ choice.id_for_label }}">
-                {{ choice.tag }}
-                <span>{{ choice.choice_label }}</span>
-              </label>
-              {% endif %}
-            {% endfor %}
-            <label class="chip" data-other-toggle="#other-budget">
-              <input type="checkbox">
-              <span>Something else&hellip;</span>
-            </label>
-          </div>
-          <div class="other-field" id="other-budget" hidden>
-            {{ form.other_budget }}
-          </div>
-          <p class="field-help" style="margin-top:12px;">
-            Your usual budget. You can spend more on some things than others &mdash;
-            the next steps let you set that per interest.
-          </p>
-        </div>
-
-        <div>
-          <span class="field-label">{{ form.availability.label }}</span>
-          <div class="chip-group">
-            {% for choice in form.availability %}
-            <label class="chip" for="{{ choice.id_for_label }}">
-              {{ choice.tag }}
-              <span>{{ choice.choice_label }}</span>
-            </label>
-            {% endfor %}
-            <label class="chip" data-other-toggle="#other-availability">
-              <input type="checkbox">
-              <span>Something else&hellip;</span>
-            </label>
-          </div>
-          <div class="other-field" id="other-availability" hidden>
-            {{ form.other_availability }}
+        <div class="u-card-backdrop" id="u-card" hidden>
+          <div class="u-card" role="dialog" aria-modal="true" aria-labelledby="u-card-title">
+            <div class="u-card-head">
+              <span class="u-card-dot" id="u-card-dot" aria-hidden="true"></span>
+              <h3 id="u-card-title"></h3>
+              <button type="button" class="btn btn-primary u-card-done" id="u-card-done">Done</button>
+            </div>
+            <div class="u-love" id="u-love">
+              <label class="rank-option-label" for="u-love-range">How much do you love it?</label>
+              <input type="range" id="u-love-range" min="1" max="10" step="1">
+              <div class="u-love-ends"><span>A little</span><span>Love it</span></div>
+            </div>
+            <div id="u-card-body"></div>
           </div>
         </div>
 
@@ -275,72 +259,6 @@
             <span class="track"></span>
           </label>
         </div>
-
-        <div class="wizard-nav">
-          <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
-          <span class="spacer"></span>
-          <button type="button" class="btn btn-primary" data-wizard-next>Continue</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="wizard-step" hidden>
-      <div class="container-narrow">
-        <span class="eyebrow">What matters most</span>
-        <h2>Put them in order.</h2>
-        <p class="lede" style="margin-bottom:24px;">
-          Top first. Your weekly email leads with what you put at the top, and makes
-          room for the rest as the week allows. Drag to reorder, or use the arrows.
-        </p>
-        <p class="field-help" style="margin:-8px 0 20px;">
-          Tap <strong>Adjust</strong> on anything you&rsquo;d travel further for, spend more on,
-          or only do at certain times. Leave it alone and it follows your usual answers.
-        </p>
-
-        <ol class="rank-list" id="rank-list">
-          {% for row in form.preference_rows %}
-          <li class="rank-item" data-pref-kind="{{ row.kind }}" data-pref-value="{{ row.value }}"
-              data-pref-category="{{ row.category }}" draggable="true" hidden>
-            <div class="rank-head">
-              <span class="rank-grip" aria-hidden="true">&#8942;&#8942;</span>
-              <span class="rank-number" aria-hidden="true"></span>
-              <span class="rank-name">{{ row.name }}{% if row.kind == "category" %} <span class="pref-scope">all of it</span>{% endif %}</span>
-              <span class="rank-moves">
-                <button type="button" class="rank-move" data-move="up" aria-label="Move {{ row.name }} up">&uarr;</button>
-                <button type="button" class="rank-move" data-move="down" aria-label="Move {{ row.name }} down">&darr;</button>
-              </span>
-              <button type="button" class="rank-adjust" aria-expanded="false">Adjust</button>
-            </div>
-            <p class="rank-summary">Your usual answers</p>
-            <div class="rank-options" hidden>
-              {% for item in row.fields %}
-              <div class="rank-option" data-setting-label="{{ item.label }}">
-                <span class="rank-option-label">{{ item.label }}</span>
-                <div class="chip-group">
-                  {% for choice in item.field %}
-                  <label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
-                  {% endfor %}
-                </div>
-              </div>
-              {% endfor %}
-              {% for item in row.choices %}
-              <div class="rank-option" data-setting-label="{{ item.label }}">
-                <span class="rank-option-label">{{ item.label }}<span class="pref-scope">&mdash; leave all unticked for your usual</span></span>
-                <div class="chip-group">
-                  {% for choice in item.field %}
-                  <label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
-                  {% endfor %}
-                </div>
-              </div>
-              {% endfor %}
-            </div>
-            {{ row.rank_field }}
-          </li>
-          {% endfor %}
-        </ol>
-        <p class="field-help" id="prefs-empty">
-          Go back and pick what pulls you in &mdash; whatever you choose shows up here to put in order.
-        </p>
 
         <div class="wizard-nav">
           <button type="button" class="btn btn-ghost" data-wizard-prev>Back</button>
@@ -425,6 +343,10 @@
         }
       });
 
+      if (steps[current].querySelector('#universe') && typeof renderUniverse === 'function') {
+        renderUniverse();
+      }
+
       fill.style.width = ((current + 1) / total * 100) + '%';
       label.textContent = 'Step ' + (current + 1) + ' of ' + total;
 
@@ -502,153 +424,308 @@
     }
     categoryInputs.forEach(function (i) { i.addEventListener('change', syncTags); });
 
-    // --- Ranking: whatever they picked, in the order that matters to them.
-    var rankList = document.getElementById('rank-list');
-    var rankItems = rankList ? Array.prototype.slice.call(rankList.querySelectorAll('.rank-item')) : [];
+    // --- The culture universe: what they picked, sized by how much it matters.
+    var universe = document.getElementById('universe');
+    var space = document.getElementById('universe-space');
+    var linesSvg = document.getElementById('universe-lines');
+    var backBtn = document.getElementById('universe-back');
+    var titleEl = document.getElementById('universe-title');
+    var tipEl = document.getElementById('universe-tip');
+    var foot = document.getElementById('universe-foot');
+    var addInput = document.getElementById('universe-add');
+    var addWhere = document.getElementById('universe-add-where');
+    var addedNote = document.getElementById('universe-added');
     var prefsEmpty = document.getElementById('prefs-empty');
-    var tagInputs = Array.prototype.slice.call(
-      form.querySelectorAll('input[name="interest_tags"]'));
+    var itemEls = Array.prototype.slice.call(document.querySelectorAll('#universe-items .u-item'));
+    var tagInputs = Array.prototype.slice.call(form.querySelectorAll('input[name="interest_tags"]'));
+    var otherInterests = form.querySelector('[name="other_interests"]');
+    var card = document.getElementById('u-card');
+    var cardTitle = document.getElementById('u-card-title');
+    var cardDot = document.getElementById('u-card-dot');
+    var cardBody = document.getElementById('u-card-body');
+    var loveBox = document.getElementById('u-love');
+    var loveRange = document.getElementById('u-love-range');
+    var view = null;          // null: everything; otherwise the category we're inside
+    var placed = {};          // bubble id -> last {x, y}, so resizing moves things gently
+    var openItem = null;
+    var DEFAULT_LOVE = 5;
+    var HUES = {
+      music: ['#ff6a88', '#ff9a4d'], theatre: ['#ff8a3d', '#ffc86e'], film: ['#4da3ff', '#7a5cff'],
+      exhibition: ['#ff5ec4', '#a45cff'], talk: ['#7a5cff', '#3cc4ff'], food: ['#ff4d6d', '#ff9f80'],
+      event: ['#9d5cff', '#ff5ed2'], sport: ['#20d9b5', '#3a7dff'], unusual: ['#b05cff', '#3ce0ff'],
+      book: ['#ffbf5e', '#ff7a4d'], listen: ['#ff5ed2', '#7a5cff'], watch: ['#8a5cff', '#4da3ff'],
+      other: ['#9aa3b5', '#5d6678']
+    };
 
     function each(nodes, fn) { Array.prototype.slice.call(nodes).forEach(fn); }
-    function shownItems() {
-      return Array.prototype.slice.call(rankList.querySelectorAll('.rank-item'))
-        .filter(function (item) { return !item.hidden; });
+    function kindOf(item) { return item.getAttribute('data-u-kind'); }
+    function valueOf(item) { return item.getAttribute('data-u-value'); }
+    function find(kind, value) {
+      for (var i = 0; i < itemEls.length; i++) {
+        if (kindOf(itemEls[i]) === kind && valueOf(itemEls[i]) === String(value)) return itemEls[i];
+      }
+      return null;
+    }
+    function loveInput(item) { return item.querySelector('input[name^="love_"]'); }
+    function ownLove(item) {
+      var input = loveInput(item);
+      var v = input ? parseInt(input.value, 10) : NaN;
+      return isNaN(v) ? null : v;
+    }
+    function loveOf(item) {
+      var own = ownLove(item);
+      if (own) return own;
+      if (kindOf(item) === 'interest') {
+        var parent = find('category', item.getAttribute('data-u-category'));
+        if (parent && ownLove(parent)) return ownLove(parent);
+      }
+      if (kindOf(item) === 'category') {
+        // Unsized, a category is as big as what they love most inside it.
+        var inside = picked().interests, best = 0;
+        itemEls.forEach(function (child) {
+          if (kindOf(child) === 'interest' && child.getAttribute('data-u-category') === valueOf(item)
+              && inside[valueOf(child)] && ownLove(child)) best = Math.max(best, ownLove(child));
+        });
+        if (best) return best;
+      }
+      return DEFAULT_LOVE;
+    }
+    function hues(item) {
+      var category = kindOf(item) === 'category' ? valueOf(item) : item.getAttribute('data-u-category');
+      return HUES[category] || HUES.other;
+    }
+    function picked() {
+      var result = { categories: [], interests: {} };
+      categoryInputs.forEach(function (i) { if (i.checked) result.categories.push(i.value); });
+      tagInputs.forEach(function (i) { if (i.checked) result.interests[i.value] = true; });
+      return result;
+    }
+    function resetItem(item) {
+      each(item.querySelectorAll('input[type="radio"]'), function (r) { r.checked = r.value === ''; });
+      each(item.querySelectorAll('input[type="checkbox"]'), function (b) { b.checked = false; });
+      var love = loveInput(item);
+      if (love) love.value = '';
     }
 
-    function resetOptions(item) {
-      each(item.querySelectorAll('input[type="radio"]'), function (radio) { radio.checked = radio.value === ''; });
-      each(item.querySelectorAll('input[type="checkbox"]'), function (box) { box.checked = false; });
+    // Called whenever what they picked changes: forget what they un-picked.
+    function syncPrefs() {
+      if (!universe) return;
+      var now = picked();
+      itemEls.forEach(function (item) {
+        var kind = kindOf(item);
+        if (kind === 'category' && now.categories.indexOf(valueOf(item)) === -1) resetItem(item);
+        if (kind === 'interest' && !now.interests[valueOf(item)]) resetItem(item);
+      });
+      if (view && now.categories.indexOf(view) === -1) view = null;
+      renderUniverse();
     }
 
-    function summarise(item) {
-      var parts = [];
-      each(item.querySelectorAll('.rank-option'), function (option) {
-        each(option.querySelectorAll('input:checked'), function (input) {
-          if (input.value !== '') parts.push(input.parentNode.textContent.trim());
+    // Circles that don't overlap: start where they were (or on a ring),
+    // push apart what collides, draw gently towards the middle.
+    function layout(bubbles, W, H) {
+      var cx = W / 2, cy = H / 2, gap = Math.max(4, W * 0.012);
+      var free = bubbles.filter(function (b) { return !b.fixed; });
+      // Each ring shares out its own circle, so suggestions sit around the
+      // outside and what they picked sits closer in.
+      var rings = {};
+      free.forEach(function (b) { (rings[b.ring] = rings[b.ring] || []).push(b); });
+      Object.keys(rings).forEach(function (ring, r) {
+        var members = rings[ring];
+        members.forEach(function (b, i) {
+          var angle = (i / members.length) * Math.PI * 2 - Math.PI / 2 + r * 0.4;
+          b.tx = cx + Math.cos(angle) * ring * W;
+          b.ty = cy + Math.sin(angle) * ring * H;
+          var before = placed[b.id];
+          if (before) { b.x = before.x * W; b.y = before.y * H; }
+          else { b.x = b.tx; b.y = b.ty; }
         });
       });
-      item.querySelector('.rank-summary').textContent = parts.length ? parts.join(' \u00b7 ') : 'Your usual answers';
-    }
-
-    function renumber() {
-      var shown = shownItems();
-      shown.forEach(function (item, i) {
-        item.querySelector('.rank-number').textContent = i + 1;
-        item.querySelector('input[type="hidden"][name^="rank_"]').value = i + 1;
-        item.querySelector('[data-move="up"]').disabled = i === 0;
-        item.querySelector('[data-move="down"]').disabled = i === shown.length - 1;
-      });
-      rankItems.forEach(function (item) {
-        if (item.hidden) item.querySelector('input[type="hidden"][name^="rank_"]').value = '';
-      });
-      if (prefsEmpty) prefsEmpty.hidden = shown.length > 0;
-    }
-
-    function syncPrefs() {
-      if (!rankList) return;
-      var ticked = { category: {}, interest: {} };
-      var categoriesWithInterests = {};
-      categoryInputs.forEach(function (input) { if (input.checked) ticked.category[input.value] = true; });
-      tagInputs.forEach(function (input) {
-        if (!input.checked) return;
-        ticked.interest[input.value] = true;
-        var category = input.getAttribute('data-category');
-        if (category) categoriesWithInterests[category] = true;
-      });
-      rankItems.forEach(function (item) {
-        var kind = item.getAttribute('data-pref-kind');
-        var value = item.getAttribute('data-pref-value');
-        // A category stands in for itself only when nothing inside it was
-        // picked: "jazz" and "live gigs" say more than "music" does.
-        var wanted = kind === 'interest'
-          ? ticked.interest[value] === true
-          : ticked.category[value] === true && !categoriesWithInterests[value];
-        if (!wanted && !item.hidden) resetOptions(item);
-        if (wanted && item.hidden) {
-          // Newly picked things join the bottom of the order.
-          rankList.appendChild(item);
+      for (var step = 0; step < 160; step++) {
+        for (var i = 0; i < bubbles.length; i++) {
+          for (var j = i + 1; j < bubbles.length; j++) {
+            var a = bubbles[i], b = bubbles[j];
+            var dx = b.x - a.x, dy = b.y - a.y;
+            var d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+            var need = a.r + b.r + gap;
+            if (d >= need) continue;
+            var push = (need - d) / 2, ux = dx / d, uy = dy / d;
+            if (a.fixed) { b.x += ux * push * 2; b.y += uy * push * 2; }
+            else if (b.fixed) { a.x -= ux * push * 2; a.y -= uy * push * 2; }
+            else { a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push; }
+          }
         }
-        item.hidden = !wanted;
-        summarise(item);
+        free.forEach(function (b) {
+          b.x += (b.tx - b.x) * 0.06;
+          b.y += (b.ty - b.y) * 0.06;
+          b.x = Math.max(b.r + 2, Math.min(W - b.r - 2, b.x));
+          b.y = Math.max(b.r + 2, Math.min(H - b.r - 2, b.y));
+        });
+      }
+      bubbles.forEach(function (b) { placed[b.id] = { x: b.x / W, y: b.y / H }; });
+    }
+
+    function renderUniverse() {
+      if (!universe) return;
+      var W = space.clientWidth, H = space.clientHeight;
+      if (!W || !H) return;                  // not on screen yet
+      var now = picked();
+      var unit = Math.min(W, H);
+      var rMin = unit * 0.075, rMax = unit * 0.165;
+      function size(love) { return rMin + (love - 1) / 9 * (rMax - rMin); }
+      var bubbles = [];
+
+      if (view === null) {
+        var me = find('me', 'me');
+        bubbles.push({ id: 'me', item: me, label: 'Me', kind: 'me', r: unit * 0.1, fixed: true, x: W / 2, y: H / 2 });
+        now.categories.forEach(function (c) {
+          var item = find('category', c);
+          if (item) bubbles.push({ id: 'category:' + c, item: item, label: item.getAttribute('data-u-name'),
+                                   kind: 'category', r: size(loveOf(item)), ring: 0.31 });
+        });
+      } else {
+        var centre = find('category', view);
+        bubbles.push({ id: 'centre:' + view, item: centre, label: centre.getAttribute('data-u-name'),
+                       kind: 'centre', r: Math.max(size(loveOf(centre)), unit * 0.13), fixed: true,
+                       x: W / 2, y: H / 2 });
+        itemEls.forEach(function (item) {
+          if (kindOf(item) !== 'interest' || item.getAttribute('data-u-category') !== view) return;
+          var chosen = now.interests[valueOf(item)] === true;
+          var label = item.getAttribute('data-u-name');
+          var fits = Math.min(unit * 0.105, Math.max(unit * 0.075, label.length * unit * 0.0068));
+          bubbles.push({ id: 'interest:' + valueOf(item), item: item, label: label,
+                         kind: chosen ? 'interest' : 'suggestion', suggestion: !chosen,
+                         r: chosen ? size(loveOf(item)) : fits, ring: chosen ? 0.24 : 0.39 });
+        });
+      }
+
+      // Too many big bubbles for the space: scale them all down together.
+      var area = bubbles.reduce(function (sum, b) { return sum + Math.PI * b.r * b.r; }, 0);
+      var fit = Math.min(1, Math.sqrt((W * H * 0.5) / area));
+      bubbles.forEach(function (b) { b.r *= fit; });
+      layout(bubbles, W, H);
+      draw(bubbles, W, H);
+
+      var empty = !now.categories.length;
+      prefsEmpty.hidden = !empty;
+      backBtn.hidden = view === null;
+      tipEl.hidden = view !== null;
+      titleEl.textContent = view === null ? 'My culture' : find('category', view).getAttribute('data-u-name');
+      foot.hidden = view === null;
+      if (view !== null) addWhere.textContent = find('category', view).getAttribute('data-u-name');
+    }
+
+    function draw(bubbles, W, H) {
+      var keep = {};
+      bubbles.forEach(function (b) {
+        keep[b.id] = true;
+        var node = space.querySelector('[data-bubble="' + b.id + '"]');
+        if (!node) {
+          node = document.createElement('button');
+          node.type = 'button';
+          node.className = 'u-bubble';
+          node.setAttribute('data-bubble', b.id);
+          node.appendChild(document.createElement('span'));
+          node.style.left = (W / 2) + 'px';
+          node.style.top = (H / 2) + 'px';
+          node.style.width = node.style.height = '0px';
+          space.appendChild(node);
+          void node.offsetWidth;             // let it grow in from nothing
+        }
+        var colours = b.kind === 'me' ? ['#5e5ce6', '#1c1b3d'] : hues(b.item);
+        node.style.setProperty('--c1', colours[0]);
+        node.style.setProperty('--c2', colours[1]);
+        node.className = 'u-bubble is-' + b.kind;
+        node.style.left = b.x + 'px';
+        node.style.top = b.y + 'px';
+        node.style.width = node.style.height = (b.r * 2) + 'px';
+        var longName = b.label.length > 11 ? Math.max(0.62, 11 / b.label.length * 1.15) : 1;
+        node.style.fontSize = Math.max(10, Math.min(22, b.r * 0.34 * longName)) + 'px';
+        node.firstChild.textContent = (b.kind === 'suggestion' ? '+ ' : '') + b.label;
+        node.setAttribute('aria-label',
+          b.kind === 'me' ? 'Me: your usual answers' :
+          b.kind === 'category' ? b.label + ', size ' + loveOf(b.item) + ' of 10. Go inside' :
+          b.kind === 'suggestion' ? 'Add ' + b.label :
+          b.label + ', size ' + loveOf(b.item) + ' of 10. Open settings');
+        node._bubble = b;
       });
-      renumber();
+      each(space.querySelectorAll('.u-bubble'), function (node) {
+        if (!keep[node.getAttribute('data-bubble')]) node.parentNode.removeChild(node);
+      });
+      // Faint threads from the middle to everything around it.
+      var centre = bubbles.filter(function (b) { return b.fixed; })[0];
+      linesSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      linesSvg.innerHTML = centre ? bubbles.filter(function (b) { return !b.fixed; }).map(function (b) {
+        return '<line x1="' + centre.x + '" y1="' + centre.y + '" x2="' + b.x + '" y2="' + b.y +
+               '" class="' + (b.suggestion ? 'is-faint' : '') + '"/>';
+      }).join('') : '';
+    }
+
+    function openCard(item, title) {
+      openItem = item;
+      var isMe = kindOf(item) === 'me';
+      cardTitle.textContent = title || item.getAttribute('data-u-name');
+      var colours = isMe ? ['#5e5ce6', '#1c1b3d'] : hues(item);
+      cardDot.style.background = 'radial-gradient(circle at 35% 30%, ' + colours[0] + ', ' + colours[1] + ')';
+      loveBox.hidden = isMe;
+      if (!isMe) loveRange.value = loveOf(item);
+      cardBody.appendChild(item.querySelector('.u-options'));
+      card.hidden = false;
+      document.getElementById('u-card-done').focus();
+    }
+    function closeCard() {
+      if (!openItem) return;
+      openItem.appendChild(cardBody.querySelector('.u-options'));
+      openItem = null;
+      card.hidden = true;
+      renderUniverse();
+    }
+
+    if (universe) {
+      // The card must sit above the whole page: inside the animated step, a
+      // fixed position is taken relative to the step, not the screen. Its
+      // settings travel back into the form whenever it closes.
+      document.body.appendChild(card);
+      form.addEventListener('submit', closeCard);
+
+      space.addEventListener('click', function (e) {
+        var node = e.target.closest('.u-bubble');
+        if (!node || !node._bubble) return;
+        var b = node._bubble;
+        if (b.kind === 'me') openCard(b.item, 'You, usually');
+        else if (b.kind === 'category') { view = valueOf(b.item); renderUniverse(); }
+        else if (b.kind === 'suggestion') {
+          var box = tagInputs.filter(function (i) { return i.value === valueOf(b.item); })[0];
+          if (box) { box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); }
+        }
+        else openCard(b.item);
+      });
+      backBtn.addEventListener('click', function () { view = null; renderUniverse(); });
+      loveRange.addEventListener('input', function () {
+        var input = openItem && loveInput(openItem);
+        if (input) { input.value = loveRange.value; renderUniverse(); }
+      });
+      document.getElementById('u-card-done').addEventListener('click', closeCard);
+      card.addEventListener('click', function (e) { if (e.target === card) closeCard(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !card.hidden) closeCard(); });
+      document.getElementById('universe-add-go').addEventListener('click', function () {
+        var text = addInput.value.trim();
+        if (!text || !view || !otherInterests) return;
+        var where = find('category', view).getAttribute('data-u-name');
+        var entry = where + ': ' + text;
+        otherInterests.value = otherInterests.value.trim() ? otherInterests.value.trim() + '; ' + entry : entry;
+        addInput.value = '';
+        addedNote.hidden = false;
+        addedNote.textContent = 'Added “' + text + '” — we’ll look for it and turn it into something we can send you.';
+      });
+      addInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('universe-add-go').click(); }
+      });
+      window.addEventListener('resize', function () { renderUniverse(); });
     }
     tagInputs.forEach(function (i) { i.addEventListener('change', syncPrefs); });
 
-    if (rankList) {
-      rankList.addEventListener('click', function (e) {
-        var move = e.target.closest('[data-move]');
-        var adjust = e.target.closest('.rank-adjust');
-        var item = e.target.closest('.rank-item');
-        if (move && item) {
-          var shown = shownItems();
-          var at = shown.indexOf(item);
-          if (move.getAttribute('data-move') === 'up' && at > 0) {
-            rankList.insertBefore(item, shown[at - 1]);
-          } else if (move.getAttribute('data-move') === 'down' && at < shown.length - 1) {
-            rankList.insertBefore(item, shown[at + 1].nextSibling);
-          }
-          renumber();
-          move.focus();
-        } else if (adjust && item) {
-          var options = item.querySelector('.rank-options');
-          options.hidden = !options.hidden;
-          adjust.setAttribute('aria-expanded', String(!options.hidden));
-          adjust.textContent = options.hidden ? 'Adjust' : 'Done';
-        }
-      });
-      rankList.addEventListener('change', function (e) {
-        var item = e.target.closest('.rank-item');
-        if (item) summarise(item);
-      });
-
-      // Drag to reorder, for a mouse; the arrows do the same for a thumb or keyboard.
-      var dragging = null;
-      rankList.addEventListener('dragstart', function (e) {
-        var item = e.target.closest('.rank-item');
-        if (!item || e.target.closest('.rank-options')) return;
-        dragging = item;
-        item.classList.add('is-dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        try { e.dataTransfer.setData('text/plain', ''); } catch (err) {}
-      });
-      rankList.addEventListener('dragover', function (e) {
-        if (!dragging) return;
-        e.preventDefault();
-        var over = e.target.closest('.rank-item');
-        if (!over || over === dragging) return;
-        var box = over.getBoundingClientRect();
-        var after = e.clientY > box.top + box.height / 2;
-        rankList.insertBefore(dragging, after ? over.nextSibling : over);
-      });
-      rankList.addEventListener('dragend', function () {
-        if (dragging) dragging.classList.remove('is-dragging');
-        dragging = null;
-        renumber();
-      });
-    }
-
     syncTags();
     syncPrefs();
-
-    // --- Relevance: where you'd travel only matters if you'd travel at all.
-    var radiusInputs = Array.prototype.slice.call(
-      form.querySelectorAll('input[name="travel_radius"]'));
-    var destinations = document.getElementById('travel-destinations-field');
-    var WILLING_TO_TRAVEL = ['regional', 'anywhere'];
-
-    function syncTravel() {
-      if (!destinations) return;
-      var picked = radiusInputs.filter(function (i) { return i.checked; })[0];
-      var relevant = !picked || WILLING_TO_TRAVEL.indexOf(picked.value) !== -1;
-      destinations.hidden = !relevant;
-      if (!relevant) {
-        var field = destinations.querySelector('textarea');
-        if (field) field.value = '';
-      }
-    }
-    radiusInputs.forEach(function (i) { i.addEventListener('change', syncTravel); });
-    syncTravel();
 
     // --- "Something else…" chips reveal their write-in field.
     Array.prototype.slice.call(form.querySelectorAll('[data-other-toggle]'))

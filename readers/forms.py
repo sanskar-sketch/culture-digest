@@ -48,6 +48,14 @@ def rank_field_name(key) -> str:
     return f"rank_{key}"
 
 
+def love_field_name(key) -> str:
+    return f"love_{key}"
+
+
+# A bubble nobody resized is middling: it matters, but no more than most.
+DEFAULT_LOVE = 5
+
+
 def category_key(value: str) -> str:
     return f"cat_{value}"
 
@@ -115,12 +123,22 @@ class InterestPreferenceFields:
                 help_text="Leave all unticked for your usual answer.")
             if current is not None:
                 self.initial.setdefault(name, getattr(current, setting) or [])
-        rank_name = rank_field_name(key)
-        self.fields[rank_name] = forms.IntegerField(
-            required=False, min_value=1, max_value=999, label=f"Rank of {what}",
-            widget=forms.HiddenInput if chips else forms.NumberInput(attrs={"min": 1}))
-        if current is not None and current.rank:
-            self.initial.setdefault(rank_name, current.rank)
+        if chips:
+            # Signup sizes bubbles; the order is worked out from the sizes.
+            love_name = love_field_name(key)
+            self.fields[love_name] = forms.IntegerField(
+                required=False, min_value=1, max_value=10, widget=forms.HiddenInput,
+                label=f"How much {what} matters")
+            if current is not None and current.love:
+                self.initial.setdefault(love_name, current.love)
+        else:
+            # The desk sets the order itself.
+            rank_name = rank_field_name(key)
+            self.fields[rank_name] = forms.IntegerField(
+                required=False, min_value=1, max_value=999, label=f"Rank of {what}",
+                widget=forms.NumberInput(attrs={"min": 1}))
+            if current is not None and current.rank:
+                self.initial.setdefault(rank_name, current.rank)
 
     def preference_rows(self):
         """Every category and interest, as the templates need them, in the
@@ -138,10 +156,13 @@ class InterestPreferenceFields:
         return sorted(rows, key=lambda row: (row["rank"] is None, row["rank"] or 0))
 
     def _preference_row(self, key, name, kind, value, *, category, stored):
+        rank_name, love_name = rank_field_name(key), love_field_name(key)
         return {
             "key": key, "name": name, "kind": kind, "value": value, "category": category,
             "rank": stored.rank if stored is not None else None,
-            "rank_field": self[rank_field_name(key)],
+            "love": stored.love if stored is not None else None,
+            "rank_field": self[rank_name] if rank_name in self.fields else None,
+            "love_field": self[love_name] if love_name in self.fields else None,
             "fields": [{"field": self[preference_field_name(key, setting)], "label": label}
                        for setting, label, _ in PREFERENCE_SETTINGS],
             "choices": [{"field": self[preference_field_name(key, setting)], "label": label}
@@ -158,7 +179,7 @@ class InterestPreferenceFields:
         return values
 
     def save_preferences(self, reader, *, merge: bool = False) -> int:
-        """Store the ranks and exceptions. Returns how many interests carry one.
+        """Store the order, how much each matters, and any exceptions.
 
         `merge` is for a returning reader filling the signup form again:
         it only ever adds or changes an answer, never blanks one, the same
@@ -166,24 +187,72 @@ class InterestPreferenceFields:
         """
         followed_tags = set(reader.interest_tags.values_list("id", flat=True))
         followed_categories = set(reader.interest_categories or [])
-        for value, _ in getattr(self, "preference_categories", []):
-            self._store(reader, category_key(value), {"category": value},
-                        kept=value in followed_categories, merge=merge)
-        for tag in getattr(self, "preference_tags", []):
-            self._store(reader, tag.pk, {"tag": tag},
-                        kept=tag.pk in followed_tags, merge=merge)
+        categories = getattr(self, "preference_categories", [])
+        tags = getattr(self, "preference_tags", [])
+
+        if self.PREFERENCE_STYLE == "chips":
+            loves, ranks = self._order_from_love(categories, tags, followed_categories, followed_tags)
+        else:
+            loves = None
+            ranks = {key: self.cleaned_data.get(rank_field_name(key)) or None
+                     for key in [category_key(v) for v, _ in categories] + [t.pk for t in tags]}
+
+        for value, _ in categories:
+            key = category_key(value)
+            self._store(reader, key, {"category": value}, kept=value in followed_categories,
+                        merge=merge, rank=ranks.get(key),
+                        love=loves.get(key) if loves is not None else None, has_love=loves is not None)
+        for tag in tags:
+            self._store(reader, tag.pk, {"tag": tag}, kept=tag.pk in followed_tags,
+                        merge=merge, rank=ranks.get(tag.pk),
+                        love=loves.get(tag.pk) if loves is not None else None, has_love=loves is not None)
         return reader.interest_preferences.count()
 
-    def _store(self, reader, key, lookup, *, kept: bool, merge: bool):
+    def _order_from_love(self, categories, tags, followed_categories, followed_tags):
+        """({key: love}, {key: rank}) from the bubble sizes.
+
+        An interest they didn't size takes its category's size. What gets
+        ranked is each interest they picked, and each category they picked
+        nothing inside - "jazz" says more than "music" does. Biggest first;
+        between equals, the order they appear in.
+        """
+        posted = {}
+        for key in [category_key(v) for v, _ in categories] + [t.pk for t in tags]:
+            name = love_field_name(key)
+            if name in self.fields:
+                posted[key] = self.cleaned_data.get(name) or None
+
+        if not any(posted.values()):
+            # They left every bubble as it was: there's no order to record,
+            # and saying they ranked things would tell the writer a fiction.
+            return None, {}
+
+        loves, ranked = {}, []
+        with_interests = {t.category for t in tags if t.pk in followed_tags}
+        for index, (value, _) in enumerate(categories):
+            key = category_key(value)
+            loves[key] = posted.get(key)
+            if value in followed_categories and value not in with_interests:
+                ranked.append((-(posted.get(key) or DEFAULT_LOVE), index, key))
+        for index, tag in enumerate(tags, start=len(categories)):
+            if tag.pk not in followed_tags:
+                continue
+            love = (posted.get(tag.pk) or posted.get(category_key(tag.category))
+                    or DEFAULT_LOVE)
+            loves[tag.pk] = love
+            ranked.append((-love, index, tag.pk))
+        ranks = {key: position for position, (_, _, key) in enumerate(sorted(ranked), start=1)}
+        return loves, ranks
+
+    def _store(self, reader, key, lookup, *, kept: bool, merge: bool, rank, love, has_love):
         values = self._preference_values(key)
-        rank = self.cleaned_data.get(rank_field_name(key)) or None
         said_something = any(v not in (None, "", []) for v in values.values())
         existing = InterestPreference.objects.filter(reader=reader, **lookup)
         if not kept:
             # Not something they follow: a rank or exception for it means nothing.
             existing.delete()
             return
-        if not said_something and rank is None:
+        if not said_something and rank is None and love is None:
             if not merge:
                 existing.delete()
             return
@@ -194,6 +263,8 @@ class InterestPreferenceFields:
             setattr(row, setting, value)
         if rank is not None or not merge:
             row.rank = rank
+        if has_love and (love is not None or not merge):
+            row.love = love
         row.save()
 
 
