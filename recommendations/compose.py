@@ -200,6 +200,9 @@ class Pick:
     # Where the interest this belongs to sits in the reader's own order,
     # 1 = what they put first. None when it isn't on anything they ranked.
     interest_rank: int | None = None
+    # Set when the writer found it is plainly what they said isn't for them.
+    not_for_them: bool = False
+    clash: str = ""
     token: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
@@ -443,13 +446,16 @@ def compose(reader, *, pool=None, overrides=None, today: date | None = None,
         return issue
 
     rows = ai.write_picks(reader, issue, candidates) if use_ai else None
-    unwritten = 0
+    unwritten, clashes = 0, []
     if rows:
         written = _apply_writing(candidates, rows)
         # A pick AI wouldn't write twice isn't sent in the template's words
         # beside ones it did write: it reads as a different, lesser email.
         unwritten = len(candidates) - len(written)
-        candidates = written
+        # What they told us isn't for them stays out, however well it scored:
+        # their own words outrank anything the matching worked out.
+        clashes = [p for p in written if p.not_for_them]
+        candidates = [p for p in written if not p.not_for_them]
         issue.written_by_ai = True
     else:
         for pick in candidates:
@@ -474,6 +480,11 @@ def compose(reader, *, pool=None, overrides=None, today: date | None = None,
     if unwritten:
         issue.message += (f" AI didn't write up {unwritten} more, so "
                           f"{'it was' if unwritten == 1 else 'they were'} left out.")
+    if clashes:
+        issue.message += (f" Left out {len(clashes)} that clash with what they said isn't "
+                          "for them: " + "; ".join(
+                              f"{p.opportunity.title}" + (f" ({p.clash})" if p.clash else "")
+                              for p in clashes) + ".")
     return issue
 
 
@@ -511,6 +522,8 @@ def _apply_writing(picks: list[Pick], rows: list[dict]) -> list[Pick]:
         pick.rationale = "\n\n".join(part for part in (what, why) if part)
         pick.hook = (row.get("hook") or "").strip()[:200]
         pick.caveat = (row.get("caveat") or "").strip()
+        pick.not_for_them = bool(row.get("not_for_them"))
+        pick.clash = (row.get("clash") or "").strip()[:160]
         try:
             asked = float(row.get("for_you_stars"))
         except (TypeError, ValueError):

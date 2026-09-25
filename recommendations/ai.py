@@ -233,12 +233,17 @@ Rules:
 - Infer from what they actually said. If they mention loving a specific
   jazz venue, "jazz" fits. Do not pad the list with loosely related guesses.
 - avoid_tags is for things they clearly signalled they dislike, not merely
-  things they didn't mention.
+  things they didn't mention. Never an interest they picked: if their words
+  narrow one ("fine dining, but no tasting menus"), say so in
+  taste_summary instead.
 - Where a reader typed something in rather than picking from a list, that is
   usually a stronger signal than a checkbox - they bothered to write it.
 - Their open-ended note may contain preferences the rest of the form has no
   field for. Read it for taste signals, and fold anything relevant into
   taste_summary so it reaches whoever writes their recommendations.
+- They sized their interests at signup: "what they picked, most important
+  first" is in their order. Lead taste_summary with what they put at the
+  top, and say what they said isn't for them - both steer every pick.
 - If their free text is empty or says nothing about taste, return empty
   lists and say so plainly in taste_summary."""
 
@@ -254,6 +259,11 @@ def interpret_reader(reader) -> dict | None:
     stated = {
         "categories they follow": reader.interest_categories or "not specified",
         "tags they picked": list(reader.interest_tags.values_list("slug", flat=True)),
+        # What they sized biggest at signup matters most to them.
+        "what they picked, most important first": _ranked_interests(reader),
+        "their own settings for particular interests": [
+            f"{p.label}: {p.summary()}"
+            for p in reader.interest_preferences.select_related("tag") if p.is_set] or "none",
         "budget": reader.get_budget_display() if reader.budget else "not specified",
         "how far they'll travel": (
             reader.get_travel_radius_display() if reader.travel_radius else "not specified"
@@ -326,7 +336,11 @@ def apply_interpretation(reader) -> bool:
     # Resolve slugs defensively - the model is told to use only real slugs,
     # but storing is where we make sure of it.
     inferred = Tag.objects.filter(slug__in=result.get("interest_tags") or [])
-    avoid = Tag.objects.filter(slug__in=result.get("avoid_tags") or [])
+    # Never avoid something they picked: "fine dining, but no tasting menus"
+    # narrows an interest, it doesn't cancel it. The narrowing is in the
+    # taste summary, and the writer keeps the tasting menus out.
+    avoid = (Tag.objects.filter(slug__in=result.get("avoid_tags") or [])
+             .exclude(pk__in=reader.interest_tags.values_list("pk", flat=True)))
     reader.ai_inferred_tags.set(inferred)
     reader.ai_avoid_tags.set(avoid)
     return True
@@ -544,6 +558,17 @@ _PICK_PROPERTIES = {
         "type": "string",
         "description": "Worth knowing before going, or empty.",
     },
+    "not_for_them": {
+        "type": "boolean",
+        "description": "True only when this is plainly the thing they told us isn't for "
+                       "them, or breaks a limit they set in their own words. It is then "
+                       "left out of their email.",
+    },
+    "clash": {
+        "type": "string",
+        "description": "When not_for_them is true: which of their words it clashes with, "
+                       "in a few words. Otherwise empty.",
+    },
 }
 
 PICKS_SCHEMA = {
@@ -663,12 +688,19 @@ what's really not for them, and anything else they wanted us to know.
 - Loved: when an item shares something real with a thing they loved - the
   same kind of room, the same artist lineage, the same idea underneath -
   that is usually the best why_for_you there is. Name the loved thing.
-- Not for them: check every item against it and against their replies. If
-  an item is the thing they don't want, rate it down as far as you're
-  allowed. If it only brushes against it - a night of a classic album's
-  music for someone who's gone off tribute acts - say so plainly in the
-  caveat and whether the difference is real. Never describe an item as the
-  opposite of what it is to make it fit.
+- Not for them: check every item against it and against their replies.
+  If an item is plainly the thing they said they don't want - a tasting
+  menu for someone who wrote "no tasting menus", a stadium gig for someone
+  who hates big venues - set not_for_them and name the clash: it will be
+  left out, whatever its rating. The same goes for a limit they gave in
+  their own words that the item breaks outright (a set starting at 11pm
+  for "nothing after 9pm", a late-night set for "nothing that finishes
+  late") - even when it is otherwise exactly their thing. If you would
+  have to warn them it breaks their own rule, it is not_for_them: they can
+  loosen the rule by replying. If it only brushes against it - a night of a
+  classic album's music for someone who's gone off tribute acts - keep it,
+  and say plainly in the caveat whether the difference is real. Never
+  describe an item as the opposite of what it is to make it fit.
 - Anything else: plans, company, constraints, curiosities ("taking my mum",
   "no late nights", "getting into Japanese film"). Where it bears on an
   item, let it shape the rating and the words.
@@ -820,7 +852,12 @@ def _reader_context(reader) -> str:
 
 def _ranked_interests(reader) -> str:
     """Everything they picked, in the order they ranked it where they did."""
-    ranked = [(p.rank, p.label + (f" ({p.love_words})" if p.love_words else ""))
+    def line(p):
+        where = f", within {p.tag.get_category_display().lower()}" if p.tag_id and p.tag.category else ""
+        feeling = f", {p.love_words}" if p.love_words else ""
+        return p.label + (f" ({where[2:]}{feeling})" if (where or feeling) else "")
+
+    ranked = [(p.rank, line(p))
               for p in reader.interest_preferences.select_related("tag") if p.rank is not None]
     ranked_labels = {p.label for p in reader.interest_preferences.select_related("tag")
                      if p.rank is not None}

@@ -358,7 +358,7 @@ class PerInterestSettingsTests(TestCase):
         self.reader.save()
         self.rank(art=(self.art, 1), jazz=(self.jazz, 2))
         context = ai._reader_context(self.reader)
-        self.assertIn("1. contemporary art; 2. jazz", context)
+        self.assertIn("1. contemporary art (within exhibition); 2. jazz (within music)", context)
         for said in ("A late set at the Vortex.", "Tribute acts.", "Taking my mum."):
             self.assertIn(said, context)
         pick = compose.Pick(opportunity=event("Gig", tags=[self.jazz]), score=1, reasons=[],
@@ -472,6 +472,36 @@ class WritingTests(TestCase):
         issue = self.compose_with([self.row(self.gig)], self.frame())
         self.assertEqual([p.opportunity for p in issue.picks], [self.gig])
         self.assertIn("AI didn't write up 1 more, so it was left out.", issue.message)
+
+    def test_what_they_said_isnt_for_them_stays_out_however_it_scores(self):
+        issue = self.compose_with([
+            self.row(self.gig),
+            self.row(self.other, stars=5, not_for_them=True, clash="they said no big halls"),
+        ], self.frame())
+        self.assertEqual([p.opportunity for p in issue.picks], [self.gig])
+        self.assertIn("Left out 1 that clash with what they said isn't for them: "
+                      "Other gig (they said no big halls).", issue.message)
+
+    @override_settings(OPENAI_API_KEY="test-key")
+    def test_the_taste_reading_sees_what_they_sized_biggest(self):
+        InterestPreference.objects.create(reader=self.ada, tag=self.jazz, rank=1, love=10)
+        self.ada.disliked_examples = "Big concert halls."
+        self.ada.save()
+        with mock.patch.object(ai, "_call", return_value=None) as call:
+            ai.interpret_reader(self.ada)
+        user = call.call_args.args[1]
+        self.assertIn("most important first", user)
+        self.assertIn("1. jazz (within music, loves it)", user)
+        self.assertIn("Big concert halls.", user)
+
+    @override_settings(OPENAI_API_KEY="test-key")
+    def test_the_taste_reading_never_avoids_something_they_picked(self):
+        painting = tag("painting", "exhibition")
+        with mock.patch.object(ai, "interpret_reader", return_value={
+                "taste_summary": "Jazz, but no tasting menus.", "interest_tags": [],
+                "avoid_tags": ["jazz", "painting"]}):
+            ai.apply_interpretation(self.ada)
+        self.assertEqual(list(self.ada.ai_avoid_tags.all()), [painting])
 
     def test_a_pick_ai_rates_below_the_floor_is_dropped(self):
         issue = self.compose_with([self.row(self.gig), self.row(self.other, stars=2.5)])
