@@ -440,9 +440,10 @@ class DropdownWordingTests(LoggedInTestCase):
         InterestPreference.objects.create(reader=reader, tag=jazz, rank=3, budget="treat")
 
         rows = reader.ranked_interests()
-        self.assertEqual([(r["position"], r["name"]) for r in rows],
-                         [(1, "Big paintings"), (2, "theatre (all of it)"), (3, "Late jazz"),
-                          (None, "Aardvark zines")])     # never ranked: last, unnumbered
+        self.assertEqual([(r["position"], r["name"], r["their_order"]) for r in rows],
+                         [(1, "Big paintings", True), (2, "theatre (all of it)", True),
+                          (3, "Late jazz", True),
+                          (4, "Aardvark zines", False)])   # never ranked: after, marked as ours
         self.assertEqual(rows[2]["exception"], "happy to treat myself")
 
         for url in (reverse("desk:readers_list"), reverse("desk:readers_change", args=[reader.pk]),
@@ -452,6 +453,21 @@ class DropdownWordingTests(LoggedInTestCase):
             page = page[page.find('class="d-rank-pill"'):]
             order = [page.find(name) for name in ("Big paintings", "theatre (all of it)", "Late jazz")]
             self.assertTrue(all(i >= 0 for i in order) and order == sorted(order), url)
+
+    def test_someone_who_never_ranked_still_gets_a_numbered_list(self):
+        jazz = Tag.objects.create(name="Late jazz", slug="late-jazz", category="music")
+        zines = Tag.objects.create(name="Aardvark zines", slug="aardvark-zines", category="other")
+        reader = Reader.objects.create(email="bo@example.com", interest_categories=["music", "theatre"])
+        reader.interest_tags.add(jazz, zines)
+        # What their feedback says they respond to puts jazz first...
+        rows = reader.ranked_interests(learned={jazz.pk: 2.0})
+        self.assertEqual([(r["position"], r["name"]) for r in rows],
+                         [(1, "Late jazz"), (2, "Aardvark zines"), (3, "theatre (all of it)")])
+        self.assertFalse(any(r["their_order"] for r in rows))
+        # ...and a broad category they picked nothing inside still counts.
+        page = self.client.get(reverse("desk:readers_change", args=[reader.pk])).content.decode()
+        self.assertIn("They haven't ranked anything yet", page)
+        self.assertIn("theatre (all of it)", page)
 
     def test_the_desk_warns_when_emails_would_link_elsewhere(self):
         with self.settings(SITE_BASE_URL="http://127.0.0.1:8000"):

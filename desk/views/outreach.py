@@ -5,6 +5,8 @@ from django.urls import reverse
 
 from desk.permissions import staff_required
 from readers.models import Reader
+from recommendations.matching import _feedback_tag_weights
+from siteconfig.models import SiteConfig
 
 
 @staff_required
@@ -16,7 +18,8 @@ def reader_tags(request, pk):
                         (reader.email, reverse("desk:readers_change", args=[reader.pk])),
                         ("What we believe", None)],
         "reader": reader,
-        "picked": reader.ranked_interests(),
+        "picked": reader.ranked_interests(learned=_feedback_tag_weights(reader, SiteConfig.load())),
+        "has_ranked": reader.has_ranked,
         "inferred": reader.ai_inferred_tags.all().order_by("name"),
         "avoid": reader.ai_avoid_tags.all().order_by("name"),
     })

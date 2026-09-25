@@ -21,6 +21,14 @@ BULK_ACTIONS = (
 )
 
 
+def _learned(reader) -> dict:
+    """{tag id: weight} from what they've said about past picks."""
+    from recommendations.matching import _feedback_tag_weights
+    from siteconfig.models import SiteConfig
+
+    return _feedback_tag_weights(reader, SiteConfig.load())
+
+
 def _profile_completeness(reader):
     filled = 0
     for field in READER_PROFILE_FIELDS:
@@ -211,7 +219,8 @@ def reader_form(request, pk):
         "form": form,
         "instance": instance,
         "completeness": _profile_completeness(instance),
-        "interests_in_order": instance.ranked_interests(),
+        "interests_in_order": instance.ranked_interests(learned=_learned(instance)),
+        "has_ranked": instance.has_ranked,
         "feedback_breakdown": feedback_breakdown,
         "issues": issues,
     }

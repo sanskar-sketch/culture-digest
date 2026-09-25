@@ -132,31 +132,60 @@ class Reader(models.Model):
     def __str__(self):
         return self.name or self.email
 
-    def ranked_interests(self) -> list[dict]:
-        """Everything they picked, in their own order.
+    def ranked_interests(self, learned: dict | None = None) -> list[dict]:
+        """Everything they picked, numbered, most important first.
 
-        What they ranked comes first, numbered 1, 2, 3 as they placed it;
-        anything picked but never ranked follows, A to Z, unnumbered. Each
-        carries the exception they set for it, if any. Reads the prefetched
-        rows when a list page has prefetched them, so it costs no queries
-        per reader there.
+        What they ranked themselves comes first, in their order
+        (`their_order` True). Everything else follows - each interest they
+        picked, and each category they picked nothing inside - ordered by
+        `learned` ({tag id: weight} from their feedback) where we have it,
+        then A to Z. Those are our order, not theirs, and say so
+        (`their_order` False). Each row carries the exception they set for
+        it, if any. Reads prefetched rows when a list page prefetched them.
         """
+        from opportunities.models import Category
+
+        learned = learned or {}
         prefs = list(self.interest_preferences.all())
-        rows, ranked_tags = [], set()
-        for position, pref in enumerate(sorted((p for p in prefs if p.rank is not None),
-                                               key=lambda p: (p.rank, p.label)), start=1):
-            rows.append({"position": position, "name": pref.label,
+        tags = list(self.interest_tags.all())
+        rows, ranked_tags, ranked_categories = [], set(), set()
+
+        for pref in sorted((p for p in prefs if p.rank is not None), key=lambda p: (p.rank, p.label)):
+            rows.append({"name": pref.label, "their_order": True,
                          "exception": pref.summary() if pref.is_set else ""})
             if pref.tag_id:
                 ranked_tags.add(pref.tag_id)
-        unranked_prefs = {p.tag_id: p for p in prefs if p.rank is None and p.tag_id}
-        for tag in sorted(self.interest_tags.all(), key=lambda t: t.name.lower()):
+            else:
+                ranked_categories.add(pref.category)
+
+        by_tag = {p.tag_id: p for p in prefs if p.rank is None and p.tag_id}
+        by_category = {p.category: p for p in prefs if p.rank is None and not p.tag_id}
+        rest = []
+        for tag in tags:
             if tag.pk in ranked_tags:
                 continue
-            pref = unranked_prefs.get(tag.pk)
-            rows.append({"position": None, "name": tag.name,
-                         "exception": pref.summary() if pref is not None and pref.is_set else ""})
+            pref = by_tag.get(tag.pk)
+            rest.append((-learned.get(tag.pk, 0), tag.name.lower(), {
+                "name": tag.name, "their_order": False,
+                "exception": pref.summary() if pref is not None and pref.is_set else ""}))
+        with_interests = {t.category for t in tags}
+        labels = dict(Category.choices)
+        for value in self.interest_categories or []:
+            if value in ranked_categories or value in with_interests:
+                continue
+            pref = by_category.get(value)
+            name = f"{labels.get(value, value).lower()} (all of it)"
+            rest.append((0, name, {"name": name, "their_order": False,
+                                   "exception": pref.summary() if pref is not None and pref.is_set else ""}))
+        rows += [row for _, _, row in sorted(rest, key=lambda item: (item[0], item[1]))]
+
+        for position, row in enumerate(rows, start=1):
+            row["position"] = position
         return rows
+
+    @property
+    def has_ranked(self) -> bool:
+        return any(p.rank is not None for p in self.interest_preferences.all())
 
 
 class InterestPreference(models.Model):

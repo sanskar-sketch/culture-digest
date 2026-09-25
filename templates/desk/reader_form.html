@@ -55,8 +55,8 @@ now sends this, not a fresh one.
     {% if interests_in_order %}
     <div class="d-field">
       <span class="d-label">Their interests, in their order</span>
-      <p style="margin:0;">{% for row in interests_in_order %}<span class="d-rank-pill"{% if row.exception %} title="{{ row.exception }}"{% endif %}>{% if row.position %}<b>{{ row.position }}</b>{% endif %}{{ row.name }}</span>{% endfor %}</p>
-      <span class="d-help">1 matters most; their email leads with it. Change the order under Interest by interest below.</span>
+      <p style="margin:0;">{% for row in interests_in_order %}<span class="d-rank-pill{% if not row.their_order %} is-ours{% endif %}" title="{% if row.their_order %}Their order{% else %}Our order - they haven't ranked this{% endif %}{% if row.exception %} · {{ row.exception }}{% endif %}"><b>{{ row.position }}</b>{{ row.name }}</span>{% endfor %}</p>
+      <span class="d-help">1 matters most; their email leads with it. {% if has_ranked %}Solid ones are the order they chose; outlined ones they haven't ranked, so they follow what their feedback says they respond to.{% else %}They haven't ranked anything yet, so this is our order, from what their feedback says they respond to.{% endif %} Change the order under Interest by interest below.</span>
     </div>
     {% endif %}
     {% include "desk/_field.html" with field=form.interest_categories %}
