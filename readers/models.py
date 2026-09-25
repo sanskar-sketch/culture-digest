@@ -168,6 +168,9 @@ class InterestPreference(models.Model):
     availability = models.JSONField(
         default=list, blank=True,
         help_text="When they're free for this one, e.g. ['weekends']. Empty = their usual.")
+    rank = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Where they put this among everything they picked: 1 = matters most.")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -176,7 +179,7 @@ class InterestPreference(models.Model):
               "availability")
 
     class Meta:
-        ordering = ["category", "tag__name"]
+        ordering = ["rank", "category", "tag__name"]
         constraints = [
             models.UniqueConstraint(fields=["reader", "tag"], name="one_preference_per_interest",
                                     condition=models.Q(tag__isnull=False)),
@@ -202,7 +205,7 @@ class InterestPreference(models.Model):
     @property
     def is_set(self) -> bool:
         """Does this say anything? An empty row is the same as no row."""
-        return any(getattr(self, field) not in (None, "") for field in self.FIELDS)
+        return any(getattr(self, field) not in (None, "", []) for field in self.FIELDS)
 
     def summary(self) -> str:
         """'anywhere in my city, happy to treat myself' - for editors and AI."""

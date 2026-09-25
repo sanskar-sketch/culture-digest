@@ -656,13 +656,30 @@ for them.
 
 WHAT THEY'VE TOLD US COMES FIRST
 
-Check every item against what they've said isn't for them and against
-their replies. If an item is the thing they don't want, rate it down as far
-as you're allowed. If it only brushes against it - a night of a classic
-album's music for someone who's gone off tribute acts - say so plainly in
-the caveat and say whether the difference is real (these are established
-musicians in their own right, say). Never describe an item as the opposite
-of what it is to make it fit.
+Their own words are the strongest signal you have - stronger than any box
+they ticked. Three answers matter most: the things they've loved recently,
+what's really not for them, and anything else they wanted us to know.
+
+- Loved: when an item shares something real with a thing they loved - the
+  same kind of room, the same artist lineage, the same idea underneath -
+  that is usually the best why_for_you there is. Name the loved thing.
+- Not for them: check every item against it and against their replies. If
+  an item is the thing they don't want, rate it down as far as you're
+  allowed. If it only brushes against it - a night of a classic album's
+  music for someone who's gone off tribute acts - say so plainly in the
+  caveat and whether the difference is real. Never describe an item as the
+  opposite of what it is to make it fit.
+- Anything else: plans, company, constraints, curiosities ("taking my mum",
+  "no late nights", "getting into Japanese film"). Where it bears on an
+  item, let it shape the rating and the words.
+
+THE ORDER THEY PUT THINGS IN
+
+They ranked what they picked, first place mattering most, and each item
+tells you where its interest came (their_ranking). An item on something
+they ranked near the top gets the benefit of the doubt; one on something
+near the bottom has to earn its place on its own merits. Quality still
+decides: never rate a weak item up just for its rank.
 
 FOR EACH ITEM
 
@@ -716,7 +733,10 @@ in, its timing and dates, and the words already written for it.
   things that make it. If their replies or feedback have changed what
   you're choosing, say what changed ("I've leant further towards original
   artists after your note about tribute nights"). Never pretend a weak week
-  is a strong one. Don't list the picks.
+  is a strong one. Don't list the picks. Lead with what they ranked first
+  when the week has something good for it; if it doesn't, say that too.
+  Where one of their picks connects to something they told us they loved,
+  or something else they told us, that connection is worth a clause.
   You are told which of their interests drew nothing worth sending this
   week. Say so plainly where it matters to them - "nothing in photography
   I'd send you this week" - rather than letting an interest quietly vanish.
@@ -734,6 +754,7 @@ in, its timing and dates, and the words already written for it.
   uses. Day like "Thursday 17", "Saturday 19" or "Any evening".
 - strongest: the two or three picks you'd be most annoyed to hear they'd
   missed, best first, by event_id. Usually from the top of the issue.
+  Where two are close, favour the one on an interest they ranked higher.
 - closing: one or two sentences on those strongest bets and why - the ones
   you'd most hate them to miss. Don't just list them.
 
@@ -747,7 +768,7 @@ def _reader_context(reader) -> str:
     lines = [
         f"Where they live: {reader.location or 'not specified'}",
         f"Categories they follow: {', '.join(reader.interest_categories or []) or 'no preference stated'}",
-        f"Interests they picked: {', '.join(reader.interest_tags.values_list('name', flat=True)) or 'none'}",
+        f"Interests they picked: {_ranked_interests(reader)}",
         f"Budget: {reader.get_budget_display() if reader.budget else 'not specified'}",
         f"How far they'll travel: {reader.get_travel_radius_display() if reader.travel_radius else 'not specified'}",
         f"When they're free: {', '.join(reader.availability or []) or 'not specified'}",
@@ -797,7 +818,31 @@ def _reader_context(reader) -> str:
     )
 
 
-def _item_for_writing(pick, depth: str) -> dict:
+def _ranked_interests(reader) -> str:
+    """Everything they picked, in the order they ranked it where they did."""
+    ranked = [(p.rank, p.label) for p in reader.interest_preferences.select_related("tag")
+              if p.rank is not None]
+    ranked_labels = {label for _, label in ranked}
+    rest = [name for name in reader.interest_tags.values_list("name", flat=True)
+            if name not in ranked_labels]
+    if not ranked:
+        return ", ".join(rest) or "none"
+    ordered = "; ".join(f"{i}. {label}" for i, (_, label) in enumerate(sorted(ranked), start=1))
+    text = f"in the order they ranked them, first mattering most - {ordered}"
+    return text + (f". Also picked, unranked: {', '.join(rest)}" if rest else "")
+
+
+def _ranking_of(reader, opportunity) -> str:
+    from .matching import interest_rank
+
+    ranked = interest_rank(reader, opportunity) if reader is not None else None
+    if not ranked:
+        return "not on an interest they ranked"
+    rank, name, count = ranked
+    return f"{name}: ranked {rank} of {count}"
+
+
+def _item_for_writing(pick, depth: str, reader=None) -> dict:
     opp = pick.opportunity
     where = ", ".join(x for x in (opp.location_name, opp.location_area) if x)
     reviews = []
@@ -823,6 +868,7 @@ def _item_for_writing(pick, depth: str) -> dict:
         "verified_critic_reviews": reviews,
         "score_stars": pick.stars,
         "matching_signals": pick.reasons,
+        "their_ranking": _ranking_of(reader, pick.opportunity),
         "saved_by_reader": pick.saved,
         "wildcard": pick.wildcard,
         "book_ahead": pick.timing == "book_ahead",
@@ -849,7 +895,7 @@ def write_picks(reader, issue, picks) -> list[dict] | None:
     ranked = sorted((p for p in picks if not p.saved and p.timing != "book_ahead"),
                     key=lambda p: (-p.stars, -p.score))
     full = {p.event_id for p in ranked[: config.top_picks_count + 2]}
-    items = {p.event_id: _item_for_writing(p, "full" if p.event_id in full else "short")
+    items = {p.event_id: _item_for_writing(p, "full" if p.event_id in full else "short", reader)
              for p in picks}
     shortlist = json.dumps([{"event_id": i["event_id"], "title": i["title"],
                              "category": i["category"], "score_stars": i["score_stars"]}

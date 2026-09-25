@@ -203,10 +203,23 @@ class PerInterestSettingsTests(TestCase):
         self.assertIn("free weekday evenings",
                       reader.interest_preferences.get(tag=self.jazz).summary())
 
+    def test_a_reader_puts_what_they_picked_in_order(self):
+        self.signup(interest_categories=["music", "exhibition", "theatre"], **{
+            f"rank_{self.art.pk}": "1", f"rank_{self.jazz.pk}": "2", "rank_cat_theatre": "3",
+        })
+        reader = Reader.objects.get(email="reader@example.com")
+        order = [(p.label, p.rank) for p in reader.interest_preferences.select_related("tag")]
+        self.assertEqual(order, [("contemporary art", 1), ("jazz", 2), ("theatre (all of it)", 3)])
+        # A rank alone isn't an exception: their usual answers still apply.
+        self.assertFalse(reader.interest_preferences.get(tag=self.jazz).is_set)
+
     def test_the_signup_page_offers_the_settings(self):
         page = self.client.get(reverse("readers:onboarding")).content.decode()
-        self.assertIn("Any exceptions?", page)
+        self.assertIn("Put them in order.", page)
+        self.assertNotIn("Any exceptions?", page)
+        self.assertIn(f'name="rank_{self.jazz.pk}"', page)
+        self.assertIn(">Usual<", page)
         self.assertIn(f'name="pref_{self.jazz.pk}_travel_radius"', page)
         self.assertIn('name="pref_cat_music_travel_radius"', page)
         self.assertIn(f'name="pref_{self.jazz.pk}_availability"', page)
-        self.assertIn("Same as usual", page)
+

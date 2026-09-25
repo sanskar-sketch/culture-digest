@@ -30,6 +30,24 @@ def preference_field_name(key, setting: str) -> str:
     return f"pref_{key}_{setting}"
 
 
+# Signup shows these as chips, so they need to be short. The stored values
+# are the same ones the desk's longer labels describe; scale and taste
+# offer the two ends and the middle, which is what people actually pick.
+CHIP_CHOICES = {
+    "travel_radius": [("local_only", "Close by"), ("within_city", "Across my city"),
+                      ("regional", "Around the region"), ("anywhere", "Anywhere")],
+    "budget": [("free_cheap", "Free or cheap"), ("moderate", "Moderate"),
+               ("treat", "Treat myself"), ("no_limit", "No limit")],
+    "scale_preference": [(1, "Small rooms"), (3, "Either"), (5, "Big venues")],
+    "mainstream_preference": [(1, "Mainstream"), (3, "Either"), (5, "Niche")],
+}
+USUAL_CHIP = ("", "Usual")
+
+
+def rank_field_name(key) -> str:
+    return f"rank_{key}"
+
+
 def category_key(value: str) -> str:
     return f"cat_{value}"
 
@@ -43,40 +61,52 @@ class InterestPreferenceFields:
     the reader chose.
     """
 
+    # Signup: chips a thumb can hit. The desk overrides this with dropdowns.
+    PREFERENCE_STYLE = "chips"
+
     def build_preference_fields(self, reader=None, tags=None, categories=None):
         """Fields for every category and every interest on offer.
 
-        Categories come first: someone who only picked "music" and never
-        went as far as "jazz" still gets to say what they'd travel and
-        spend on music.
+        Each gets a rank - where the reader puts it among everything they
+        picked - and its own travel, spend, scale, taste and timing, all
+        "usual" until changed. Categories are here too: someone who only
+        picked "music" and never went as far as "jazz" still gets to rank
+        music and say what they'd spend on it.
         """
         self.preference_tags = list(tags if tags is not None else Tag.objects.all())
         if categories is None:
             categories = [c for c in Category.choices if c[0] != Category.OTHER]
         self.preference_categories = list(categories)
 
-        by_tag, by_category = {}, {}
+        self._stored_by_tag, self._stored_by_category = {}, {}
         if reader is not None and reader.pk:
             for stored in reader.interest_preferences.all():
                 if stored.tag_id:
-                    by_tag[stored.tag_id] = stored
+                    self._stored_by_tag[stored.tag_id] = stored
                 else:
-                    by_category[stored.category] = stored
+                    self._stored_by_category[stored.category] = stored
 
         for value, label in self.preference_categories:
             self._add_preference_fields(category_key(value), f"{label.lower()} in general",
-                                        by_category.get(value))
+                                        self._stored_by_category.get(value))
         for tag in self.preference_tags:
-            self._add_preference_fields(tag.pk, tag.name, by_tag.get(tag.pk))
+            self._add_preference_fields(tag.pk, tag.name, self._stored_by_tag.get(tag.pk))
 
     def _add_preference_fields(self, key, what: str, current):
+        chips = self.PREFERENCE_STYLE == "chips"
         for setting, label, choices in PREFERENCE_SETTINGS:
             name = preference_field_name(key, setting)
-            self.fields[name] = forms.ChoiceField(
-                choices=[SAME_AS_USUAL, *choices], required=False,
-                label=f"{label} for {what}")
-            if current is not None:
-                self.initial.setdefault(name, getattr(current, setting) or "")
+            if chips:
+                self.fields[name] = forms.ChoiceField(
+                    choices=[USUAL_CHIP, *CHIP_CHOICES[setting]], required=False,
+                    widget=forms.RadioSelect, label=f"{label} for {what}")
+            else:
+                self.fields[name] = forms.ChoiceField(
+                    choices=[SAME_AS_USUAL, *choices], required=False,
+                    label=f"{label} for {what}")
+            stored = getattr(current, setting, None) if current is not None else None
+            # "" ticks the Usual chip; a stored answer ticks its own.
+            self.initial.setdefault(name, "" if stored in (None, "") else stored)
         for setting, (label, choices) in MULTI_SETTINGS.items():
             name = preference_field_name(key, setting)
             self.fields[name] = forms.MultipleChoiceField(
@@ -85,19 +115,33 @@ class InterestPreferenceFields:
                 help_text="Leave all unticked for your usual answer.")
             if current is not None:
                 self.initial.setdefault(name, getattr(current, setting) or [])
+        rank_name = rank_field_name(key)
+        self.fields[rank_name] = forms.IntegerField(
+            required=False, min_value=1, max_value=999, label=f"Rank of {what}",
+            widget=forms.HiddenInput if chips else forms.NumberInput(attrs={"min": 1}))
+        if current is not None and current.rank:
+            self.initial.setdefault(rank_name, current.rank)
 
     def preference_rows(self):
-        """[{key, name, kind, fields}] for the templates: categories, then interests."""
+        """Every category and interest, as the templates need them, in the
+        reader's own order where they have one."""
         rows = []
         for value, label in getattr(self, "preference_categories", []):
-            rows.append(self._preference_row(category_key(value), label, "category", value))
+            stored = self._stored_by_category.get(value)
+            rows.append(self._preference_row(category_key(value), label, "category", value,
+                                             category=value, stored=stored))
         for tag in getattr(self, "preference_tags", []):
-            rows.append(self._preference_row(tag.pk, tag.name, "interest", tag.pk))
-        return rows
+            rows.append(self._preference_row(tag.pk, tag.name, "interest", tag.pk,
+                                             category=tag.category,
+                                             stored=self._stored_by_tag.get(tag.pk)))
+        # Ranked ones first, in rank order; the rest keep their places.
+        return sorted(rows, key=lambda row: (row["rank"] is None, row["rank"] or 0))
 
-    def _preference_row(self, key, name, kind, value):
+    def _preference_row(self, key, name, kind, value, *, category, stored):
         return {
-            "key": key, "name": name, "kind": kind, "value": value,
+            "key": key, "name": name, "kind": kind, "value": value, "category": category,
+            "rank": stored.rank if stored is not None else None,
+            "rank_field": self[rank_field_name(key)],
             "fields": [{"field": self[preference_field_name(key, setting)], "label": label}
                        for setting, label, _ in PREFERENCE_SETTINGS],
             "choices": [{"field": self[preference_field_name(key, setting)], "label": label}
@@ -107,14 +151,14 @@ class InterestPreferenceFields:
     def _preference_values(self, key):
         values = {}
         for setting, _, _ in PREFERENCE_SETTINGS:
-            raw = (self.cleaned_data.get(preference_field_name(key, setting)) or "").strip()
+            raw = str(self.cleaned_data.get(preference_field_name(key, setting)) or "").strip()
             values[setting] = (int(raw) if raw else None) if setting in NUMERIC_SETTINGS else raw
         for setting in MULTI_SETTINGS:
             values[setting] = list(self.cleaned_data.get(preference_field_name(key, setting)) or [])
         return values
 
     def save_preferences(self, reader, *, merge: bool = False) -> int:
-        """Store the exceptions. Returns how many carry one.
+        """Store the ranks and exceptions. Returns how many interests carry one.
 
         `merge` is for a returning reader filling the signup form again:
         it only ever adds or changes an answer, never blanks one, the same
@@ -132,13 +176,14 @@ class InterestPreferenceFields:
 
     def _store(self, reader, key, lookup, *, kept: bool, merge: bool):
         values = self._preference_values(key)
+        rank = self.cleaned_data.get(rank_field_name(key)) or None
         said_something = any(v not in (None, "", []) for v in values.values())
         existing = InterestPreference.objects.filter(reader=reader, **lookup)
         if not kept:
-            # Not something they follow: an exception for it means nothing.
+            # Not something they follow: a rank or exception for it means nothing.
             existing.delete()
             return
-        if not said_something:
+        if not said_something and rank is None:
             if not merge:
                 existing.delete()
             return
@@ -147,6 +192,8 @@ class InterestPreferenceFields:
             if merge and value in (None, "", []):
                 continue
             setattr(row, setting, value)
+        if rank is not None or not merge:
+            row.rank = rank
         row.save()
 
 

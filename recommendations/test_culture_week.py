@@ -311,6 +311,63 @@ class PerInterestSettingsTests(TestCase):
         self.assertEqual(prefs.budget, Reader.Budget.NO_LIMIT)
         self.assertEqual(prefs.scale_preference, 5)
 
+    def rank(self, **ranks):
+        for obj, position in ranks.values():
+            InterestPreference.objects.update_or_create(reader=self.reader, tag=obj,
+                                                        defaults={"rank": position})
+        self.reader = Reader.objects.get(pk=self.reader.pk)
+
+    def test_what_they_ranked_first_scores_higher(self):
+        self.reader.travel_radius = ""
+        self.reader.budget = ""
+        self.reader.save()
+        self.rank(jazz=(self.jazz, 1), art=(self.art, 2))
+        gig = self.score(event("A gig", tags=[self.jazz]))
+        show = self.score(event("A show", tags=[self.art], category="exhibition"))
+        self.assertAlmostEqual(gig.score - show.score, self.config.weight_interest_rank)
+        self.assertIn("jazz is what they ranked first", gig.reasons)
+
+    def test_the_email_leads_with_what_they_ranked_first(self):
+        self.reader.travel_radius = ""
+        self.reader.budget = ""
+        self.reader.save()
+        theatre = tag("plays", "theatre")
+        self.reader.interest_tags.add(theatre)
+        self.reader.interest_categories = ["music", "exhibition", "theatre"]
+        self.reader.save()
+        # Art first, then plays, then jazz - the reverse of the usual order.
+        self.rank(art=(self.art, 1), plays=(theatre, 2), jazz=(self.jazz, 3))
+        for n in range(3):
+            event(f"Show {n}", tags=[self.art], category="exhibition")
+            event(f"Play {n}", tags=[theatre], category="theatre")
+            event(f"Gig {n}", tags=[self.jazz])
+        issue = compose.compose(self.reader, use_ai=False)
+        # Rated alike, the top goes to their first-ranked interest.
+        self.assertEqual(issue.top[0].opportunity.category, "exhibition")
+        # Below the top, sections come in their order too - not Music first.
+        views = [{"is_top": p.is_top, "section": p.section} for p in issue.picks]
+        order = [g["key"] for g in emailing._sections(views)]
+        self.assertEqual(order, ["top", "exhibition", "theatre", "music"])
+        _, html, _ = emailing.render_composed(issue)
+        self.assertLess(html.find("Art &amp; exhibitions"), html.find("Live music"))
+
+    def test_the_writer_sees_the_ranking_and_their_own_words(self):
+        self.reader.loved_examples = "A late set at the Vortex."
+        self.reader.disliked_examples = "Tribute acts."
+        self.reader.notes = "Taking my mum."
+        self.reader.save()
+        self.rank(art=(self.art, 1), jazz=(self.jazz, 2))
+        context = ai._reader_context(self.reader)
+        self.assertIn("1. contemporary art; 2. jazz", context)
+        for said in ("A late set at the Vortex.", "Tribute acts.", "Taking my mum."):
+            self.assertIn(said, context)
+        pick = compose.Pick(opportunity=event("Gig", tags=[self.jazz]), score=1, reasons=[],
+                            timing="on", timing_label="", section="music", stars=4)
+        self.assertEqual(ai._item_for_writing(pick, "full", self.reader)["their_ranking"],
+                         "jazz: ranked 2 of 2")
+        for rule in ("Loved:", "Not for them:", "Anything else:", "THE ORDER THEY PUT THINGS IN"):
+            self.assertIn(rule, ai.PICKS_SYSTEM)
+
     def test_the_writer_is_told_about_the_exceptions(self):
         self.exception(self.jazz, travel_radius=Reader.TravelRadius.ANYWHERE,
                        budget=Reader.Budget.TREAT)

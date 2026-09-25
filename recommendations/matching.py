@@ -104,6 +104,39 @@ def _overrides_for(reader: Reader) -> tuple[dict, dict]:
     return cached
 
 
+def _ranks_for(reader: Reader) -> tuple[dict, dict, int]:
+    """({tag id: (rank, name)}, {category: (rank, name)}, how many ranked), read once."""
+    cached = getattr(reader, "_interest_ranks", None)
+    if cached is None:
+        by_tag, by_category = {}, {}
+        for pref in reader.interest_preferences.select_related("tag").exclude(rank__isnull=True):
+            if pref.tag_id:
+                by_tag[pref.tag_id] = (pref.rank, pref.tag.name)
+            else:
+                by_category[pref.category] = (pref.rank, pref.get_category_display())
+        cached = (by_tag, by_category, len(by_tag) + len(by_category))
+        reader._interest_ranks = cached
+    return cached
+
+
+def interest_rank(reader: Reader, opportunity: Opportunity):
+    """(rank, interest name, how many ranked) for the highest-ranked interest
+    of theirs this belongs to, or None if they ranked nothing it carries."""
+    by_tag, by_category, count = _ranks_for(reader)
+    if not count:
+        return None
+    on_tags = [by_tag[t.id] for t in opportunity.tags.all() if t.id in by_tag]
+    best = min(on_tags) if on_tags else by_category.get(opportunity.category)
+    if best is None:
+        return None
+    # Ranks are positions the reader dragged into place; a gap left by an
+    # interest they since dropped shouldn't push the rest out of range.
+    return min(best[0], count), best[1], count
+
+
+ORDINALS = {1: "first", 2: "second", 3: "third"}
+
+
 def _widest(values, order):
     return max(values, key=order.index) if values else ""
 
@@ -248,6 +281,17 @@ def score_opportunity(
         score += config.weight_category
         if not overlap:
             reasons.append(f"{opportunity.get_category_display().lower()} is one of their things")
+
+    # The order they put their interests in. First place gets the whole
+    # bonus, last place none: a week should lead with what matters most to
+    # them, not with whichever interest had the busiest listings.
+    ranked = interest_rank(reader, opportunity)
+    if ranked:
+        rank, name, count = ranked
+        share = 1.0 if count == 1 else (count - rank) / (count - 1)
+        score += config.weight_interest_rank * share
+        if rank in ORDINALS:
+            reasons.append(f"{name} is what they ranked {ORDINALS[rank]}")
 
     # Interests inferred by AI from their free text (recommendations.ai).
     # Deliberately weighted below an explicitly picked tag: they told us the

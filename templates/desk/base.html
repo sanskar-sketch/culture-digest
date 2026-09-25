@@ -56,6 +56,9 @@
       </div>
     </div>
     <div class="d-content">
+      {% if link_warning %}
+      <div class="d-messages"><div class="d-msg warning">{{ link_warning }}</div></div>
+      {% endif %}
       {% if messages %}
       <div class="d-messages">
         {% for message in messages %}

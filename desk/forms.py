@@ -133,6 +133,9 @@ READER_PROFILE_FIELDS = (
 
 
 class ReaderForm(InterestPreferenceFields, FriendlyChoices, forms.ModelForm):
+    # An editor wants every value, spelled out, in a dense page.
+    PREFERENCE_STYLE = "dropdowns"
+
     EMPTY_LABELS = {
         "travel_radius": "Not set",
         "budget": "Not set",

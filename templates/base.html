@@ -319,31 +319,53 @@
     }
     .bg-dark .field-help { color: var(--text-secondary-dark); }
 
-    /* one interest's own travel/spend/taste settings */
-    .pref-row {
+    /* ranking what they picked, each with its own travel/spend/timing */
+    .pref-scope { font-weight: 400; font-size: 13px; color: var(--text-secondary); }
+    .bg-dark .pref-scope { color: var(--text-secondary-dark); }
+    .chip-sm span { padding: 7px 14px; font-size: 14px; }
+    .rank-list { list-style: none; margin: 0 0 8px; padding: 0; }
+    .rank-item {
       border: 1px solid var(--hairline);
       border-radius: var(--radius-sm);
-      padding: 14px 16px 6px;
-      margin-bottom: 10px;
       background: #fff;
+      margin-bottom: 10px;
+      padding: 12px 14px;
     }
-    .pref-row[hidden] { display: none; }
-    .bg-dark .pref-row { background: rgba(255, 255, 255, 0.04); border-color: var(--hairline-dark); }
-    .pref-name { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
-    .pref-scope { font-weight: 400; font-size: 13px; color: var(--text-secondary); }
-    .pref-fields { display: flex; flex-wrap: wrap; gap: 10px; }
-    .pref-field { flex: 1 1 150px; min-width: 0; margin-bottom: 8px; }
-    .pref-field > span {
-      display: block;
-      font-size: 12px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--text-secondary);
-      margin-bottom: 4px;
+    .rank-item[hidden] { display: none; }
+    .bg-dark .rank-item { background: rgba(255, 255, 255, 0.04); border-color: var(--hairline-dark); }
+    .rank-item.is-dragging { opacity: 0.45; }
+    .rank-head { display: flex; align-items: center; gap: 10px; }
+    .rank-grip { cursor: grab; color: var(--text-secondary); letter-spacing: -3px; user-select: none; }
+    .rank-number {
+      flex: none;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700;
+      background: linear-gradient(135deg, #5e5ce6, #ff375f);
+      color: #fff;
     }
-    .bg-dark .pref-field > span { color: var(--text-secondary-dark); }
-    .pref-when { margin: 2px 0 10px; }
-    .pref-when > span {
+    .rank-name { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; }
+    .rank-moves { display: inline-flex; gap: 4px; }
+    .rank-move, .rank-adjust {
+      font: inherit;
+      font-size: 14px;
+      border: 1px solid var(--hairline);
+      background: transparent;
+      color: inherit;
+      border-radius: 999px;
+      padding: 5px 11px;
+      cursor: pointer;
+    }
+    .bg-dark .rank-move, .bg-dark .rank-adjust { border-color: var(--hairline-dark); }
+    .rank-move:disabled { opacity: 0.3; cursor: default; }
+    .rank-summary { margin: 6px 0 0 66px; font-size: 13px; color: var(--text-secondary); }
+    .bg-dark .rank-summary { color: var(--text-secondary-dark); }
+    .rank-options { margin: 14px 0 2px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+    .bg-dark .rank-options { border-top-color: var(--hairline-dark); }
+    .rank-options[hidden] { display: none; }
+    .rank-option { margin-bottom: 12px; }
+    .rank-option-label {
       display: block;
       font-size: 12px;
       letter-spacing: 0.04em;
@@ -351,22 +373,15 @@
       color: var(--text-secondary);
       margin-bottom: 6px;
     }
-    .pref-when .chip-group { gap: 6px; }
-    .chip-sm span { padding: 7px 14px; font-size: 14px; }
-    .pref-field select {
-      width: 100%;
-      padding: 9px 10px;
-      font-size: 15px;
-      font-family: inherit;
-      border: 1px solid var(--hairline);
-      border-radius: var(--radius-sm);
-      background: #fff;
-      color: var(--text);
+    .bg-dark .rank-option-label { color: var(--text-secondary-dark); }
+    .rank-option .chip-group { gap: 6px; }
+    .rank-option-label .pref-scope {
+      text-transform: none; letter-spacing: 0; font-size: 12px; margin-left: 6px;
     }
-    .bg-dark .pref-field select {
-      background: rgba(255, 255, 255, 0.06);
-      border-color: var(--hairline-dark);
-      color: var(--text-dark);
+    @media (max-width: 520px) {
+      .rank-grip { display: none; }
+      .rank-summary { margin-left: 38px; }
+      .rank-head { flex-wrap: wrap; }
     }
 
     .text-input {

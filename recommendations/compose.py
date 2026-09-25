@@ -195,6 +195,9 @@ class Pick:
     rationale: str = ""
     caveat: str = ""
     edited: bool = False
+    # Where the interest this belongs to sits in the reader's own order,
+    # 1 = what they put first. None when it isn't on anything they ranked.
+    interest_rank: int | None = None
     token: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
@@ -278,13 +281,25 @@ def gather(reader, week: tuple[date, date], config, pool=None) -> list[Pick]:
             section="saved" if is_saved else ("book_ahead" if timing[0] == "book_ahead"
                                               else section_for(opportunity)),
             stars=stars, saved=is_saved, no_overlap=not overlap,
+            interest_rank=(ranked[0] if (ranked := matching.interest_rank(reader, opportunity))
+                           else None),
         ))
     return picks
 
 
+UNRANKED = 10_000
+
+
 def _rank_key(pick: Pick):
+    """Best first: stars, then the reader's own order, then score.
+
+    Stars come first because they already weigh fit and quality together;
+    between two picks rated alike, the one on the interest they put higher
+    goes first - a week should lead with what matters most to them.
+    """
     start = pick.opportunity.start_date or date.max
-    return (-pick.stars, -pick.score, start, pick.opportunity.title.lower())
+    rank = pick.interest_rank if pick.interest_rank is not None else UNRANKED
+    return (-pick.stars, rank, -pick.score, start, pick.opportunity.title.lower())
 
 
 def shortlist(picks: list[Pick], config, reader) -> list[Pick]:
@@ -379,9 +394,20 @@ def arrange(picks: list[Pick], config, *, respect_floor: bool = True) -> list[Pi
         top.append(pick)
         per_category[pick.section] += 1
 
+    # Sections come in the reader's own order: whoever ranked theatre first
+    # finds Theatre straight after the top picks. The top, their saved
+    # things and Book ahead keep their places; sections holding nothing
+    # they ranked follow in the usual order.
+    best_rank: dict[str, int] = {}
+    for p in kept:
+        if not p.is_top and p.interest_rank is not None:
+            best_rank[p.section] = min(best_rank.get(p.section, UNRANKED), p.interest_rank)
+    fixed = {"top": (0, 0), "saved": (1, 0), "book_ahead": (3, 0)}
+
     def order(p):
         group = "top" if p.is_top else p.section
-        return (SECTION_ORDER.get(group, 99), *_rank_key(p))
+        place = fixed.get(group) or (2, best_rank.get(group, UNRANKED + SECTION_ORDER.get(group, 99)))
+        return (*place, SECTION_ORDER.get(group, 99), *_rank_key(p))
 
     in_sections = Counter()
     capped = []
@@ -626,6 +652,7 @@ def to_json(issue: ComposedIssue) -> dict:
             "stars": p.stars, "saved": p.saved, "wildcard": p.wildcard, "is_top": p.is_top,
             "position": p.position, "hook": p.hook, "rationale": p.rationale,
             "caveat": p.caveat, "edited": p.edited, "token": p.token,
+            "interest_rank": p.interest_rank,
         } for p in issue.picks],
     }
 
@@ -647,6 +674,7 @@ def from_json(reader, data: dict) -> ComposedIssue:
             is_top=row.get("is_top", False), position=row.get("position", 0),
             hook=row.get("hook", ""), rationale=row.get("rationale", ""),
             caveat=row.get("caveat", ""), edited=row.get("edited", False),
+            interest_rank=row.get("interest_rank"),
             token=row.get("token") or str(uuid.uuid4())))
     start, end = (date.fromisoformat(d) for d in data["week"])
     return ComposedIssue(

@@ -170,6 +170,10 @@ class SiteConfig(models.Model):
         default=2.0, help_text="Per interest tag shared with the reader's own picks.")
     weight_category = models.FloatField(
         default=1.5, help_text="When the category is one the reader follows.")
+    weight_interest_rank = models.FloatField(
+        default=2.0,
+        help_text="Added for the reader's first-ranked interest, shrinking evenly to "
+                  "nothing for their last. How much the order they put things in counts.")
     weight_inferred_tag = models.FloatField(
         default=0.9,
         help_text="Per tag AI inferred from their free text. Keep below the tag "

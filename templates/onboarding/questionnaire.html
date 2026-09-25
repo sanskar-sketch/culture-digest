@@ -286,45 +286,60 @@
 
     <section class="wizard-step" hidden>
       <div class="container-narrow">
-        <span class="eyebrow">Interest by interest</span>
-        <h2>Any exceptions?</h2>
-        <p class="lede" style="margin-bottom:28px;">
-          Most people aren&rsquo;t the same about everything &mdash; you might cross town
-          for a gig and want the gallery round the corner, or spend freely on theatre
-          and nothing on a night out. Change anything that&rsquo;s different for one of
-          your interests. Leave the rest: they follow your usual answers.
+        <span class="eyebrow">What matters most</span>
+        <h2>Put them in order.</h2>
+        <p class="lede" style="margin-bottom:24px;">
+          Top first. Your weekly email leads with what you put at the top, and makes
+          room for the rest as the week allows. Drag to reorder, or use the arrows.
+        </p>
+        <p class="field-help" style="margin:-8px 0 20px;">
+          Tap <strong>Adjust</strong> on anything you&rsquo;d travel further for, spend more on,
+          or only do at certain times. Leave it alone and it follows your usual answers.
         </p>
 
-        <div id="interest-prefs">
+        <ol class="rank-list" id="rank-list">
           {% for row in form.preference_rows %}
-          <div class="pref-row" data-pref-kind="{{ row.kind }}" data-pref-value="{{ row.value }}" hidden>
-            <div class="pref-name">{{ row.name }}{% if row.kind == "category" %} <span class="pref-scope">everything in this category</span>{% endif %}</div>
-            <div class="pref-fields">
+          <li class="rank-item" data-pref-kind="{{ row.kind }}" data-pref-value="{{ row.value }}"
+              data-pref-category="{{ row.category }}" draggable="true" hidden>
+            <div class="rank-head">
+              <span class="rank-grip" aria-hidden="true">&#8942;&#8942;</span>
+              <span class="rank-number" aria-hidden="true"></span>
+              <span class="rank-name">{{ row.name }}{% if row.kind == "category" %} <span class="pref-scope">all of it</span>{% endif %}</span>
+              <span class="rank-moves">
+                <button type="button" class="rank-move" data-move="up" aria-label="Move {{ row.name }} up">&uarr;</button>
+                <button type="button" class="rank-move" data-move="down" aria-label="Move {{ row.name }} down">&darr;</button>
+              </span>
+              <button type="button" class="rank-adjust" aria-expanded="false">Adjust</button>
+            </div>
+            <p class="rank-summary">Your usual answers</p>
+            <div class="rank-options" hidden>
               {% for item in row.fields %}
-              <label class="pref-field" for="{{ item.field.id_for_label }}">
-                <span>{{ item.label }}</span>
-                {{ item.field }}
-              </label>
+              <div class="rank-option" data-setting-label="{{ item.label }}">
+                <span class="rank-option-label">{{ item.label }}</span>
+                <div class="chip-group">
+                  {% for choice in item.field %}
+                  <label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endfor %}
+              {% for item in row.choices %}
+              <div class="rank-option" data-setting-label="{{ item.label }}">
+                <span class="rank-option-label">{{ item.label }}<span class="pref-scope">&mdash; leave all unticked for your usual</span></span>
+                <div class="chip-group">
+                  {% for choice in item.field %}
+                  <label class="chip chip-sm" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
+                  {% endfor %}
+                </div>
+              </div>
               {% endfor %}
             </div>
-            {% for item in row.choices %}
-            <div class="pref-when">
-              <span>{{ item.label }}</span>
-              <div class="chip-group">
-                {% for choice in item.field %}
-                <label class="chip chip-sm" for="{{ choice.id_for_label }}">
-                  {{ choice.tag }}
-                  <span>{{ choice.choice_label }}</span>
-                </label>
-                {% endfor %}
-              </div>
-            </div>
-            {% endfor %}
-          </div>
+            {{ row.rank_field }}
+          </li>
           {% endfor %}
-        </div>
+        </ol>
         <p class="field-help" id="prefs-empty">
-          Go back and pick what pulls you in &mdash; whatever you choose shows up here.
+          Go back and pick what pulls you in &mdash; whatever you choose shows up here to put in order.
         </p>
 
         <div class="wizard-nav">
@@ -487,37 +502,131 @@
     }
     categoryInputs.forEach(function (i) { i.addEventListener('change', syncTags); });
 
-    // --- Exceptions: ask about whatever they picked, category or interest.
-    var prefRows = Array.prototype.slice.call(form.querySelectorAll('[data-pref-kind]'));
+    // --- Ranking: whatever they picked, in the order that matters to them.
+    var rankList = document.getElementById('rank-list');
+    var rankItems = rankList ? Array.prototype.slice.call(rankList.querySelectorAll('.rank-item')) : [];
     var prefsEmpty = document.getElementById('prefs-empty');
     var tagInputs = Array.prototype.slice.call(
       form.querySelectorAll('input[name="interest_tags"]'));
 
+    function each(nodes, fn) { Array.prototype.slice.call(nodes).forEach(fn); }
+    function shownItems() {
+      return Array.prototype.slice.call(rankList.querySelectorAll('.rank-item'))
+        .filter(function (item) { return !item.hidden; });
+    }
+
+    function resetOptions(item) {
+      each(item.querySelectorAll('input[type="radio"]'), function (radio) { radio.checked = radio.value === ''; });
+      each(item.querySelectorAll('input[type="checkbox"]'), function (box) { box.checked = false; });
+    }
+
+    function summarise(item) {
+      var parts = [];
+      each(item.querySelectorAll('.rank-option'), function (option) {
+        each(option.querySelectorAll('input:checked'), function (input) {
+          if (input.value !== '') parts.push(input.parentNode.textContent.trim());
+        });
+      });
+      item.querySelector('.rank-summary').textContent = parts.length ? parts.join(' \u00b7 ') : 'Your usual answers';
+    }
+
+    function renumber() {
+      var shown = shownItems();
+      shown.forEach(function (item, i) {
+        item.querySelector('.rank-number').textContent = i + 1;
+        item.querySelector('input[type="hidden"][name^="rank_"]').value = i + 1;
+        item.querySelector('[data-move="up"]').disabled = i === 0;
+        item.querySelector('[data-move="down"]').disabled = i === shown.length - 1;
+      });
+      rankItems.forEach(function (item) {
+        if (item.hidden) item.querySelector('input[type="hidden"][name^="rank_"]').value = '';
+      });
+      if (prefsEmpty) prefsEmpty.hidden = shown.length > 0;
+    }
+
     function syncPrefs() {
+      if (!rankList) return;
       var ticked = { category: {}, interest: {} };
-      categoryInputs.forEach(function (input) {
-        if (input.checked) ticked.category[input.value] = true;
-      });
+      var categoriesWithInterests = {};
+      categoryInputs.forEach(function (input) { if (input.checked) ticked.category[input.value] = true; });
       tagInputs.forEach(function (input) {
-        if (input.checked) ticked.interest[input.value] = true;
+        if (!input.checked) return;
+        ticked.interest[input.value] = true;
+        var category = input.getAttribute('data-category');
+        if (category) categoriesWithInterests[category] = true;
       });
-      var shown = 0;
-      prefRows.forEach(function (row) {
-        var kind = row.getAttribute('data-pref-kind');
-        var wanted = ticked[kind][row.getAttribute('data-pref-value')] === true;
-        row.hidden = !wanted;
-        if (wanted) shown++;
-        // An exception for something they no longer follow means nothing.
-        if (!wanted) {
-          Array.prototype.slice.call(row.querySelectorAll('select')).forEach(
-            function (select) { select.value = ''; });
-          Array.prototype.slice.call(row.querySelectorAll('input[type="checkbox"]')).forEach(
-            function (box) { box.checked = false; });
+      rankItems.forEach(function (item) {
+        var kind = item.getAttribute('data-pref-kind');
+        var value = item.getAttribute('data-pref-value');
+        // A category stands in for itself only when nothing inside it was
+        // picked: "jazz" and "live gigs" say more than "music" does.
+        var wanted = kind === 'interest'
+          ? ticked.interest[value] === true
+          : ticked.category[value] === true && !categoriesWithInterests[value];
+        if (!wanted && !item.hidden) resetOptions(item);
+        if (wanted && item.hidden) {
+          // Newly picked things join the bottom of the order.
+          rankList.appendChild(item);
         }
+        item.hidden = !wanted;
+        summarise(item);
       });
-      if (prefsEmpty) prefsEmpty.hidden = shown > 0;
+      renumber();
     }
     tagInputs.forEach(function (i) { i.addEventListener('change', syncPrefs); });
+
+    if (rankList) {
+      rankList.addEventListener('click', function (e) {
+        var move = e.target.closest('[data-move]');
+        var adjust = e.target.closest('.rank-adjust');
+        var item = e.target.closest('.rank-item');
+        if (move && item) {
+          var shown = shownItems();
+          var at = shown.indexOf(item);
+          if (move.getAttribute('data-move') === 'up' && at > 0) {
+            rankList.insertBefore(item, shown[at - 1]);
+          } else if (move.getAttribute('data-move') === 'down' && at < shown.length - 1) {
+            rankList.insertBefore(item, shown[at + 1].nextSibling);
+          }
+          renumber();
+          move.focus();
+        } else if (adjust && item) {
+          var options = item.querySelector('.rank-options');
+          options.hidden = !options.hidden;
+          adjust.setAttribute('aria-expanded', String(!options.hidden));
+          adjust.textContent = options.hidden ? 'Adjust' : 'Done';
+        }
+      });
+      rankList.addEventListener('change', function (e) {
+        var item = e.target.closest('.rank-item');
+        if (item) summarise(item);
+      });
+
+      // Drag to reorder, for a mouse; the arrows do the same for a thumb or keyboard.
+      var dragging = null;
+      rankList.addEventListener('dragstart', function (e) {
+        var item = e.target.closest('.rank-item');
+        if (!item || e.target.closest('.rank-options')) return;
+        dragging = item;
+        item.classList.add('is-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', ''); } catch (err) {}
+      });
+      rankList.addEventListener('dragover', function (e) {
+        if (!dragging) return;
+        e.preventDefault();
+        var over = e.target.closest('.rank-item');
+        if (!over || over === dragging) return;
+        var box = over.getBoundingClientRect();
+        var after = e.clientY > box.top + box.height / 2;
+        rankList.insertBefore(dragging, after ? over.nextSibling : over);
+      });
+      rankList.addEventListener('dragend', function () {
+        if (dragging) dragging.classList.remove('is-dragging');
+        dragging = null;
+        renumber();
+      });
+    }
 
     syncTags();
     syncPrefs();

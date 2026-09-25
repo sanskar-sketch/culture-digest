@@ -289,11 +289,20 @@ def _sections(picks: list[dict], notes: dict | None = None) -> list[dict]:
     if not any(p["section"] or p["is_top"] for p in picks):
         # An issue from before sections: one untitled group, as it was sent.
         return [{"key": "picks", "emoji": "", "title": "", "note": "", "picks": picks}] if picks else []
+    # In the order the picks were arranged, which follows the reader's own
+    # ranking - not a fixed Music, Theatre, Art order.
+    titles = {key: (emoji, title) for key, emoji, title in SECTIONS}
+    appearing = []
+    for pick in picks:
+        key = "top" if pick["is_top"] else pick["section"]
+        if key not in appearing:
+            appearing.append(key)
     groups = []
-    for key, emoji, title in SECTIONS:
-        members = [p for p in picks if ("top" if p["is_top"] else p["section"]) == key]
-        if not members:
+    for key in appearing:
+        if key not in titles:
             continue
+        emoji, title = titles[key]
+        members = [p for p in picks if ("top" if p["is_top"] else p["section"]) == key]
         if key == "top":
             # "The five I'd put at the top", or "The one I'd put at the top".
             title = f"The {_NUMBERS.get(len(members), len(members))} I'd put at the top"

@@ -68,14 +68,18 @@ now sends this, not a fresh one.
   <div class="d-fieldset">
     <h2>Interest by interest</h2>
     <p class="d-help" style="margin:-6px 0 14px;">
-      What this reader will travel, spend and sit through for one interest in
-      particular. &ldquo;Same as usual&rdquo; falls back to the answers above.
-      Where several apply to one event, the most willing travel and spend win
-      and the taste dials average.
+      The order this reader put their interests in (1 matters most - their
+      email leads with it), and what they'll travel, spend and sit through for
+      each. &ldquo;Same as usual&rdquo; falls back to the answers above. Where
+      several apply to one event, the most willing travel and spend win and the
+      taste dials average.
     </p>
     {% for row in form.preference_rows %}
     <div class="pref-row">
-      <div class="pref-name">{{ row.name }}{% if row.kind == "category" %} <span class="pref-scope">everything in this category</span>{% endif %}</div>
+      <div class="pref-name">
+        <label class="pref-rank" for="{{ row.rank_field.id_for_label }}">Rank {{ row.rank_field }}</label>
+        {{ row.name }}{% if row.kind == "category" %} <span class="pref-scope">everything in this category</span>{% endif %}
+      </div>
       <div class="pref-fields">
         {% for item in row.fields %}
         <label class="pref-field" for="{{ item.field.id_for_label }}">
