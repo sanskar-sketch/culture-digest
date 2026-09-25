@@ -427,6 +427,17 @@ class DropdownWordingTests(LoggedInTestCase):
         reader.refresh_from_db()
         self.assertEqual(reader.budget, "")
 
+    def test_the_desk_warns_when_emails_would_link_elsewhere(self):
+        with self.settings(SITE_BASE_URL="http://127.0.0.1:8000"):
+            page = self.client.get(reverse("desk:dashboard"), HTTP_HOST="127.0.0.1:8010")
+        self.assertContains(page, "Emails sent from here link to http://127.0.0.1:8000")
+        self.assertContains(page, "Set SITE_BASE_URL to http://127.0.0.1:8010")
+        with self.settings(SITE_BASE_URL="http://127.0.0.1:8010"):
+            page = self.client.get(reverse("desk:dashboard"), HTTP_HOST="127.0.0.1:8010")
+            self.assertNotContains(page, "Emails sent from here link to")
+            page = self.client.get(reverse("desk:dashboard"), HTTP_HOST="localhost:8010")
+            self.assertNotContains(page, "Emails sent from here link to")
+
     def test_an_editor_sees_and_changes_a_readers_per_interest_settings(self):
         from readers.models import InterestPreference
 

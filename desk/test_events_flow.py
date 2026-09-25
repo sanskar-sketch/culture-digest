@@ -75,13 +75,32 @@ class ResearchForReadersTests(TestCase):
     def test_it_asks_for_what_readers_have_most_and_you_have_least(self):
         with mock.patch("opportunities.research.start", return_value=True) as start:
             started = research.for_readers(limit=1)
-        self.assertEqual(started, ["Silent discos"])
+        self.assertEqual(started, ["Silent discos in London"])
         self.assertEqual(start.call_args.kwargs["area"], "London")
 
     def test_it_searches_where_most_of_them_are(self):
         with mock.patch("opportunities.research.start", return_value=True) as start:
             research.for_readers(Reader.objects.filter(pk=self.cy.pk))
         self.assertEqual(start.call_args.kwargs["area"], "Leeds")
+
+    def test_a_reader_alone_in_their_city_still_gets_a_search_there(self):
+        # Everyone else is in London or Leeds, and London already has jazz -
+        # but none of it is any use in Ahmedabad.
+        dev = Reader.objects.create(email="dev@example.com", location="Ahmedabad")
+        dev.interest_tags.add(self.jazz)
+        with mock.patch("opportunities.research.start", return_value=True) as start:
+            started = research.for_readers(limit=6)
+        self.assertIn("Jazz nights in Ahmedabad", started)
+        self.assertIn("Ahmedabad", [c.kwargs["area"] for c in start.call_args_list])
+
+    def test_events_elsewhere_do_not_count_as_covered(self):
+        dev = Reader.objects.create(email="dev@example.com", location="Ahmedabad")
+        dev.interest_tags.add(self.jazz)
+        here = research.gaps_for([dev.pk], area="Ahmedabad")
+        london = research.gaps_for([self.ada.pk], area="London")
+        self.assertEqual(here[0].live, 0)          # the London trio is no use there
+        jazz_in_london = next(t for t in london if t.name == "Jazz nights")
+        self.assertEqual(jazz_in_london.live, 1)
 
     def test_nobody_means_nothing_to_search_for(self):
         with mock.patch("opportunities.research.start") as start:

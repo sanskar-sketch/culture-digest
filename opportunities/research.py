@@ -21,6 +21,7 @@ live, so `start` runs it on a thread and the editor refreshes the page.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import urllib.error
 import urllib.request
@@ -117,13 +118,33 @@ def link_status(url: str, timeout: float = 8.0) -> int:
         return 0
 
 
+_FILLER_WORDS = {"the", "a", "an", "and", "at", "of"}
+
+
+def title_key(title: str) -> str:
+    """A title as words only, for spotting the same thing named twice.
+
+    "Ahmedabad International Film Festival 2026" and "Ahmedabad
+    International Film Festival" are one festival; research found it
+    under two interests and saved it twice.
+    """
+    words = re.sub(r"\b(?:19|20)\d{2}\b", " ", title.lower())
+    words = re.sub(r"[^\w]+", " ", words)
+    return " ".join(w for w in words.split() if w not in _FILLER_WORDS)
+
+
 def _already_have(row) -> bool:
-    """Same booking link, or same title - either means we have it."""
+    """Same booking link, or the same title near enough - either means we have it."""
     url = public_url(row.get("booking_url") or "")
     if url and Opportunity.objects.filter(booking_url=url).exists():
         return True
     title = (row.get("title") or "").strip()
-    return bool(title) and Opportunity.objects.filter(title__iexact=title).exists()
+    key = title_key(title)
+    if not key:
+        return False
+    first_word = key.split()[0]
+    return any(title_key(other) == key for other in
+               Opportunity.objects.filter(title__icontains=first_word).values_list("title", flat=True))
 
 
 def save_drafts(payload: dict, interest: Tag | None = None,
@@ -263,16 +284,38 @@ def is_running(interest: Tag) -> bool:
         return interest.pk in _running
 
 
+# How many different places one round of research covers. A reader whose
+# city nobody else lives in still needs events found where they are.
+MAX_AREAS = 4
+
+
+def gaps_for(reader_ids, area: str = "", limit: int = 5):
+    """The interests these readers hold that have the fewest events near them.
+
+    Counted near them, not everywhere: a hundred London plays do nothing
+    for a reader in Ahmedabad, so for that area plays still read as a gap.
+    """
+    from django.db.models import Count, Q
+
+    live = Q(opportunities__status=Opportunity.Status.PUBLISHED)
+    if area:
+        live &= Q(opportunities__location_area__icontains=area) | Q(opportunities__is_online=True)
+    return list(Tag.objects
+                .annotate(readers=Count("interested_readers", distinct=True,
+                                        filter=Q(interested_readers__in=reader_ids)),
+                          live=Count("opportunities", distinct=True, filter=live))
+                .filter(readers__gt=0)
+                .order_by("live", "-readers", "name")[:limit])
+
+
 def for_readers(readers=None, limit: int = 5, count: int = 4) -> list[str]:
     """Research the interests these readers have most and you have least for.
 
-    With no readers given, every active reader counts. The area searched is
-    where most of them are. Returns the interest names research started for.
+    With no readers given, every active reader counts. Searched area by
+    area, busiest first, so someone living on their own in a city is not
+    quietly left out of every search. Returns what research started for,
+    as "plays in Ahmedabad".
     """
-    from collections import Counter
-
-    from django.db.models import Count, Q
-
     from readers.models import Reader
 
     readers = readers if readers is not None else Reader.objects.filter(is_active=True)
@@ -280,19 +323,20 @@ def for_readers(readers=None, limit: int = 5, count: int = 4) -> list[str]:
     if not reader_ids:
         return []
 
-    wanted = (Tag.objects
-              .annotate(readers=Count("interested_readers", distinct=True,
-                                      filter=Q(interested_readers__in=reader_ids)),
-                        live=Count("opportunities", distinct=True,
-                                   filter=Q(opportunities__status=Opportunity.Status.PUBLISHED)))
-              .filter(readers__gt=0)
-              .order_by("live", "-readers", "name")[:limit])
+    by_area: dict[str, list[int]] = {}
+    for pk, where in Reader.objects.filter(pk__in=reader_ids).values_list("pk", "location"):
+        by_area.setdefault((where or "").strip(), []).append(pk)
+    areas = sorted(by_area.items(), key=lambda pair: (-len(pair[1]), pair[0]))[:MAX_AREAS]
+    each = max(1, limit // len(areas))
 
-    areas = Counter(a for a in Reader.objects.filter(pk__in=reader_ids)
-                    .values_list("location", flat=True) if a)
-    area = areas.most_common(1)[0][0] if areas else ""
-
-    return [tag.name for tag in wanted if start(tag, area=area, count=count)]
+    started = []
+    for area, ids in areas:
+        for tag in gaps_for(ids, area=area, limit=each):
+            if len(started) >= limit:
+                break
+            if start(tag, area=area, count=count):
+                started.append(f"{tag.name} in {area}" if area else tag.name)
+    return started
 
 
 # ---------------------------------------------------------------------------

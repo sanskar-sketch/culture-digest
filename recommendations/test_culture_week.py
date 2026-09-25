@@ -801,6 +801,16 @@ class ResearchLinkTests(TestCase):
         self.assertFalse(research._is_homepage(
             "https://events.nationaltheatre.org.uk/events/95366?promo=16225YO"))
 
+    def test_the_same_thing_named_twice_is_saved_once(self):
+        research.save_drafts(self.row(title="Ahmedabad International Film Festival",
+                                      booking_url="https://example.com/aiff"))
+        again = research.save_drafts(self.row(title="Ahmedabad International Film Festival 2026",
+                                              booking_url="https://example.com/aiff-2026"))
+        self.assertEqual(again, [])
+        other = research.save_drafts(self.row(title="Ahmedabad International Children Film Festival",
+                                              booking_url="https://example.com/kids"))
+        self.assertEqual(len(other), 1)   # a different festival, however alike the name
+
     def test_no_venue_is_left_blank_not_a_dash(self):
         created = research.save_drafts(self.row(location_name="—"))
         self.assertEqual(created[0].location_name, "")
