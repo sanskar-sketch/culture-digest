@@ -289,8 +289,8 @@
 
         <div id="interest-prefs">
           {% for row in form.preference_rows %}
-          <div class="pref-row" data-pref-tag="{{ row.tag.pk }}" hidden>
-            <div class="pref-name">{{ row.tag.name }}</div>
+          <div class="pref-row" data-pref-kind="{{ row.kind }}" data-pref-value="{{ row.value }}" hidden>
+            <div class="pref-name">{{ row.name }}{% if row.kind == "category" %} <span class="pref-scope">everything in this category</span>{% endif %}</div>
             <div class="pref-fields">
               {% for item in row.fields %}
               <label class="pref-field" for="{{ item.field.id_for_label }}">
@@ -303,7 +303,7 @@
           {% endfor %}
         </div>
         <p class="field-help" id="prefs-empty">
-          Pick a few interests earlier and they&rsquo;ll show up here.
+          Go back and pick what pulls you in &mdash; whatever you choose shows up here.
         </p>
 
         <div class="wizard-nav">
@@ -466,20 +466,24 @@
     }
     categoryInputs.forEach(function (i) { i.addEventListener('change', syncTags); });
 
-    // --- Exceptions: only ask about the interests they actually ticked.
-    var prefRows = Array.prototype.slice.call(form.querySelectorAll('[data-pref-tag]'));
+    // --- Exceptions: ask about whatever they picked, category or interest.
+    var prefRows = Array.prototype.slice.call(form.querySelectorAll('[data-pref-kind]'));
     var prefsEmpty = document.getElementById('prefs-empty');
     var tagInputs = Array.prototype.slice.call(
       form.querySelectorAll('input[name="interest_tags"]'));
 
     function syncPrefs() {
-      var ticked = {};
+      var ticked = { category: {}, interest: {} };
+      categoryInputs.forEach(function (input) {
+        if (input.checked) ticked.category[input.value] = true;
+      });
       tagInputs.forEach(function (input) {
-        if (input.checked) ticked[input.value] = true;
+        if (input.checked) ticked.interest[input.value] = true;
       });
       var shown = 0;
       prefRows.forEach(function (row) {
-        var wanted = ticked[row.getAttribute('data-pref-tag')] === true;
+        var kind = row.getAttribute('data-pref-kind');
+        var wanted = ticked[kind][row.getAttribute('data-pref-value')] === true;
         row.hidden = !wanted;
         if (wanted) shown++;
         // An exception for something they no longer follow means nothing.

@@ -87,11 +87,19 @@ BUDGET_ORDER = [Reader.Budget.FREE_CHEAP, Reader.Budget.MODERATE,
                 Reader.Budget.TREAT, Reader.Budget.NO_LIMIT]
 
 
-def _overrides_for(reader: Reader) -> dict:
-    """{tag id: InterestPreference} for this reader, read once."""
+def _overrides_for(reader: Reader) -> tuple[dict, dict]:
+    """({tag id: pref}, {category: pref}) for this reader, read once."""
     cached = getattr(reader, "_interest_overrides", None)
     if cached is None:
-        cached = {p.tag_id: p for p in reader.interest_preferences.all() if p.is_set}
+        by_tag, by_category = {}, {}
+        for pref in reader.interest_preferences.all():
+            if not pref.is_set:
+                continue
+            if pref.tag_id:
+                by_tag[pref.tag_id] = pref
+            else:
+                by_category[pref.category] = pref
+        cached = (by_tag, by_category)
         reader._interest_overrides = cached
     return cached
 
@@ -105,22 +113,36 @@ def preferences_for(reader: Reader, opportunity: Opportunity) -> Prefs:
     prefs = Prefs(travel_radius=reader.travel_radius, budget=reader.budget,
                   mainstream_preference=reader.mainstream_preference,
                   scale_preference=reader.scale_preference)
-    overrides = _overrides_for(reader)
-    if not overrides:
-        return prefs
-    applying = [overrides[t.id] for t in opportunity.tags.all() if t.id in overrides]
-    if not applying:
+    by_tag, by_category = _overrides_for(reader)
+    if not (by_tag or by_category):
         return prefs
 
-    prefs.exceptions = applying
-    if travel := _widest([p.travel_radius for p in applying if p.travel_radius], TRAVEL_ORDER):
+    # An exception for one interest beats one for its whole category: the
+    # more particular the answer, the more it means. The category still
+    # fills in anything the interest left as "same as usual".
+    on_tags = [by_tag[t.id] for t in opportunity.tags.all() if t.id in by_tag]
+    whole_category = by_category.get(opportunity.category)
+    groups = [group for group in (on_tags, [whole_category] if whole_category else []) if group]
+    if not groups:
+        return prefs
+    prefs.exceptions = [pref for group in groups for pref in group]
+
+    def answer(field, combine):
+        """The most particular answer to this one setting, or None."""
+        for group in groups:
+            given = [getattr(p, field) for p in group if getattr(p, field) not in (None, "")]
+            if given:
+                return combine(given)
+        return None
+
+    if travel := answer("travel_radius", lambda given: _widest(given, TRAVEL_ORDER)):
         prefs.travel_radius = travel
-    if budget := _widest([p.budget for p in applying if p.budget], BUDGET_ORDER):
+    if budget := answer("budget", lambda given: _widest(given, BUDGET_ORDER)):
         prefs.budget = budget
     for field in ("mainstream_preference", "scale_preference"):
-        dialled = [getattr(p, field) for p in applying if getattr(p, field) is not None]
-        if dialled:
-            setattr(prefs, field, round(sum(dialled) / len(dialled)))
+        dialled = answer(field, lambda given: round(sum(given) / len(given)))
+        if dialled is not None:
+            setattr(prefs, field, dialled)
     return prefs
 
 

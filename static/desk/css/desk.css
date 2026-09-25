@@ -414,6 +414,7 @@ table.d-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 /* one interest's own travel/spend/taste settings */
 .pref-row { border: 1px solid var(--d-line); border-radius: 10px; padding: 12px 14px 4px; margin-bottom: 8px; }
 .pref-name { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.pref-scope { font-weight: 400; font-size: 12px; color: var(--d-muted); }
 .pref-fields { display: flex; flex-wrap: wrap; gap: 10px; }
 .pref-field { flex: 1 1 150px; min-width: 0; margin-bottom: 8px; }
 .pref-field > span { display: block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--d-muted); margin-bottom: 4px; }

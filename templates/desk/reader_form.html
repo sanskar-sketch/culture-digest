@@ -75,7 +75,7 @@ now sends this, not a fresh one.
     </p>
     {% for row in form.preference_rows %}
     <div class="pref-row">
-      <div class="pref-name">{{ row.tag.name }}</div>
+      <div class="pref-name">{{ row.name }}{% if row.kind == "category" %} <span class="pref-scope">everything in this category</span>{% endif %}</div>
       <div class="pref-fields">
         {% for item in row.fields %}
         <label class="pref-field" for="{{ item.field.id_for_label }}">

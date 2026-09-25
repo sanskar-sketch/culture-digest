@@ -23,8 +23,13 @@ PREFERENCE_SETTINGS = (
 NUMERIC_SETTINGS = {"scale_preference", "mainstream_preference"}
 
 
-def preference_field_name(tag_id, setting: str) -> str:
-    return f"pref_{tag_id}_{setting}"
+def preference_field_name(key, setting: str) -> str:
+    """A tag's field is pref_12_budget; a whole category's is pref_cat_music_budget."""
+    return f"pref_{key}_{setting}"
+
+
+def category_key(value: str) -> str:
+    return f"cat_{value}"
 
 
 class InterestPreferenceFields:
@@ -36,67 +41,99 @@ class InterestPreferenceFields:
     the reader chose.
     """
 
-    def build_preference_fields(self, reader=None, tags=None):
+    def build_preference_fields(self, reader=None, tags=None, categories=None):
+        """Fields for every category and every interest on offer.
+
+        Categories come first: someone who only picked "music" and never
+        went as far as "jazz" still gets to say what they'd travel and
+        spend on music.
+        """
         self.preference_tags = list(tags if tags is not None else Tag.objects.all())
-        stored = {}
+        if categories is None:
+            categories = [c for c in Category.choices if c[0] != Category.OTHER]
+        self.preference_categories = list(categories)
+
+        by_tag, by_category = {}, {}
         if reader is not None and reader.pk:
-            stored = {p.tag_id: p for p in reader.interest_preferences.all()}
+            for stored in reader.interest_preferences.all():
+                if stored.tag_id:
+                    by_tag[stored.tag_id] = stored
+                else:
+                    by_category[stored.category] = stored
+
+        for value, label in self.preference_categories:
+            self._add_preference_fields(category_key(value), f"{label.lower()} in general",
+                                        by_category.get(value))
         for tag in self.preference_tags:
-            current = stored.get(tag.pk)
-            for setting, label, choices in PREFERENCE_SETTINGS:
-                name = preference_field_name(tag.pk, setting)
-                self.fields[name] = forms.ChoiceField(
-                    choices=[SAME_AS_USUAL, *choices], required=False,
-                    label=f"{label} for {tag.name}")
-                self.fields[name].widget.attrs["data-interest"] = tag.pk
-                if current is not None:
-                    self.initial.setdefault(name, getattr(current, setting) or "")
+            self._add_preference_fields(tag.pk, tag.name, by_tag.get(tag.pk))
+
+    def _add_preference_fields(self, key, what: str, current):
+        for setting, label, choices in PREFERENCE_SETTINGS:
+            name = preference_field_name(key, setting)
+            self.fields[name] = forms.ChoiceField(
+                choices=[SAME_AS_USUAL, *choices], required=False,
+                label=f"{label} for {what}")
+            if current is not None:
+                self.initial.setdefault(name, getattr(current, setting) or "")
 
     def preference_rows(self):
-        """[{tag, fields}] for the templates, in tag order."""
+        """[{key, name, kind, fields}] for the templates: categories, then interests."""
         rows = []
+        for value, label in getattr(self, "preference_categories", []):
+            rows.append(self._preference_row(category_key(value), label, "category", value))
         for tag in getattr(self, "preference_tags", []):
-            rows.append({
-                "tag": tag,
-                "fields": [{"field": self[preference_field_name(tag.pk, setting)], "label": label}
-                           for setting, label, _ in PREFERENCE_SETTINGS],
-            })
+            rows.append(self._preference_row(tag.pk, tag.name, "interest", tag.pk))
         return rows
 
-    def _preference_values(self, tag):
+    def _preference_row(self, key, name, kind, value):
+        return {
+            "key": key, "name": name, "kind": kind, "value": value,
+            "fields": [{"field": self[preference_field_name(key, setting)], "label": label}
+                       for setting, label, _ in PREFERENCE_SETTINGS],
+        }
+
+    def _preference_values(self, key):
         values = {}
         for setting, _, _ in PREFERENCE_SETTINGS:
-            raw = (self.cleaned_data.get(preference_field_name(tag.pk, setting)) or "").strip()
+            raw = (self.cleaned_data.get(preference_field_name(key, setting)) or "").strip()
             values[setting] = (int(raw) if raw else None) if setting in NUMERIC_SETTINGS else raw
         return values
 
     def save_preferences(self, reader, *, merge: bool = False) -> int:
-        """Store the exceptions. Returns how many interests carry one.
+        """Store the exceptions. Returns how many carry one.
 
         `merge` is for a returning reader filling the signup form again:
         it only ever adds or changes an answer, never blanks one, the same
         way the rest of that form behaves.
         """
-        chosen = set(reader.interest_tags.values_list("id", flat=True))
+        followed_tags = set(reader.interest_tags.values_list("id", flat=True))
+        followed_categories = set(reader.interest_categories or [])
+        for value, _ in getattr(self, "preference_categories", []):
+            self._store(reader, category_key(value), {"category": value},
+                        kept=value in followed_categories, merge=merge)
         for tag in getattr(self, "preference_tags", []):
-            values = self._preference_values(tag)
-            said_something = any(v not in (None, "") for v in values.values())
-            if tag.pk not in chosen:
-                # Not one of their interests: an exception for it means nothing.
-                InterestPreference.objects.filter(reader=reader, tag=tag).delete()
-                continue
-            if merge and not said_something:
-                continue
-            if not said_something:
-                InterestPreference.objects.filter(reader=reader, tag=tag).delete()
-                continue
-            row, _ = InterestPreference.objects.get_or_create(reader=reader, tag=tag)
-            for setting, value in values.items():
-                if merge and value in (None, ""):
-                    continue
-                setattr(row, setting, value)
-            row.save()
+            self._store(reader, tag.pk, {"tag": tag},
+                        kept=tag.pk in followed_tags, merge=merge)
         return reader.interest_preferences.count()
+
+    def _store(self, reader, key, lookup, *, kept: bool, merge: bool):
+        values = self._preference_values(key)
+        said_something = any(v not in (None, "") for v in values.values())
+        existing = InterestPreference.objects.filter(reader=reader, **lookup)
+        if not kept:
+            # Not something they follow: an exception for it means nothing.
+            existing.delete()
+            return
+        if not said_something:
+            if not merge:
+                existing.delete()
+            return
+        row = existing.first() or InterestPreference(reader=reader, **lookup)
+        for setting, value in values.items():
+            if merge and value in (None, ""):
+                continue
+            setattr(row, setting, value)
+        row.save()
 
 
 class TagCategoryCheckboxes(forms.CheckboxSelectMultiple):

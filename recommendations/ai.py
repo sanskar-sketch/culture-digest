@@ -754,7 +754,7 @@ def _reader_context(reader) -> str:
     if exceptions:
         lines.append("Exceptions they set for particular interests (these override the answers "
                      "above for anything carrying that interest):")
-        lines += [f"- {p.tag.name}: {p.summary()}" for p in exceptions]
+        lines += [f"- {p.label}: {p.summary()}" for p in exceptions]
     if reader.ai_taste_summary:
         lines.append(f"Our reading of their taste: {reader.ai_taste_summary}")
 

@@ -169,7 +169,8 @@ class ReaderForm(InterestPreferenceFields, FriendlyChoices, forms.ModelForm):
         # Only the interests this reader follows: an exception for anything
         # else has no effect, and the list would be unreadable.
         followed = (self.instance.interest_tags.all() if self.instance.pk else Tag.objects.none())
-        self.build_preference_fields(reader=self.instance, tags=followed)
+        picked = [c for c in Category.choices if c[0] in (self.instance.interest_categories or [])]
+        self.build_preference_fields(reader=self.instance, tags=followed, categories=picked)
 
 
 

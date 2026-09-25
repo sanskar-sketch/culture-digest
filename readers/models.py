@@ -2,7 +2,7 @@ import uuid
 
 from django.db import models
 
-from opportunities.models import Tag
+from opportunities.models import Category, Tag
 
 
 class Reader(models.Model):
@@ -145,8 +145,13 @@ class InterestPreference(models.Model):
 
     reader = models.ForeignKey(
         Reader, on_delete=models.CASCADE, related_name="interest_preferences")
+    # One of these: a specific interest, or a whole category. Someone who
+    # only ever picked "music" and "theatre" should still be able to say
+    # they'll cross town for the music and not for the theatre.
     tag = models.ForeignKey(
-        Tag, on_delete=models.CASCADE, related_name="reader_preferences")
+        Tag, on_delete=models.CASCADE, related_name="reader_preferences",
+        null=True, blank=True)
+    category = models.CharField(max_length=30, choices=Category.choices, blank=True)
 
     travel_radius = models.CharField(
         max_length=20, choices=Reader.TravelRadius.choices, blank=True,
@@ -167,13 +172,28 @@ class InterestPreference(models.Model):
     FIELDS = ("travel_radius", "budget", "scale_preference", "mainstream_preference")
 
     class Meta:
-        ordering = ["tag__name"]
+        ordering = ["category", "tag__name"]
         constraints = [
-            models.UniqueConstraint(fields=["reader", "tag"], name="one_preference_per_interest"),
+            models.UniqueConstraint(fields=["reader", "tag"], name="one_preference_per_interest",
+                                    condition=models.Q(tag__isnull=False)),
+            models.UniqueConstraint(fields=["reader", "category"], name="one_preference_per_category",
+                                    condition=~models.Q(category="")),
+            models.CheckConstraint(
+                name="preference_names_one_thing",
+                condition=(models.Q(tag__isnull=False, category="")
+                           | models.Q(tag__isnull=True) & ~models.Q(category="")),
+            ),
         ]
 
     def __str__(self):
-        return f"{self.reader}: {self.tag}"
+        return f"{self.reader}: {self.label}"
+
+    @property
+    def label(self) -> str:
+        """'jazz', or 'music (all of it)' for a whole category."""
+        if self.tag_id:
+            return self.tag.name
+        return f"{self.get_category_display().lower()} (all of it)"
 
     @property
     def is_set(self) -> bool:

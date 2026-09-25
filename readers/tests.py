@@ -175,8 +175,24 @@ class PerInterestSettingsTests(TestCase):
         reader = Reader.objects.get(email="reader@example.com")
         self.assertEqual(reader.interest_preferences.get(tag=self.jazz).travel_radius, "anywhere")
 
+    def test_a_whole_category_can_carry_the_settings_too(self):
+        # Someone who picks "music" and never goes as far as "jazz" still
+        # gets to say what they'd travel and spend on music.
+        self.signup(interest_tags=[], **{"pref_cat_music_travel_radius": "anywhere",
+                                         "pref_cat_music_budget": "treat"})
+        reader = Reader.objects.get(email="reader@example.com")
+        row = reader.interest_preferences.get(category="music")
+        self.assertEqual((row.travel_radius, row.budget, row.tag_id), ("anywhere", "treat", None))
+        self.assertEqual(row.label, "music (all of it)")
+
+    def test_a_category_they_did_not_pick_is_dropped(self):
+        self.signup(interest_tags=[], **{"pref_cat_theatre_budget": "no_limit"})
+        reader = Reader.objects.get(email="reader@example.com")
+        self.assertFalse(reader.interest_preferences.filter(category="theatre").exists())
+
     def test_the_signup_page_offers_the_settings(self):
         page = self.client.get(reverse("readers:onboarding")).content.decode()
         self.assertIn("Any exceptions?", page)
         self.assertIn(f'name="pref_{self.jazz.pk}_travel_radius"', page)
+        self.assertIn('name="pref_cat_music_travel_radius"', page)
         self.assertIn("Same as usual", page)

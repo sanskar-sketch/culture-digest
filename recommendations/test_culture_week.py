@@ -291,6 +291,26 @@ class PerInterestSettingsTests(TestCase):
         self.assertEqual((prefs.budget, prefs.travel_radius),
                          (Reader.Budget.FREE_CHEAP, Reader.TravelRadius.LOCAL_ONLY))
 
+    def test_a_whole_category_covers_interests_they_never_picked_out(self):
+        gig = event("Late set", tags=[], price_tier="splurge")   # music, no tags
+        self.assertIsNone(self.score(gig))
+        InterestPreference.objects.create(reader=self.reader, category="music",
+                                          budget=Reader.Budget.NO_LIMIT)
+        self.reader = Reader.objects.get(pk=self.reader.pk)
+        self.assertIsNotNone(self.score(gig))
+
+    def test_an_interest_beats_its_category_but_the_category_fills_the_gaps(self):
+        InterestPreference.objects.create(reader=self.reader, category="music",
+                                          budget=Reader.Budget.NO_LIMIT,
+                                          travel_radius=Reader.TravelRadius.LOCAL_ONLY,
+                                          scale_preference=5)
+        self.exception(self.jazz, travel_radius=Reader.TravelRadius.ANYWHERE)
+        prefs = matching.preferences_for(self.reader, event("Jazz night", tags=[self.jazz]))
+        # The interest answers travel; music answers what it didn't.
+        self.assertEqual(prefs.travel_radius, Reader.TravelRadius.ANYWHERE)
+        self.assertEqual(prefs.budget, Reader.Budget.NO_LIMIT)
+        self.assertEqual(prefs.scale_preference, 5)
+
     def test_the_writer_is_told_about_the_exceptions(self):
         self.exception(self.jazz, travel_radius=Reader.TravelRadius.ANYWHERE,
                        budget=Reader.Budget.TREAT)
