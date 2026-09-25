@@ -16,7 +16,7 @@ def reader_tags(request, pk):
                         (reader.email, reverse("desk:readers_change", args=[reader.pk])),
                         ("What we believe", None)],
         "reader": reader,
-        "picked": reader.interest_tags.all().order_by("name"),
+        "picked": reader.ranked_interests(),
         "inferred": reader.ai_inferred_tags.all().order_by("name"),
         "avoid": reader.ai_avoid_tags.all().order_by("name"),
     })

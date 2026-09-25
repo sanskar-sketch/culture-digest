@@ -52,6 +52,13 @@ now sends this, not a fresh one.
 
   <div class="d-fieldset">
     <h2>Taste</h2>
+    {% if interests_in_order %}
+    <div class="d-field">
+      <span class="d-label">Their interests, in their order</span>
+      <p style="margin:0;">{% for row in interests_in_order %}<span class="d-rank-pill"{% if row.exception %} title="{{ row.exception }}"{% endif %}>{% if row.position %}<b>{{ row.position }}</b>{% endif %}{{ row.name }}</span>{% endfor %}</p>
+      <span class="d-help">1 matters most; their email leads with it. Change the order under Interest by interest below.</span>
+    </div>
+    {% endif %}
     {% include "desk/_field.html" with field=form.interest_categories %}
     {% include "desk/_field.html" with field=form.interest_tags %}
     {% include "desk/_field.html" with field=form.mainstream_preference %}

@@ -11,7 +11,7 @@
 <div class="d-card">
   <h2>They picked these</h2>
   <p style="font-size:12px;color:var(--d-muted);margin:0 0 8px;">Chosen at signup, or typed in and absorbed. Weighted highest.</p>
-  <p style="margin:0;">{% for t in picked %}<span class="d-pill accent" style="margin:0 4px 4px 0;display:inline-block;">{{ t.name }}</span>{% empty %}<span style="color:var(--d-muted);">Nothing picked.</span>{% endfor %}</p>
+  <p style="margin:0;">{% for row in picked %}<span class="d-rank-pill"{% if row.exception %} title="{{ row.exception }}"{% endif %}>{% if row.position %}<b>{{ row.position }}</b>{% endif %}{{ row.name }}{% if row.exception %} <span class="d-rank-note">· {{ row.exception }}</span>{% endif %}</span>{% empty %}<span style="color:var(--d-muted);">Nothing picked.</span>{% endfor %}</p>
 </div>
 
 <div class="d-card">

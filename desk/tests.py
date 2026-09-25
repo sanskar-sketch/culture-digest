@@ -427,6 +427,32 @@ class DropdownWordingTests(LoggedInTestCase):
         reader.refresh_from_db()
         self.assertEqual(reader.budget, "")
 
+    def test_every_readers_interests_show_in_their_own_order(self):
+        from readers.models import InterestPreference
+
+        jazz = Tag.objects.create(name="Late jazz", slug="late-jazz", category="music")
+        art = Tag.objects.create(name="Big paintings", slug="big-paintings", category="exhibition")
+        zines = Tag.objects.create(name="Aardvark zines", slug="aardvark-zines", category="other")
+        reader = Reader.objects.create(email="ada@example.com", interest_categories=["theatre"])
+        reader.interest_tags.add(jazz, art, zines)
+        InterestPreference.objects.create(reader=reader, tag=art, rank=1)
+        InterestPreference.objects.create(reader=reader, category="theatre", rank=2)
+        InterestPreference.objects.create(reader=reader, tag=jazz, rank=3, budget="treat")
+
+        rows = reader.ranked_interests()
+        self.assertEqual([(r["position"], r["name"]) for r in rows],
+                         [(1, "Big paintings"), (2, "theatre (all of it)"), (3, "Late jazz"),
+                          (None, "Aardvark zines")])     # never ranked: last, unnumbered
+        self.assertEqual(rows[2]["exception"], "happy to treat myself")
+
+        for url in (reverse("desk:readers_list"), reverse("desk:readers_change", args=[reader.pk]),
+                    reverse("desk:reader_tags", args=[reader.pk])):
+            page = self.client.get(url).content.decode()
+            # Read from the first ranked pill on, past any A-Z interest picker.
+            page = page[page.find('class="d-rank-pill"'):]
+            order = [page.find(name) for name in ("Big paintings", "theatre (all of it)", "Late jazz")]
+            self.assertTrue(all(i >= 0 for i in order) and order == sorted(order), url)
+
     def test_the_desk_warns_when_emails_would_link_elsewhere(self):
         with self.settings(SITE_BASE_URL="http://127.0.0.1:8000"):
             page = self.client.get(reverse("desk:dashboard"), HTTP_HOST="127.0.0.1:8010")

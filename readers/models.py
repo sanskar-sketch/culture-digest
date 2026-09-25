@@ -132,6 +132,32 @@ class Reader(models.Model):
     def __str__(self):
         return self.name or self.email
 
+    def ranked_interests(self) -> list[dict]:
+        """Everything they picked, in their own order.
+
+        What they ranked comes first, numbered 1, 2, 3 as they placed it;
+        anything picked but never ranked follows, A to Z, unnumbered. Each
+        carries the exception they set for it, if any. Reads the prefetched
+        rows when a list page has prefetched them, so it costs no queries
+        per reader there.
+        """
+        prefs = list(self.interest_preferences.all())
+        rows, ranked_tags = [], set()
+        for position, pref in enumerate(sorted((p for p in prefs if p.rank is not None),
+                                               key=lambda p: (p.rank, p.label)), start=1):
+            rows.append({"position": position, "name": pref.label,
+                         "exception": pref.summary() if pref.is_set else ""})
+            if pref.tag_id:
+                ranked_tags.add(pref.tag_id)
+        unranked_prefs = {p.tag_id: p for p in prefs if p.rank is None and p.tag_id}
+        for tag in sorted(self.interest_tags.all(), key=lambda t: t.name.lower()):
+            if tag.pk in ranked_tags:
+                continue
+            pref = unranked_prefs.get(tag.pk)
+            rows.append({"position": None, "name": tag.name,
+                         "exception": pref.summary() if pref is not None and pref.is_set else ""})
+        return rows
+
 
 class InterestPreference(models.Model):
     """One reader's exception for one interest.

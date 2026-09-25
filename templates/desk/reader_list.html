@@ -37,7 +37,7 @@
     <table class="d-table">
       <thead><tr>
         <th style="width:1%"><input type="checkbox" data-select-all aria-label="Select all"></th>
-        <th>Email</th><th>Name</th><th>Location</th><th>Sent / replied</th><th>Profile</th><th>Active</th>
+        <th>Email · interests, in their order</th><th>Name</th><th>Location</th><th>Sent / replied</th><th>Profile</th><th>Active</th>
         <th class="d-col-act"><span class="d-sr-only">Actions</span></th>
       </tr></thead>
       <tbody>
@@ -49,7 +49,8 @@
           they'll go and what they'll pay. Without the script it is an
           ordinary link to their page, which shows the same and more.
           {% endcomment %}
-          <td><a class="d-row-link" href="{% url 'desk:readers_change' reader.pk %}" data-expand="user-{{ reader.pk }}">{{ reader.email }}</a></td>
+          <td><a class="d-row-link" href="{% url 'desk:readers_change' reader.pk %}" data-expand="user-{{ reader.pk }}">{{ reader.email }}</a>
+            <div class="d-rank-line" aria-label="Interests, in their order">{% for row in reader.interests_in_order|slice:":4" %}<span class="d-rank-pill"{% if row.exception %} title="{{ row.exception }}"{% endif %}>{% if row.position %}<b>{{ row.position }}</b>{% endif %}{{ row.name }}</span>{% empty %}<span class="own">no interests picked</span>{% endfor %}{% if reader.interests_in_order|length > 4 %}<span class="d-rank-more">+{{ reader.interests_in_order|length|add:"-4" }} more</span>{% endif %}</div></td>
           <td>{{ reader.name|default:"—" }}</td>
           <td>{{ reader.location|default:"—" }}</td>
           <td>{% if reader.recs_count %}{{ reader.recs_count }} sent · <strong>{{ reader.replied_count }}</strong> replied{% else %}—{% endif %}</td>
@@ -62,7 +63,7 @@
             <div class="d-detail-grid">
               <div>
                 <h3>Interests</h3>
-                <p>{% for t in reader.interest_tags.all %}<span class="d-pill accent">{{ t.name }}</span>{% empty %}<span class="own">nothing picked</span>{% endfor %}</p>
+                <p>{% for row in reader.interests_in_order %}<span class="d-rank-pill"{% if row.exception %} title="{{ row.exception }}"{% endif %}>{% if row.position %}<b>{{ row.position }}</b>{% endif %}{{ row.name }}{% if row.exception %} <span class="d-rank-note">· {{ row.exception }}</span>{% endif %}</span>{% empty %}<span class="own">nothing picked</span>{% endfor %}</p>
                 {% if reader.inferred_only %}<p>{% for t in reader.inferred_only %}<span class="d-pill good" title="Inferred by AI from their own words">{{ t.name }}</span>{% endfor %}</p>{% endif %}
                 {% if reader.ai_avoid_tags.all %}<p>Avoids: {% for t in reader.ai_avoid_tags.all %}<span class="d-pill bad">{{ t.name }}</span>{% endfor %}</p>{% endif %}
                 {% if reader.ai_taste_summary %}<p title="What AI read into their own words">{{ reader.ai_taste_summary }}</p>{% endif %}

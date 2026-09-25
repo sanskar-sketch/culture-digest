@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -12,7 +12,7 @@ from opportunities.models import Category
 from recommendations.models import Recommendation
 from recommendations import drafts
 from recommendations.models import IssueDraft
-from readers.models import Reader
+from readers.models import InterestPreference, Reader
 
 BULK_ACTIONS = (
     {"value": "choose", "label": "Suggest events & send",
@@ -42,7 +42,11 @@ def reader_list(request):
         replied_count=Count("issues__recommendations",
                        filter=~Q(issues__recommendations__feedback=Recommendation.Feedback.NONE),
                        distinct=True),
-    ).prefetch_related("interest_tags", "ai_inferred_tags", "ai_avoid_tags")
+    ).prefetch_related(
+        "interest_tags", "ai_inferred_tags", "ai_avoid_tags",
+        # In their own order, with the interest each ranking names.
+        Prefetch("interest_preferences",
+                 queryset=InterestPreference.objects.select_related("tag")))
     qs = search(qs, request, ["email", "name", "location", "travel_destinations",
                               "loved_examples", "disliked_examples", "notes",
                               "other_categories", "other_interests"])
@@ -113,6 +117,7 @@ def reader_list(request):
         reader.inferred_only = [t for t in reader.ai_inferred_tags.all() if t.pk not in picked]
         # Their own words on when: stored as values, shown as labels.
         reader.availability_labels = [availability.get(v, v) for v in (reader.availability or [])]
+        reader.interests_in_order = reader.ranked_interests()
 
     filter_groups = [
         {"title": "Active", "param": "active", "options": filter_options(request, "active", [("1", "Active"), ("0", "Inactive")])},
@@ -201,6 +206,7 @@ def reader_form(request, pk):
         "form": form,
         "instance": instance,
         "completeness": _profile_completeness(instance),
+        "interests_in_order": instance.ranked_interests(),
         "feedback_breakdown": feedback_breakdown,
         "issues": issues,
     }

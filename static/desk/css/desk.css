@@ -660,3 +660,12 @@ pre.d-preview-text { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55
 .d-review-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 20px; margin-top: 12px; }
 .d-review-body .d-field { margin-bottom: 10px; }
 .d-review-card .d-form-actions { margin-top: 6px; }
+
+/* a reader's interests, in the order they ranked them */
+.d-rank-pill { display: inline-flex; align-items: center; gap: 6px; margin: 0 4px 4px 0; padding: 3px 10px 3px 4px; border-radius: 999px; background: var(--d-accent-soft); color: var(--d-accent-ink, var(--d-ink)); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.d-rank-pill b { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--d-accent); color: #fff; font-size: 11px; }
+.d-rank-pill:not(:has(b)) { padding-left: 10px; opacity: .8; }
+.d-rank-note { font-weight: 400; color: var(--d-muted); white-space: normal; }
+.d-rank-more { font-size: 12px; color: var(--d-muted); white-space: nowrap; }
+.d-rank-line { margin-top: 6px; white-space: normal; max-width: 460px; line-height: 1.9; }
+.d-rank-line .d-rank-pill { font-size: 11.5px; }
